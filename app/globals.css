@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light;
+:root, html, body {
+  color-scheme: light !important;
   --background: #f8fafc;
   --foreground: #0f172a;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
 }
 
 @theme inline {
@@ -14,16 +16,21 @@
 }
 
 html {
-  color-scheme: light;
-  background-color: #f8fafc;
-  color: #0f172a;
+  color-scheme: light !important;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
 }
 
 body {
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Pastikan form input selalu berada dalam light mode tanpa terpengaruh OS */
+input, select, textarea, button {
+  color-scheme: light !important;
 }
 
 /* Custom minimal scrollbar */
