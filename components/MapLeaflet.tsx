@@ -148,11 +148,11 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
   }, [points]);
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
+    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-xs">
       <div ref={mapContainerRef} style={{ height, width: '100%' }} className="z-10" />
       
       {/* Legend Overlay */}
-      <div className="absolute bottom-4 right-4 z-20 rounded-xl bg-white/95 p-3 shadow-lg backdrop-blur-sm border border-slate-200 text-xs text-slate-800 dark:bg-slate-900/90 dark:border-slate-800 dark:text-slate-200">
+      <div className="absolute bottom-4 right-4 z-20 rounded-xl bg-white/95 p-3 shadow-md backdrop-blur-sm border border-slate-200/80 text-xs text-slate-800">
         <div className="font-semibold mb-2">Legenda Jenis Alat:</div>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">

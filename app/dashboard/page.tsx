@@ -11,10 +11,7 @@ import {
   Droplet, 
   AlertTriangle, 
   UploadCloud, 
-  RefreshCw,
-  Layers,
-  CheckCircle2,
-  Database
+  RefreshCw
 } from 'lucide-react';
 import DataTable, { InventoryItem } from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
@@ -24,7 +21,7 @@ import { MapPoint } from '@/components/MapLeaflet';
 const MapLeaflet = dynamic(() => import('@/components/MapLeaflet'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-96 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex h-96 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-400 shadow-xs">
       <p className="text-xs font-medium animate-pulse">Memuat Peta Spasial Leaflet...</p>
     </div>
   ),
@@ -281,10 +278,10 @@ export default function DashboardPage() {
       {/* Top Banner & Refresh */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white sm:text-3xl">
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight sm:text-3xl">
             Dashboard Inventarisasi PCBs Nasional
           </h1>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-xs text-slate-500 font-medium">
             Monitoring sebaran transformator, kapasitor, dan minyak dielektrik berpotensi PCBs
           </p>
         </div>
@@ -293,7 +290,7 @@ export default function DashboardPage() {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             <span>Segarkan Data</span>
@@ -301,7 +298,7 @@ export default function DashboardPage() {
 
           <Link
             href="/upload"
-            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-all"
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 transition-all"
           >
             <UploadCloud className="h-4 w-4" />
             <span>Upload File Excel</span>
@@ -311,19 +308,19 @@ export default function DashboardPage() {
 
       {/* Database Warning Notice if SQL not run yet */}
       {dbNotice && (
-        <div className="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 shadow-xs">
           <div className="flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
             <div>
-              <div className="font-bold">Database Belum Dikonfigurasi di Supabase</div>
-              <div>{dbNotice}</div>
+              <div className="font-bold text-amber-950">Database Belum Dikonfigurasi di Supabase</div>
+              <div className="text-amber-800">{dbNotice}</div>
             </div>
           </div>
           <a
             href="https://supabase.com/dashboard/project/fifjrfzwqhmexnanaoag"
             target="_blank"
             rel="noreferrer"
-            className="rounded-lg bg-amber-600 px-3 py-1.5 font-bold text-white shadow-sm hover:bg-amber-700"
+            className="rounded-xl bg-amber-600 px-3.5 py-1.5 font-bold text-white shadow-xs hover:bg-amber-700 transition-colors shrink-0 text-center"
           >
             Buka Supabase SQL Editor
           </a>
@@ -333,92 +330,90 @@ export default function DashboardPage() {
       {/* 4 Metric KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Perusahaan */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold text-slate-500">
               Perusahaan Terdaftar
             </span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+            <span className="text-3xl font-extrabold text-slate-900">
               {totalCompanies}
             </span>
-            <span className="text-xs text-slate-400">Entitas Industri</span>
+            <span className="text-xs text-slate-400 font-medium">Entitas Industri</span>
           </div>
         </div>
 
         {/* Transformator */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold text-slate-500">
               Transformator
             </span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
               <Cpu className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+            <span className="text-3xl font-extrabold text-slate-900">
               {trafoStats.total}
             </span>
             <div className="text-[11px] font-semibold text-slate-500">
-              <span className="text-emerald-600 dark:text-emerald-400">{trafoStats.aktif} Aktif</span> &bull;{' '}
+              <span className="text-emerald-700">{trafoStats.aktif} Aktif</span> &bull;{' '}
               <span className="text-slate-400">{trafoStats.nonAktif} Non-Aktif</span>
             </div>
           </div>
         </div>
 
         {/* Kapasitor */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold text-slate-500">
               Kapasitor Unit
             </span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
               <BatteryCharging className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+            <span className="text-3xl font-extrabold text-slate-900">
               {totalKapasitor}
             </span>
-            <span className="text-xs text-slate-400">Bank / Unit Terdata</span>
+            <span className="text-xs text-slate-400 font-medium">Bank / Unit Terdata</span>
           </div>
         </div>
 
         {/* Minyak Dielektrik */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold text-slate-500">
               Minyak Dielektrik
             </span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               <Droplet className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+            <span className="text-3xl font-extrabold text-slate-900">
               {totalMinyak}
             </span>
-            <span className="text-xs text-slate-400">Wadah / Drum Simpan</span>
+            <span className="text-xs text-slate-400 font-medium">Wadah / Drum Simpan</span>
           </div>
         </div>
       </div>
 
       {/* Peta GIS Leaflet */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              Peta Sebaran Spasial Lokasi Peralatan
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Menampilkan {mapPoints.length} titik koordinat yang berhasil di-parse dari string DMS Excel
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">
+            Peta Sebaran Spasial Lokasi Peralatan
+          </h2>
+          <p className="text-xs text-slate-500 font-medium">
+            Menampilkan {mapPoints.length} titik koordinat yang berhasil di-parse dari string DMS Excel
+          </p>
         </div>
 
         <MapLeaflet points={mapPoints} height="440px" />
