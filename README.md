@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PCBs-Inventory-System
 
-## Getting Started
+Prototipe Web Dashboard Inventarisasi PCBs (Polychlorinated Biphenyls) dari berkas Excel multi-perusahaan.
 
-First, run the development server:
+## Tech Stack
+- **Framework**: Next.js 14+ (App Router) & TypeScript
+- **Styling**: Tailwind CSS
+- **Database & Storage**: Supabase (PostgreSQL & Supabase Storage)
+- **Excel Parser**: SheetJS (`xlsx`)
+- **GIS / Mapping**: Leaflet
+- **Data Visualization**: Recharts
+- **Icons**: Lucide React
 
+---
+
+## Struktur Database & Migration Supabase
+
+Skema database tersimpan di direktori `/supabase`:
+- `supabase/migrations/20260922000001_initial_schema.sql`:
+  - `companies`: Data profil perusahaan pemilik peralatan/minyak.
+  - `import_batches`: Riwayat batch unggahan berkas Excel per perusahaan.
+  - `transformator`: Inventarisasi trafo lengkap (koordinat, kapasitas, uji PCB, kondisi).
+  - `kapasitor`: Inventarisasi kapasitor lengkap.
+  - `minyak_dielektrik`: Inventarisasi drum/tangki minyak cadangan/bekas.
+  - `field_definitions`: Kamus field baku untuk mapping dinamis kolom Excel.
+- `supabase/seed.sql`: Data awal kamus field baku untuk transformator, kapasitor, dan minyak dielektrik serta data sampel perusahaan.
+
+---
+
+## Panduan Menjalankan Migration & Seed di Supabase
+
+1. Buka dashboard proyek Supabase Anda di browser: [https://supabase.com/dashboard](https://supabase.com/dashboard)
+2. Masuk ke proyek Anda (`fifjrfzwqhmexnanaoag`).
+3. Pada menu navigasi sebelah kiri, klik **SQL Editor** (ikon tanda kurung siku `>_`).
+4. Klik **New query**.
+5. Buka berkas [supabase/migrations/20260922000001_initial_schema.sql](supabase/migrations/20260922000001_initial_schema.sql), salin seluruh isinya, tempel ke SQL Editor, lalu klik tombol **Run**.
+6. Setelah tabel berhasil dibuat, buat query baru lagi, salin isi berkas [supabase/seed.sql](supabase/seed.sql), tempel, lalu klik tombol **Run**.
+7. *(Opsional untuk upload file)*: Buka menu **Storage**, klik **New bucket**, beri nama bucket `pcbs-files` dengan status **Public bucket** agar file asli yang diunggah dapat disimpan dan diunduh.
+
+---
+
+## Konfigurasi Environment (`.env.local`)
+
+Pastikan berkas `.env.local` memiliki format yang benar:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://fifjrfzwqhmexnanaoag.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+SUPABASE_URL=https://fifjrfzwqhmexnanaoag.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+> **Catatan Penting**: URL Supabase tidak boleh memiliki akhiran `/rest/v1/` dan key tidak boleh ada spasi setelah tanda sama dengan (`=`).
+
+---
+
+## Utility DMS Parser (`lib/dms.ts`)
+
+Mengonversi koordinat derajat menit detik (DMS) menjadi koordinat desimal `latitude` dan `longitude`. Mendukung format Indonesia (`LS`, `LU`, `BT`, `BB`), simbol derajat/menit/detik, penanganan koma desimal, serta penanganan typo seperti `35',973"`.
+
+Uji coba parser:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx tsx scripts/test-dms.ts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Panduan Push ke GitHub
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Jalankan perintah berikut di terminal Anda untuk menghubungkan dan melakukan push ke repositori GitHub:
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+git add .
+git commit -m "feat: complete Phase 1 database schema, seed, DMS parser, and Supabase client setup"
+git branch -M main
+git remote add origin https://github.com/aljuan14/PCBs-Inventory-System.git
+git push -u origin main
+```
