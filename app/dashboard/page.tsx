@@ -405,7 +405,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Peta GIS Leaflet */}
+      {/* Charts Section */}
+      <DashboardCharts
+        distributionData={distributionData}
+        riskCategoryData={riskData}
+      />
+
+      {/* Data Table Section */}
+      <DataTable items={inventoryItems} companies={companyNames} />
+
+      {/* Peta GIS Leaflet (Paling Bawah) */}
       <div className="space-y-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">
@@ -416,17 +425,8 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <MapLeaflet points={mapPoints} height="440px" />
+        <MapLeaflet points={mapPoints} height="460px" />
       </div>
-
-      {/* Charts Section */}
-      <DashboardCharts
-        distributionData={distributionData}
-        riskCategoryData={riskData}
-      />
-
-      {/* Data Table Section */}
-      <DataTable items={inventoryItems} companies={companyNames} />
     </div>
   );
 }
