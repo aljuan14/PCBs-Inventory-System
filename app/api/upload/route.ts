@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File Excel wajib diunggah.' }, { status: 400 });
     }
 
-    if (!jenisData || !['transformator', 'kapasitor', 'minyak_dielektrik'].includes(jenisData)) {
+    if (!jenisData || !['transformator_digunakan', 'transformator_tidak_digunakan', 'kapasitor', 'minyak_dielektrik'].includes(jenisData)) {
       return NextResponse.json({ error: 'Jenis data inventaris tidak valid.' }, { status: 400 });
     }
 

@@ -2,32 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { parseExcelWithSmartHeader } from '@/lib/excel';
 import { parseDMSCoordinate } from '@/lib/dms';
+import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
 import fs from 'fs';
 import path from 'path';
 
 // Fallback type map sesuai dengan FIELD_DEFS_FALLBACK di mapping route
 // Key: field_key, Value: kategori tipe ('numeric' | 'date' | 'text')
-const FALLBACK_TYPE_MAP: Record<string, Record<string, string>> = {
-  transformator: {
-    tahun_pembuatan: 'numeric', daya_kva: 'numeric',
-    tegangan_primer_kv: 'numeric', tegangan_sekunder_kv: 'numeric',
-    volume_minyak_liter: 'numeric', konsentrasi_pcb_ppm: 'numeric',
-    tanggal_uji: 'date', latitude: 'numeric', longitude: 'numeric',
-    perawatan_volume_ditambahkan_l: 'numeric', berat_ton: 'numeric',
-    perawatan_waktu: 'date', waktu_terakhir_digunakan: 'date',
-  },
-  kapasitor: {
-    tahun_pembuatan: 'numeric', kapasitas_kvar: 'numeric',
-    tegangan_kerja_kv: 'numeric', konsentrasi_pcb_ppm: 'numeric',
-    tanggal_uji: 'date', latitude: 'numeric', longitude: 'numeric',
-  },
-  minyak_dielektrik: {
-    volume_liter: 'numeric', konsentrasi_pcb_ppm: 'numeric',
-    tanggal_uji: 'date', latitude: 'numeric', longitude: 'numeric',
-    volume_l: 'numeric',
-  },
-};
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -75,7 +55,7 @@ export async function POST(req: NextRequest) {
     const parseResult = parseExcelWithSmartHeader(fileBuffer);
     const { allRows } = parseResult;
 
-    const jenisData = batch.jenis_data;
+    const jenisData = batch.jenis_data as InventoryCategory;
     const companyId = batch.company_id;
 
     // 4. Transformasi baris demi baris
@@ -88,16 +68,13 @@ export async function POST(req: NextRequest) {
       .eq('jenis_data', jenisData);
 
     const typeMap = new Map<string, string>();
-    // Isi dari DB jika ada, atau gunakan fallback hardcoded
-    if (fieldDefs && fieldDefs.length > 0) {
-      for (const fd of fieldDefs) {
-        typeMap.set(fd.field_key, fd.tipe_data);
-      }
-    } else {
-      const fallback = FALLBACK_TYPE_MAP[jenisData] ?? {};
-      for (const [k, v] of Object.entries(fallback)) {
-        typeMap.set(k, v);
-      }
+    // Official category fields are authoritative; retain DB definitions only
+    // for optional legacy metadata that is not part of the fixed schema.
+    for (const field of INVENTORY_FIELDS[jenisData] ?? []) {
+      typeMap.set(field.field_key, field.tipe_data);
+    }
+    for (const fd of fieldDefs || []) {
+      if (!typeMap.has(fd.field_key)) typeMap.set(fd.field_key, fd.tipe_data);
     }
 
     for (const rawRow of allRows) {
@@ -149,7 +126,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Tandai kolom koordinat
-        if (fieldKey === 'titik_koordinat_raw') {
+        if (fieldKey === 'koordinat_raw') {
           rawCoordinateString = String(val);
         }
       }
@@ -158,8 +135,8 @@ export async function POST(req: NextRequest) {
       if (rawCoordinateString) {
         const parsedCoords = parseDMSCoordinate(rawCoordinateString);
         if (parsedCoords.isValid) {
-          item.latitude = parsedCoords.latitude;
-          item.longitude = parsedCoords.longitude;
+          item.koordinat_lat = parsedCoords.latitude;
+          item.koordinat_lng = parsedCoords.longitude;
         }
       }
 
@@ -172,7 +149,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Insert ke tabel sesuai jenis_data
-    const tableName = jenisData; // 'transformator' | 'kapasitor' | 'minyak_dielektrik'
+    const tableName = jenisData;
     const { error: insertErr } = await supabase
       .from(tableName)
       .insert(rowsToInsert);

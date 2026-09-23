@@ -5,7 +5,7 @@ import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, 
 
 export interface InventoryItem {
   id: string;
-  type: 'transformator' | 'kapasitor' | 'minyak_dielektrik';
+  type: 'transformator' | 'transformator_digunakan' | 'transformator_tidak_digunakan' | 'kapasitor' | 'minyak_dielektrik';
   name: string;
   companyName: string;
   serialNumber?: string;
@@ -198,7 +198,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
             ) : (
               paginatedItems.map((item) => {
                 let badgeTypeClass = 'bg-blue-50 text-blue-800 border-blue-200/80';
-                let labelType = 'Transformator';
+                let labelType = item.type === 'transformator_digunakan' ? 'Trafo digunakan' : item.type === 'transformator_tidak_digunakan' ? 'Trafo tidak digunakan' : 'Transformator';
                 if (item.type === 'kapasitor') {
                   badgeTypeClass = 'bg-amber-50 text-amber-800 border-amber-200/80';
                   labelType = 'Kapasitor';

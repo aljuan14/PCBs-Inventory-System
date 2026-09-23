@@ -33,10 +33,10 @@ export default function RootLayout({
     >
       <body 
         style={{ colorScheme: 'light' }}
-        className="min-h-full flex flex-col bg-slate-50 text-slate-900 font-sans"
+        className="min-h-full flex bg-[#f4f5f2] text-slate-900 font-sans"
       >
         <Navbar />
-        <main className="flex-1 w-full">{children}</main>
+        <main className="min-w-0 flex-1">{children}</main>
       </body>
     </html>
   );

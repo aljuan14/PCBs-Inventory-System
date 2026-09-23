@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { UploadCloud, FileSpreadsheet, Building2, Layers, CheckCircle, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 
 interface CompanyOption {
   id: string;
@@ -18,7 +19,7 @@ export default function UploadPage() {
   const [loadingCompanies, setLoadingCompanies] = useState(true);
 
   // Form states
-  const [jenisData, setJenisData] = useState<'transformator' | 'kapasitor' | 'minyak_dielektrik'>('transformator');
+  const [jenisData, setJenisData] = useState<InventoryCategory>('transformator_digunakan');
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [isNewCompany, setIsNewCompany] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
@@ -154,18 +155,14 @@ export default function UploadPage() {
                 <label className="block text-xs font-semibold text-slate-700 mb-2">
                   Jenis Data Inventaris <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'transformator', label: 'Transformator' },
-                    { id: 'kapasitor', label: 'Kapasitor' },
-                    { id: 'minyak_dielektrik', label: 'Minyak Oli' },
-                  ].map((tab) => (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {INVENTORY_CATEGORIES.map((tab) => (
                     <button
-                      key={tab.id}
+                      key={tab.key}
                       type="button"
-                      onClick={() => setJenisData(tab.id as any)}
+                      onClick={() => setJenisData(tab.key)}
                       className={`rounded-xl border py-2.5 px-3 text-xs font-bold transition-all ${
-                        jenisData === tab.id
+                        jenisData === tab.key
                           ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-xs'
                           : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                       }`}

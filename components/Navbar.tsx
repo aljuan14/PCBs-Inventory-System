@@ -2,61 +2,39 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, UploadCloud, ShieldAlert } from 'lucide-react';
+import { Building2, Droplets, Grid2X2, Layers3, ShieldCheck, UploadCloud, Zap, ZapOff } from 'lucide-react';
+import { INVENTORY_CATEGORIES } from '@/lib/inventory';
+
+const categoryIcons = {
+  transformator_digunakan: Zap,
+  transformator_tidak_digunakan: ZapOff,
+  kapasitor: Layers3,
+  minyak_dielektrik: Droplets,
+};
 
 export default function Navbar() {
   const pathname = usePathname();
-
-  const navItems = [
-    { href: '/dashboard', label: 'Dashboard GIS', icon: LayoutDashboard },
-    { href: '/upload', label: 'Upload & Mapping', icon: UploadCloud },
-  ];
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-sm shadow-emerald-500/20">
-              <ShieldAlert className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-bold tracking-tight text-slate-900">
-                  PCBs Inventory
-                </span>
-                <span className="rounded-md bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  KLHK Proto
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Sistem Inventarisasi Polychlorinated Biphenyls
-              </p>
-            </div>
-          </Link>
-        </div>
-
-        <nav className="flex items-center gap-1 sm:gap-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition-all ${
-                  isActive
-                    ? 'bg-emerald-50 border border-emerald-200/80 text-emerald-800 shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
-                }`}
-              >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-emerald-700' : 'text-slate-400'}`} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-    </header>
+    <aside className="sticky top-0 z-40 flex h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-[#fbfcfa] px-4 py-5">
+      <Link href="/dashboard" className="flex items-center gap-3 px-2 pb-7">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-700 text-white"><ShieldCheck className="h-5 w-5" /></div>
+        <div><div className="text-sm font-bold tracking-tight text-slate-900">PCBs inventory</div><div className="text-[10px] font-medium text-slate-500">Direktorat B3</div></div>
+      </Link>
+      <nav className="space-y-1 text-sm font-medium">
+        <Link href="/dashboard" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${pathname === '/dashboard' ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Grid2X2 className="h-4 w-4" /> Dashboard</Link>
+        <div className="px-3 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Inventarisasi</div>
+        {INVENTORY_CATEGORIES.map((category) => {
+          const Icon = categoryIcons[category.key];
+          const href = `/dashboard/${category.key.replaceAll('_', '-')}`;
+          return <Link key={category.key} href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive(href) ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Icon className="h-4 w-4" /> {category.shortLabel}</Link>;
+        })}
+        <div className="px-3 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Lainnya</div>
+        <Link href="/upload" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><UploadCloud className="h-4 w-4" /> Upload data</Link>
+        <Link href="/companies" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/companies') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Building2 className="h-4 w-4" /> Perusahaan</Link>
+      </nav>
+      <div className="mt-auto border-t border-slate-200 pt-4"><div className="flex items-center gap-2 px-2 text-xs text-slate-500"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">AD</span>Direktorat B3</div></div>
+    </aside>
   );
 }

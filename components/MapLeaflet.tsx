@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 
 export interface MapPoint {
   id: string;
-  type: 'transformator' | 'kapasitor' | 'minyak_dielektrik';
+  type: 'transformator' | 'transformator_digunakan' | 'transformator_tidak_digunakan' | 'kapasitor' | 'minyak_dielektrik';
   name: string;
   companyName: string;
   serialNumber?: string;
@@ -81,7 +81,7 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
         bounds.extend(latLng);
 
         // Tentukan warna berdasarkan jenis alat
-        let color = '#3b82f6'; // Biru untuk transformator
+        let color = '#0f766e'; // Teal untuk trafo digunakan
         let typeBadge = 'Transformator';
 
         if (point.type === 'kapasitor') {
@@ -90,6 +90,11 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
         } else if (point.type === 'minyak_dielektrik') {
           color = '#10b981'; // Emerald untuk minyak
           typeBadge = 'Minyak Dielektrik';
+        } else if (point.type === 'transformator_tidak_digunakan') {
+          color = '#b45309';
+          typeBadge = 'Trafo Tidak Digunakan';
+        } else if (point.type === 'transformator_digunakan') {
+          typeBadge = 'Trafo Masih Digunakan';
         }
 
         // Tentukan status bahaya PCB

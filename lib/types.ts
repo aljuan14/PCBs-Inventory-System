@@ -2,7 +2,7 @@
  * Tipe Data TypeScript untuk PCBs Inventory System
  */
 
-export type JenisData = 'transformator' | 'kapasitor' | 'minyak_dielektrik';
+export type JenisData = 'transformator_digunakan' | 'transformator_tidak_digunakan' | 'kapasitor' | 'minyak_dielektrik';
 
 export type ImportBatchStatus = 'pending_mapping' | 'mapped' | 'imported' | 'error';
 
