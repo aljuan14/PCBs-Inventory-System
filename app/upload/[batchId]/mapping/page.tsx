@@ -130,7 +130,11 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
       const json = await res.json();
 
       if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Gagal mengimpor data.');
+        // Tampilkan pesan error detail dari Supabase
+        const errMsg = json.error || 'Gagal mengimpor data.';
+        const errDetail = json.detail ? `\nDetail: ${json.detail}` : '';
+        const errCode = json.code ? ` (kode: ${json.code})` : '';
+        throw new Error(errMsg + errDetail + errCode);
       }
 
       setImportSuccess({ count: json.importedCount });
@@ -318,8 +322,8 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
               <button
                 type="button"
                 onClick={handleSaveAndImport}
-                disabled={importing || missingMandatory.length > 0}
-                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 disabled:opacity-50 transition-all"
+                disabled={importing}
+                className={`flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 disabled:opacity-50 transition-all`}
               >
                 {importing ? (
                   <>

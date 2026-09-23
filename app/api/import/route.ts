@@ -5,6 +5,29 @@ import { parseDMSCoordinate } from '@/lib/dms';
 import fs from 'fs';
 import path from 'path';
 
+// Fallback type map sesuai dengan FIELD_DEFS_FALLBACK di mapping route
+// Key: field_key, Value: kategori tipe ('numeric' | 'date' | 'text')
+const FALLBACK_TYPE_MAP: Record<string, Record<string, string>> = {
+  transformator: {
+    tahun_pembuatan: 'numeric', daya_kva: 'numeric',
+    tegangan_primer_kv: 'numeric', tegangan_sekunder_kv: 'numeric',
+    volume_minyak_liter: 'numeric', konsentrasi_pcb_ppm: 'numeric',
+    tanggal_uji: 'date', latitude: 'numeric', longitude: 'numeric',
+    perawatan_volume_ditambahkan_l: 'numeric', berat_ton: 'numeric',
+    perawatan_waktu: 'date', waktu_terakhir_digunakan: 'date',
+  },
+  kapasitor: {
+    tahun_pembuatan: 'numeric', kapasitas_kvar: 'numeric',
+    tegangan_kerja_kv: 'numeric', konsentrasi_pcb_ppm: 'numeric',
+    tanggal_uji: 'date', latitude: 'numeric', longitude: 'numeric',
+  },
+  minyak_dielektrik: {
+    volume_liter: 'numeric', konsentrasi_pcb_ppm: 'numeric',
+    tanggal_uji: 'date', latitude: 'numeric', longitude: 'numeric',
+    volume_l: 'numeric',
+  },
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -65,9 +88,15 @@ export async function POST(req: NextRequest) {
       .eq('jenis_data', jenisData);
 
     const typeMap = new Map<string, string>();
-    if (fieldDefs) {
+    // Isi dari DB jika ada, atau gunakan fallback hardcoded
+    if (fieldDefs && fieldDefs.length > 0) {
       for (const fd of fieldDefs) {
         typeMap.set(fd.field_key, fd.tipe_data);
+      }
+    } else {
+      const fallback = FALLBACK_TYPE_MAP[jenisData] ?? {};
+      for (const [k, v] of Object.entries(fallback)) {
+        typeMap.set(k, v);
       }
     }
 
@@ -91,16 +120,27 @@ export async function POST(req: NextRequest) {
         }
 
         const expectedType = typeMap.get(fieldKey);
+        // Normalize: semua varian angka (number, numeric, integer) diperlakukan sama
+        const isNumericType = expectedType === 'number' || expectedType === 'numeric' || expectedType === 'integer';
+        const isDateType = expectedType === 'date';
 
-        if (expectedType === 'number') {
-          // Bersihkan karakter non-angka kecuali minus dan koma/titik desimal
+        if (isNumericType) {
+          // Bersihkan: ganti koma desimal, hapus karakter non-angka kecuali minus & titik
           const strVal = String(val).replace(',', '.').replace(/[^0-9.-]/g, '');
           const num = parseFloat(strVal);
           item[fieldKey] = isNaN(num) ? null : num;
-        } else if (expectedType === 'date') {
+        } else if (isDateType) {
           try {
-            const d = new Date(val);
-            item[fieldKey] = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : null;
+            // Handle Excel serial date number
+            if (typeof val === 'number') {
+              // Excel date serial: hari sejak 1899-12-30
+              const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+              const d = new Date(excelEpoch.getTime() + val * 86400000);
+              item[fieldKey] = d.toISOString().split('T')[0];
+            } else {
+              const d = new Date(val);
+              item[fieldKey] = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : null;
+            }
           } catch {
             item[fieldKey] = null;
           }
@@ -138,8 +178,13 @@ export async function POST(req: NextRequest) {
       .insert(rowsToInsert);
 
     if (insertErr) {
-      console.error('Insert error on table ' + tableName, insertErr);
-      return NextResponse.json({ error: `Gagal menyimpan data ke database: ${insertErr.message}` }, { status: 500 });
+      console.error('Insert error on table ' + tableName, JSON.stringify(insertErr, null, 2));
+      console.error('Sample row attempted:', JSON.stringify(rowsToInsert[0], null, 2));
+      return NextResponse.json({
+        error: `Gagal menyimpan data ke database: ${insertErr.message}`,
+        detail: insertErr.details ?? insertErr.hint ?? null,
+        code: insertErr.code ?? null,
+      }, { status: 500 });
     }
 
     // 6. Update status import_batches

@@ -5,7 +5,7 @@
 
 ---
 
-## 📌 Latar Belakang & Konteks Regulasi
+## Latar Belakang & Konteks Regulasi
 
 **Polychlorinated Biphenyls (PCBs)** merupakan senyawa kimia organik sintetis yang tergolong Bahan Berbahaya dan Beracun (B3) serta *Persistent Organic Pollutants* (POPs) yang diatur secara ketat dalam **Konvensi Stockholm** dan regulasi Kementerian Lingkungan Hidup dan Kehutanan (KLHK) Republik Indonesia. 
 
@@ -18,20 +18,20 @@ Tantangan utama dalam inventarisasi nasional adalah **format pelaporan dari ribu
 
 ---
 
-## ✨ Fitur Utama yang Tersedia
+## Fitur Utama yang Tersedia
 
-### 1. 📂 Smart Header Sniffer & Upload (`/upload`)
+### 1. Smart Header Sniffer & Upload (`/upload`)
 - **Multi-Level Header Sniffer**: Algoritma cerdas di `lib/excel.ts` memindai berkas Excel dan secara otomatis menemukan baris header sebenarnya, melewati baris judul bertingkat (2–4 baris awal dokumen).
 - **Profil Perusahaan Terintegrasi**: Pilih perusahaan terdaftar atau langsung tambahkan profil perusahaan baru secara instan.
 - **Pratinjau Data Awal**: Menampilkan 5 baris pertama data mentah sebelum proses pemetaan kolom.
 
-### 2. 🔄 Manual Column Mapping & DMS Parser (`/upload/[batchId]/mapping`)
+### 2. Manual Column Mapping & DMS Parser (`/upload/[batchId]/mapping`)
 - **Visual Column Mapper**: Antarmuka sisi-kiri (kolom Excel asli beserta sampel data) dan sisi-kanan (dropdown field baku database).
 - **Heuristic Auto-Suggestion**: Otomatis mendeteksi dan memilih kolom umum seperti Nama Merek, Nomor Seri, Koordinat, Daya (kVA), dan Konsentrasi PCB (ppm).
 - **DMS Coordinate Parser (`lib/dms.ts`)**: Mengonversi koordinat derajat menit detik (termasuk format lokal `LS`, `LU`, `BT`, `BB`, desimal koma `,`, serta typo format seperti `35',973"`) menjadi angka desimal `latitude` dan `longitude` spasial.
 - **Validasi Kolom Wajib**: Memastikan kolom kunci seperti Merek atau Nomor Seri terpetakan sebelum data diimpor.
 
-### 3. 📊 Dashboard Spasial & Statistik GIS (`/` & `/dashboard`)
+### 3. Dashboard Spasial & Statistik GIS (`/` & `/dashboard`)
 - **4 Kartu Metrik KPI**: Ringkasan total perusahaan terdata, transformator (aktif vs non-aktif), kapasitor unit, dan volume minyak dielektrik.
 - **Peta Spasial Interaktif (Leaflet GIS)**: Menampilkan sebaran titik koordinat di seluruh wilayah kepulauan Indonesia:
   - 🔵 **Biru**: Transformator
@@ -54,7 +54,7 @@ Tantangan utama dalam inventarisasi nasional adalah **format pelaporan dari ribu
 
 ---
 
-## 🗄️ Skema Database Supabase (PostgreSQL)
+## Skema Database Supabase (PostgreSQL)
 
 Skema database lengkap terdapat di berkas `supabase/migrations/20260922000001_initial_schema.sql`:
 
@@ -69,7 +69,7 @@ Skema database lengkap terdapat di berkas `supabase/migrations/20260922000001_in
 
 ---
 
-## 🚀 Panduan Memulai Cepat
+## Panduan Memulai Cepat
 
 ### 1. Prasyarat Sistem
 - **Node.js**: v18.0.0 atau lebih baru (Disarankan Node.js v20+)
@@ -109,7 +109,7 @@ Buka browser Anda di **`http://localhost:3000`**.
 
 ---
 
-## 📁 Struktur Direktori Proyek
+## Struktur Direktori Proyek
 
 ```text
 ├── app/
@@ -162,5 +162,5 @@ Contoh hasil konversi:
 
 ---
 
-## 📄 Lisensi & Kontribusi
-Dikembangkan untuk keperluan inventarisasi dan pengelolaan PCBs nasional. Dikelola oleh [aljuan14](https://github.com/aljuan14).
+## Lisensi & Kontribusi
+Dikembangkan untuk keperluan inventarisasi dan pengelolaan PCBs nasional.
