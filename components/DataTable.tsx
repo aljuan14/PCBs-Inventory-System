@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle } from 'lucide-react';
+import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save } from 'lucide-react';
 
 export interface InventoryItem {
   id: string;
@@ -21,14 +21,27 @@ export interface InventoryItem {
 interface DataTableProps {
   items: InventoryItem[];
   companies: string[];
+  onEdit?: (item: InventoryItem, changes: EditableInventoryFields) => Promise<void> | void;
+  onDelete?: (item: InventoryItem) => Promise<void> | void;
 }
 
-export default function DataTable({ items, companies }: DataTableProps) {
+export interface EditableInventoryFields {
+  name: string;
+  serialNumber: string;
+  location: string;
+  pcbConcentration: number | null;
+  status: string;
+}
+
+export default function DataTable({ items, companies, onEdit, onDelete }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
   const [selectedPcbRange, setSelectedPcbRange] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
+  const [saving, setSaving] = useState(false);
   const pageSize = 10;
 
   const filteredItems = useMemo(() => {
@@ -172,12 +185,13 @@ export default function DataTable({ items, companies }: DataTableProps) {
               <th className="py-3.5 px-4">Lokasi &amp; Koordinat</th>
               <th className="py-3.5 px-4">Konsentrasi PCB</th>
               <th className="py-3.5 px-4">Status</th>
+              <th className="py-3.5 px-4 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {paginatedItems.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
+                <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
                   Tidak ada data yang sesuai dengan kriteria pencarian/filter.
                 </td>
               </tr>
@@ -249,6 +263,41 @@ export default function DataTable({ items, companies }: DataTableProps) {
                         {item.status || 'Aktif'}
                       </span>
                     </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex justify-end gap-1.5">
+                        <button
+                          type="button"
+                          title="Edit data"
+                          aria-label={`Edit ${item.name}`}
+                          onClick={() => {
+                            setEditingItem(item);
+                            setEditForm({
+                              name: item.name || '',
+                              serialNumber: item.serialNumber || '',
+                              location: item.location || '',
+                              pcbConcentration: item.pcbConcentration ?? null,
+                              status: item.status || 'Aktif',
+                            });
+                          }}
+                          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Hapus data"
+                          aria-label={`Hapus ${item.name}`}
+                          onClick={async () => {
+                            if (onDelete && window.confirm(`Hapus data ${item.name}?`)) {
+                              await onDelete(item);
+                            }
+                          }}
+                          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })
@@ -278,6 +327,67 @@ export default function DataTable({ items, companies }: DataTableProps) {
             >
               Selanjutnya
             </button>
+          </div>
+        </div>
+      )}
+
+      {editingItem && editForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-inventory-title">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h4 id="edit-inventory-title" className="text-lg font-bold text-slate-900">Edit Data Inventarisasi</h4>
+                <p className="mt-1 text-xs text-slate-500">Perbarui informasi {editingItem.name}.</p>
+              </div>
+              <button type="button" title="Tutup" aria-label="Tutup form edit" onClick={() => setEditingItem(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-slate-700">
+                Merek / Nama
+                <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/10" />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Nomor Serial
+                <input value={editForm.serialNumber} onChange={(e) => setEditForm({ ...editForm, serialNumber: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/10" />
+              </label>
+              <label className="text-xs font-semibold text-slate-700 sm:col-span-2">
+                Lokasi
+                <input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/10" />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Konsentrasi PCB (ppm)
+                <input type="number" min="0" value={editForm.pcbConcentration ?? ''} onChange={(e) => setEditForm({ ...editForm, pcbConcentration: e.target.value === '' ? null : Number(e.target.value) })} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/10" />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Status
+                <input value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/10" />
+              </label>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingItem(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
+              <button
+                type="button"
+                disabled={saving || !(editForm.name || '').trim()}
+                onClick={async () => {
+                  if (!onEdit) return;
+                  setSaving(true);
+                  try {
+                    await onEdit(editingItem, editForm);
+                    setEditingItem(null);
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </button>
+            </div>
           </div>
         </div>
       )}

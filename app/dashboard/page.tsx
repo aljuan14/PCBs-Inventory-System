@@ -4,16 +4,17 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { 
-  Building2, 
-  Cpu, 
-  BatteryCharging, 
-  Droplet, 
-  AlertTriangle, 
-  UploadCloud, 
+import {
+  Building2,
+  Cpu,
+  BatteryCharging,
+  Droplet,
+  AlertTriangle,
+  UploadCloud,
   RefreshCw
 } from 'lucide-react';
 import DataTable, { InventoryItem } from '@/components/DataTable';
+import type { EditableInventoryFields } from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
 import { MapPoint } from '@/components/MapLeaflet';
 
@@ -273,6 +274,56 @@ export default function DashboardPage() {
     loadDashboardData();
   };
 
+  const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
+    const table = item.type;
+    const baseChanges = {
+      konsentrasi_pcb_ppm: changes.pcbConcentration,
+    };
+
+    let updatePayload: Record<string, string | number | null>;
+    if (item.type === 'transformator') {
+      updatePayload = {
+        nama_merek: changes.name.trim(),
+        nomor_serial: changes.serialNumber.trim(),
+        lokasi_peralatan: changes.location.trim() || null,
+        status: changes.status.trim() || null,
+        ...baseChanges,
+      };
+    } else if (item.type === 'kapasitor') {
+      updatePayload = {
+        nama_merek: changes.name.trim(),
+        nomor_serial: changes.serialNumber.trim() || null,
+        lokasi: changes.location.trim() || null,
+        status_alat: changes.status.trim() || null,
+      };
+    } else {
+      updatePayload = {
+        merek: changes.name.trim(),
+        lokasi_penyimpanan: changes.location.trim() || null,
+        status: changes.status.trim() || null,
+        ...baseChanges,
+      };
+    }
+
+    const { error } = await supabase.from(table).update(updatePayload).eq('id', item.id);
+    if (error) {
+      window.alert(`Gagal menyimpan perubahan: ${error.message}`);
+      throw error;
+    }
+
+    await loadDashboardData();
+  };
+
+  const handleDelete = async (item: InventoryItem) => {
+    const { error } = await supabase.from(item.type).delete().eq('id', item.id);
+    if (error) {
+      window.alert(`Gagal menghapus data: ${error.message}`);
+      throw error;
+    }
+
+    await loadDashboardData();
+  };
+
   return (
     <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Top Banner & Refresh */}
@@ -412,7 +463,12 @@ export default function DashboardPage() {
       />
 
       {/* Data Table Section */}
-      <DataTable items={inventoryItems} companies={companyNames} />
+      <DataTable
+        items={inventoryItems}
+        companies={companyNames}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+      />
 
       {/* Peta GIS Leaflet (Paling Bawah) */}
       <div className="space-y-3">
