@@ -35,6 +35,7 @@ export default function InventoryOverview() {
       (result.data || []).forEach((row: Record<string, any>) => {
         const item: InventoryItem = {
           id: row.id,
+          no: row.no,
           type: category,
           name: row.nama_merek || row.merek_minyak_dielektrik || 'Tanpa nama',
           companyName: companyMap.get(row.company_id) || 'Perusahaan',
@@ -46,6 +47,7 @@ export default function InventoryOverview() {
           status: row.status_alat || row.status_minyak || null,
           capacity: row.daya_kva ? `${row.daya_kva} kVA` : row.volume_l ? `${row.volume_l} L` : null,
           createdAt: row.created_at,
+          details: row,
         };
         nextItems.push(item);
         if (item.latitude != null && item.longitude != null) nextPoints.push({ ...item, latitude: item.latitude, longitude: item.longitude });

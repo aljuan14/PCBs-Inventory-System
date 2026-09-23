@@ -34,7 +34,7 @@ RENAME TO minyak_dielektrik_legacy;
 
 CREATE TABLE IF NOT EXISTS public.transformator_digunakan (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-    no NUMERIC,
+    no INTEGER,
     nama_merek TEXT,
     nomor_serial TEXT,
     tahun_pembuatan INT,
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.transformator_digunakan (
 
 CREATE TABLE IF NOT EXISTS public.transformator_tidak_digunakan (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-    no NUMERIC,
+    no INTEGER,
     nama_merek TEXT,
     nomor_serial TEXT,
     tahun_pembuatan INT,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS public.transformator_tidak_digunakan (
 
 CREATE TABLE IF NOT EXISTS public.kapasitor (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-    no NUMERIC,
+    no INTEGER,
     nama_merek TEXT,
     nomor_serial TEXT,
     tahun_pembuatan INT,
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS public.kapasitor (
 
 CREATE TABLE IF NOT EXISTS public.minyak_dielektrik (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-    no NUMERIC,
+    no INTEGER,
     merek_minyak_dielektrik TEXT,
     volume_l NUMERIC,
     tahun_pembuatan INT,

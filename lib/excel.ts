@@ -35,60 +35,70 @@ export function parseExcelWithSmartHeader(buffer: ArrayBuffer | Uint8Array): Exc
     throw new Error('Sheet Excel kosong.');
   }
 
-  // Cari baris yang paling mungkin merupakan header kolom:
-  // Kriteria: memiliki jumlah kolom terisi terbanyak dan berisi kata-kata kunci
-  // seperti 'no', 'nama', 'merk', 'merek', 'seri', 'lokasi', 'tahun', 'daya', 'koordinat'
   const headerKeywords = [
-    'no', 'nomor', 'nama', 'merk', 'merek', 'seri', 'serial', 'lokasi',
-    'tahun', 'daya', 'tegangan', 'minyak', 'koordinat', 'uji', 'kondisi',
-    'status', 'kva', 'kvar', 'ton', 'ppm', 'alat', 'volume'
+    'no', 'nomor', 'nama', 'merk', 'merek', 'seri', 'serial', 'lokasi', 'tahun',
+    'daya', 'minyak', 'koordinat', 'uji', 'kondisi', 'status', 'kva', 'ton',
+    'ppm', 'alat', 'volume', 'negara', 'wadah', 'berat', 'perawatan', 'digunakan',
   ];
+  const clean = (value: unknown) => String(value ?? '').trim();
+  const isEmpty = (value: unknown) => clean(value) === '';
+  const isOrdinalOnlyRow = (row: any[]) => {
+    const values = row.filter((cell) => !isEmpty(cell)).map((cell) => clean(cell));
+    return values.length > 0 && values.every((value, index) => /^\d{1,3}$/.test(value) && Number(value) === index + 1);
+  };
+  const scoreLabelRow = (row: any[]) => {
+    if (isOrdinalOnlyRow(row)) return -Infinity;
+    return row.reduce((score, cell) => {
+      const value = clean(cell).toLowerCase();
+      if (!value || /^\d+$/.test(value)) return score;
+      return score + 1 + (headerKeywords.some((keyword) => value.includes(keyword)) ? 3 : 0);
+    }, 0);
+  };
 
+  // The final textual label row wins. Numeric-only ordinal rows are explicitly
+  // excluded, so templates with a separate 1..N row remain intact.
+  const maxScanRows = Math.min(14, rawRows.length);
   let bestRowIndex = 0;
-  let maxScore = -1;
-
-  // Cek maksimal hingga 10 baris pertama
-  const maxScanRows = Math.min(10, rawRows.length);
+  let maxScore = -Infinity;
   for (let i = 0; i < maxScanRows; i++) {
-    const row = rawRows[i];
-    if (!Array.isArray(row)) continue;
-
-    let score = 0;
-    let filledCols = 0;
-
-    for (const cell of row) {
-      if (cell !== null && cell !== undefined && String(cell).trim() !== '') {
-        filledCols++;
-        const cellStr = String(cell).toLowerCase();
-        for (const kw of headerKeywords) {
-          if (cellStr.includes(kw)) {
-            score += 2;
-            break;
-          }
-        }
-      }
-    }
-
-    const totalScore = filledCols + score;
-    if (totalScore > maxScore) {
-      maxScore = totalScore;
+    const score = scoreLabelRow(rawRows[i] || []);
+    if (score >= maxScore) {
+      maxScore = score;
       bestRowIndex = i;
     }
   }
 
-  // Jika baris sebelumnya adalah header induk (misal row 1 'Data Teknis', row 2 'Daya'),
-  // kita bisa menggabungkan jika diperlukan, namun baris bestRowIndex biasanya adalah nama kolom spesifik.
-  const rawHeaderRow = rawRows[bestRowIndex] || [];
-  
-  // Ambil headers unik dan bersihkan spasi
+  const labelRow = rawRows[bestRowIndex] || [];
+  const groupKeywords = ['perawatan', 'uji lanjutan', 'uji', 'kondisi'];
+  const groupRows = rawRows.slice(Math.max(0, bestRowIndex - 3), bestRowIndex);
+  const groupByColumn: string[] = Array.from({ length: labelRow.length }, () => '');
+  for (const row of groupRows) {
+    const anchors = row
+      .map((cell, column) => ({ column, value: clean(cell) }))
+      .filter(({ value }) => value && !/^\d+$/.test(value) && groupKeywords.some((keyword) => value.toLowerCase().includes(keyword)));
+    for (let anchorIndex = 0; anchorIndex < anchors.length; anchorIndex++) {
+      const anchor = anchors[anchorIndex];
+      const nextColumn = anchors[anchorIndex + 1]?.column ?? labelRow.length;
+      for (let column = anchor.column; column < nextColumn; column++) {
+        groupByColumn[column] = anchor.value;
+      }
+    }
+  }
+
+  // Merge a meaningful group label with the per-column label. Do not carry a
+  // document title or an ordinal row into the field name.
   const headers: string[] = [];
-  const colCount = rawHeaderRow.length;
+  const colCount = labelRow.length;
 
   for (let c = 0; c < colCount; c++) {
-    const rawVal = rawHeaderRow[c];
-    let headerName = rawVal !== null && rawVal !== undefined ? String(rawVal).trim() : '';
-    
-    // Jika kolom tidak ada namanya, beri label Kolom_X
+    const label = clean(labelRow[c]);
+    const group = groupByColumn[c];
+    let headerName = label;
+    if (group && label && group.toLowerCase() !== label.toLowerCase()) {
+      headerName = `${group} - ${label}`;
+    } else if (group && !label) {
+      headerName = group;
+    }
     if (!headerName) {
       headerName = `Kolom_${c + 1}`;
     }
@@ -104,11 +114,13 @@ export function parseExcelWithSmartHeader(buffer: ArrayBuffer | Uint8Array): Exc
     headers.push(uniqueName);
   }
 
-  // Ambil baris data setelah headerRowIndex
+  // Data begins after the textual label row. Any remaining ordinal-only row is
+  // skipped defensively in case the source template places it below labels.
   const dataRows: Record<string, any>[] = [];
   for (let r = bestRowIndex + 1; r < rawRows.length; r++) {
     const row = rawRows[r];
     if (!row || !Array.isArray(row)) continue;
+    if (isOrdinalOnlyRow(row)) continue;
 
     // Abaikan baris yang seluruhnya kosong
     const isRowEmpty = row.every(

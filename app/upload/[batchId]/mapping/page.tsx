@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { FieldDefinition, ImportBatch } from '@/lib/types';
-import type { InventoryCategory } from '@/lib/inventory';
+import { suggestInventoryField } from '@/lib/inventory';
 import { 
   ArrowRight, 
   CheckCircle2, 
@@ -53,49 +53,9 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
 
         // Auto-match memakai vocabulary yang relevan dengan kategori resmi.
         const initialMapping: Record<string, string> = {};
-        const availableDefs: FieldDefinition[] = data.fieldDefinitions || [];
-        const category = data.batch?.jenis_data as InventoryCategory;
-        const categoryHints: Record<InventoryCategory, Array<[string, string[]]>> = {
-          transformator_digunakan: [['perawatan_penyedia_jasa', ['penyedia', 'jasa', 'perawatan']], ['daya_kva', ['daya', 'kva']], ['uji_konsentrasi_ppm', ['konsentrasi', 'ppm']]],
-          transformator_tidak_digunakan: [['kondisi_di_dalam_alat', ['kondisi', 'dalam', 'alat']], ['status_kondisi', ['status', 'kondisi']], ['waktu_terakhir_digunakan', ['terakhir', 'digunakan']]],
-          kapasitor: [['status_alat', ['status', 'alat', 'kapasitor']]],
-          minyak_dielektrik: [['merek_minyak_dielektrik', ['merek', 'minyak', 'dielektrik']], ['status_minyak', ['status', 'minyak']], ['uji_konsentrasi_ppm', ['konsentrasi', 'ppm']]],
-        };
 
         for (const h of data.headers || []) {
-          const cleanH = h.toLowerCase().replace(/[^a-z0-9]/g, '');
-          let matchedKey = '__ignore__';
-
-          for (const fd of availableDefs) {
-            const cleanKey = fd.field_key.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const cleanLabel = fd.label.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-            if (cleanH === cleanKey || cleanH === cleanLabel) {
-              matchedKey = fd.field_key;
-              break;
-            }
-
-            const hint = categoryHints[category]?.find(([, words]) => words.every((word) => cleanH.includes(word)));
-            if (hint && fd.field_key === hint[0]) matchedKey = fd.field_key;
-            // Keyword heuristics khusus field tetap
-            if (cleanH.includes('merek') || cleanH.includes('merk')) {
-              if (fd.field_key === 'nama_merek' || fd.field_key === 'merek_minyak_dielektrik') matchedKey = fd.field_key;
-            } else if (cleanH.includes('seri') || cleanH.includes('serial')) {
-              if (fd.field_key === 'nomor_serial') matchedKey = fd.field_key;
-            } else if (cleanH.includes('koordinat') || cleanH.includes('dms') || cleanH.includes('latlon')) {
-              if (fd.field_key === 'koordinat_raw') matchedKey = fd.field_key;
-            } else if (cleanH.includes('pcb') || cleanH.includes('ppm')) {
-              if (fd.field_key === 'uji_konsentrasi_ppm') matchedKey = fd.field_key;
-            } else if (cleanH.includes('kva') || cleanH.includes('daya')) {
-              if (fd.field_key === 'daya_kva') matchedKey = fd.field_key;
-            } else if (cleanH.includes('tahun')) {
-              if (fd.field_key === 'tahun_pembuatan') matchedKey = fd.field_key;
-            } else if (cleanH.includes('lokasi')) {
-              if (fd.field_key.includes('lokasi')) matchedKey = fd.field_key;
-            }
-          }
-
-          initialMapping[h] = matchedKey;
+          initialMapping[h] = suggestInventoryField(data.batch?.jenis_data, h);
         }
 
         setMappings(initialMapping);

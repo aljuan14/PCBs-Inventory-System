@@ -57,6 +57,20 @@ export async function POST(req: NextRequest) {
 
     const jenisData = batch.jenis_data as InventoryCategory;
     const companyId = batch.company_id;
+    const categoryFields = INVENTORY_FIELDS[jenisData];
+    if (!categoryFields) {
+      return NextResponse.json({ error: 'Kategori batch tidak didukung.' }, { status: 400 });
+    }
+    const allowedFields = new Set(categoryFields.map((field) => field.field_key));
+    const requiredFields = categoryFields.filter((field) => field.wajib).map((field) => field.field_key);
+    const invalidMappings = Object.values(mappings).filter((fieldKey) => fieldKey !== '__ignore__' && !allowedFields.has(fieldKey));
+    if (invalidMappings.length > 0) {
+      return NextResponse.json({ error: 'Mapping berisi field yang bukan milik kategori ini.' }, { status: 400 });
+    }
+    const missingRequired = requiredFields.filter((fieldKey) => !Object.values(mappings).includes(fieldKey));
+    if (missingRequired.length > 0) {
+      return NextResponse.json({ error: `Field wajib belum dipetakan: ${missingRequired.join(', ')}` }, { status: 400 });
+    }
 
     // 4. Transformasi baris demi baris
     const rowsToInsert: Record<string, any>[] = [];
@@ -139,6 +153,9 @@ export async function POST(req: NextRequest) {
           item.koordinat_lng = parsedCoords.longitude;
         }
       }
+
+      const missingValue = requiredFields.find((fieldKey) => item[fieldKey] === null || item[fieldKey] === undefined || item[fieldKey] === '');
+      if (missingValue) continue;
 
       // Pastikan ada nilai minimum yang masuk akal
       rowsToInsert.push(item);

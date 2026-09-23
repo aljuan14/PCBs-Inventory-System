@@ -19,6 +19,7 @@ function toItem(category: InventoryCategory, row: Record<string, any>, companyNa
   const isTrafo = category.startsWith('transformator');
   return {
     id: row.id,
+    no: row.no,
     type: category,
     name: row.nama_merek || row.merek_minyak_dielektrik || 'Tanpa nama',
     companyName: companyNames.get(row.company_id) || 'Perusahaan',
@@ -30,6 +31,7 @@ function toItem(category: InventoryCategory, row: Record<string, any>, companyNa
     status: row.status_alat || row.status_minyak || (isTrafo ? (category.endsWith('digunakan') ? 'Masih digunakan' : 'Tidak digunakan') : null),
     capacity: row.daya_kva ? `${row.daya_kva} kVA` : row.volume_l ? `${row.volume_l} L` : null,
     createdAt: row.created_at,
+    details: row,
   };
 }
 
@@ -62,20 +64,23 @@ export default function InventoryCategoryDashboard({ category }: { category: Inv
   useEffect(() => { loadData(); }, [category]);
 
   const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
-    const payload: Record<string, string | number | null> = {
-      nama_merek: changes.name.trim(),
-      nomor_serial: changes.serialNumber.trim() || null,
-      uji_konsentrasi_ppm: changes.pcbConcentration,
-    };
+    const payload: Record<string, string | number | null> = {};
     if (category === 'minyak_dielektrik') {
-      delete payload.nama_merek;
       payload.merek_minyak_dielektrik = changes.name.trim();
+      payload.uji_konsentrasi_ppm = changes.pcbConcentration;
       payload.lokasi_penyimpanan = changes.location.trim() || null;
       payload.status_minyak = changes.status.trim() || null;
-    } else {
+    } else if (category === 'kapasitor') {
+      payload.nama_merek = changes.name.trim();
+      payload.nomor_serial = changes.serialNumber.trim() || null;
       payload.lokasi_peralatan = changes.location.trim() || null;
-      if (category === 'kapasitor') payload.status_alat = changes.status.trim() || null;
-      if (category.startsWith('transformator')) payload.status_kondisi = changes.status.trim() || null;
+      payload.status_alat = changes.status.trim() || null;
+    } else {
+      payload.nama_merek = changes.name.trim();
+      payload.nomor_serial = changes.serialNumber.trim() || null;
+      payload.uji_konsentrasi_ppm = changes.pcbConcentration;
+      payload.lokasi_peralatan = changes.location.trim() || null;
+      if (category === 'transformator_tidak_digunakan') payload.status_kondisi = changes.status.trim() || null;
     }
     const { error: updateError } = await supabase.from(category).update(payload).eq('id', item.id);
     if (updateError) throw updateError;

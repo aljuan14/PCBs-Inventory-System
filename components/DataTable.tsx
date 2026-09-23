@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { Fragment, useState, useMemo } from 'react';
 import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save } from 'lucide-react';
 
 export interface InventoryItem {
   id: string;
+  no?: number | null;
   type: 'transformator' | 'transformator_digunakan' | 'transformator_tidak_digunakan' | 'kapasitor' | 'minyak_dielektrik';
   name: string;
   companyName: string;
@@ -16,6 +17,7 @@ export interface InventoryItem {
   status?: string | null;
   capacity?: string | number | null;
   createdAt?: string;
+  details?: Record<string, unknown>;
 }
 
 interface DataTableProps {
@@ -42,6 +44,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const pageSize = 10;
 
   const filteredItems = useMemo(() => {
@@ -89,6 +92,10 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
     const start = (currentPage - 1) * pageSize;
     return filteredItems.slice(start, start + pageSize);
   }, [filteredItems, currentPage, pageSize]);
+  const showTrafoCapacity = paginatedItems.some((item) => item.type.startsWith('transformator'));
+  const showOilVolume = paginatedItems.some((item) => item.type === 'minyak_dielektrik');
+  const showPcb = paginatedItems.some((item) => item.pcbConcentration !== null && item.pcbConcentration !== undefined);
+  const tableColumnCount = 5 + Number(showTrafoCapacity) + Number(showOilVolume) + Number(showPcb);
 
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
@@ -179,11 +186,13 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
         <table className="w-full text-left text-xs">
           <thead className="border-b border-slate-200 bg-slate-50/80 font-bold text-slate-700">
             <tr>
-              <th className="py-3.5 px-4">Jenis</th>
+              <th className="py-3.5 px-4">No.</th>
               <th className="py-3.5 px-4">Merek / Seri</th>
               <th className="py-3.5 px-4">Perusahaan</th>
-              <th className="py-3.5 px-4">Lokasi &amp; Koordinat</th>
-              <th className="py-3.5 px-4">Konsentrasi PCB</th>
+              <th className="py-3.5 px-4">Lokasi</th>
+              {showTrafoCapacity && <th className="py-3.5 px-4">Daya (kVA)</th>}
+              {showOilVolume && <th className="py-3.5 px-4">Volume (L)</th>}
+              {showPcb && <th className="py-3.5 px-4">Konsentrasi Uji</th>}
               <th className="py-3.5 px-4">Status</th>
               <th className="py-3.5 px-4 text-right">Aksi</th>
             </tr>
@@ -191,22 +200,12 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
           <tbody className="divide-y divide-slate-100">
             {paginatedItems.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                <td colSpan={tableColumnCount} className="py-12 text-center text-slate-400 font-medium">
                   Tidak ada data yang sesuai dengan kriteria pencarian/filter.
                 </td>
               </tr>
             ) : (
               paginatedItems.map((item) => {
-                let badgeTypeClass = 'bg-blue-50 text-blue-800 border-blue-200/80';
-                let labelType = item.type === 'transformator_digunakan' ? 'Trafo digunakan' : item.type === 'transformator_tidak_digunakan' ? 'Trafo tidak digunakan' : 'Transformator';
-                if (item.type === 'kapasitor') {
-                  badgeTypeClass = 'bg-amber-50 text-amber-800 border-amber-200/80';
-                  labelType = 'Kapasitor';
-                } else if (item.type === 'minyak_dielektrik') {
-                  badgeTypeClass = 'bg-emerald-50 text-emerald-800 border-emerald-200/80';
-                  labelType = 'Minyak';
-                }
-
                 // PCB status pill
                 let pcbIcon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />;
                 let pcbBadge = 'bg-emerald-50 text-emerald-800 border-emerald-200/80';
@@ -226,15 +225,14 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
                   pcbText = `${item.pcbConcentration} ppm (50-500)`;
                 }
 
+                const isExpanded = expandedItemId === item.id;
+                const detailEntries = Object.entries(item.details || {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
                 return (
+                  <Fragment key={item.id}>
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4 font-medium">
-                      <span className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-[11px] font-bold ${badgeTypeClass}`}>
-                        {labelType}
-                      </span>
-                    </td>
+                    <td className="py-3.5 px-4 font-medium">{item.no ?? '-'}</td>
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-900">{item.name}</div>
+                      <button type="button" onClick={() => setExpandedItemId(isExpanded ? null : item.id)} className="text-left font-bold text-slate-900 hover:text-emerald-700">{item.name}</button>
                       {item.serialNumber && (
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
                           S/N: {item.serialNumber}
@@ -244,20 +242,15 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
                     <td className="py-3.5 px-4 font-medium text-slate-700">
                       {item.companyName}
                     </td>
-                    <td className="py-3.5 px-4">
-                      <div className="text-slate-800 font-medium">{item.location || '-'}</div>
-                      {item.latitude !== null && item.longitude !== null && item.latitude !== undefined && (
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                          {item.latitude.toFixed(4)}, {item.longitude?.toFixed(4)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-4"><div className="text-slate-800 font-medium">{item.location || '-'}</div></td>
+                    {showTrafoCapacity && <td className="py-3.5 px-4">{item.type.startsWith('transformator') ? item.capacity || '-' : '-'}</td>}
+                    {showOilVolume && <td className="py-3.5 px-4">{item.type === 'minyak_dielektrik' ? item.capacity || '-' : '-'}</td>}
+                    {showPcb && <td className="py-3.5 px-4">
                       <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${pcbBadge}`}>
                         {pcbIcon}
                         <span>{pcbText}</span>
                       </span>
-                    </td>
+                    </td>}
                     <td className="py-3.5 px-4">
                       <span className="capitalize font-medium text-slate-700">
                         {item.status || 'Aktif'}
@@ -299,6 +292,8 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
                       </div>
                     </td>
                   </tr>
+                  {isExpanded && <tr key={`${item.id}-details`} className="bg-slate-50/70"><td colSpan={tableColumnCount} className="px-6 py-4"><div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">{detailEntries.length > 0 ? detailEntries.map(([key, value]) => <div key={key}><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{key.replaceAll('_', ' ')}</div><div className="text-xs font-medium text-slate-700">{String(value)}</div></div>) : <span className="text-xs text-slate-500">Tidak ada detail tambahan.</span>}</div></td></tr>}
+                  </Fragment>
                 );
               })
             )}
