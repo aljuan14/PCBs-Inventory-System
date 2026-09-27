@@ -13,6 +13,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
+import type { PieLabelRenderProps } from 'recharts';
 
 interface ChartProps {
   distributionData: {
@@ -88,8 +89,8 @@ export default function DashboardCharts({ distributionData, riskCategoryData }: 
                 outerRadius={85}
                 paddingAngle={4}
                 dataKey="value"
-                label={({ name, percent }: any) =>
-                  percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''
+                label={({ name, percent }: PieLabelRenderProps) =>
+                  Number(percent) > 0 ? `${name}: ${(Number(percent) * 100).toFixed(0)}%` : ''
                 }
                 labelLine={false}
               >

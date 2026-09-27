@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import type { Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 export interface MapPoint {
@@ -23,7 +24,7 @@ interface MapProps {
 
 export default function MapLeaflet({ points, height = '480px' }: MapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !mapContainerRef.current) return;
@@ -50,7 +51,7 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
       const map = mapInstanceRef.current;
 
       // Bersihkan marker lama
-      map.eachLayer((layer: any) => {
+      map.eachLayer((layer) => {
         if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
           map.removeLayer(layer);
         }
@@ -130,7 +131,7 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
             ${point.serialNumber ? `<div><strong>No. Seri:</strong> ${point.serialNumber}</div>` : ''}
             ${point.location ? `<div><strong>Lokasi:</strong> ${point.location}</div>` : ''}
             <div style="margin-top: 6px; padding: 4px 6px; border-radius: 4px; display: inline-block; font-size: 11px; font-weight: 600;" class="${pcbColor}">
-              PCB: ${point.pcbConcentration !== undefined && point.pcbConcentration !== null ? `${point.pcbConcentration} ppm` : 'Belum diuji'}
+              PCB: ${point.pcbConcentration !== undefined && point.pcbConcentration !== null ? `${point.pcbConcentration} ppm · ${pcbClass}` : pcbClass}
             </div>
             <div style="margin-top: 6px; font-size: 10px; color: #94a3b8;">
               Koordinat: ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}

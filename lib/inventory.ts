@@ -28,23 +28,26 @@ export const INVENTORY_CATEGORIES: Array<{
 ];
 
 const field = (field_key: string, label: string, tipe_data: InventoryFieldType, wajib: boolean, group: InventoryField['group'] = 'Data umum'): InventoryField => ({ field_key, label, tipe_data, wajib, group });
-const trafoCommon = (includeDaya: boolean): InventoryField[] => [
-  field('no', 'Nomor', 'integer', true),
-  field('nama_merek', 'Nama / Merek Transformator', 'text', true),
-  field('nomor_serial', 'Nomor Serial', 'text', true),
+// No field is mandatory: real-world reports (e.g. PLN) often lack serials or
+// ratings. Import instead requires at least one identifying value per row
+// (see hasIdentity) and auto-numbers `no` when it is missing.
+const trafoCommon = (): InventoryField[] => [
+  field('no', 'Nomor', 'integer', false),
+  field('nama_merek', 'Nama / Merek Transformator', 'text', false),
+  field('nomor_serial', 'Nomor Serial', 'text', false),
   field('tahun_pembuatan', 'Tahun Pembuatan', 'integer', false),
   field('negara_asal', 'Negara Asal', 'text', false),
   field('merek_minyak_dielektrik', 'Merek Minyak Dielektrik', 'text', false),
   field('volume_minyak_l', 'Volume Minyak Dielektrik (L)', 'numeric', false),
   field('lokasi_peralatan', 'Lokasi Peralatan', 'text', false),
   field('koordinat_raw', 'Koordinat', 'text', false),
-  ...(includeDaya ? [field('daya_kva', 'Daya (kVA)', 'numeric', true)] : [field('daya_kva', 'Daya (kVA)', 'numeric', true)]),
+  field('daya_kva', 'Daya (kVA)', 'numeric', false),
   field('ketersediaan_keran_buang', 'Ketersediaan Keran Buang', 'text', false),
 ];
 
 export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
   transformator_digunakan: [
-    ...trafoCommon(true),
+    ...trafoCommon(),
     field('perawatan_jenis', 'Jenis Perawatan', 'text', false, 'Perawatan rutin'),
     field('perawatan_waktu', 'Waktu Perawatan', 'date', false, 'Perawatan rutin'),
     field('perawatan_merek_oli_pengganti', 'Merek Oli Pengganti', 'text', false, 'Perawatan rutin'),
@@ -58,7 +61,7 @@ export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
     field('peralatan_tanggap_darurat', 'Peralatan Tanggap Darurat', 'text', false),
   ],
   transformator_tidak_digunakan: [
-    ...trafoCommon(true),
+    ...trafoCommon(),
     field('perawatan_jenis', 'Jenis Perawatan', 'text', false, 'Perawatan rutin'),
     field('perawatan_waktu', 'Waktu Perawatan', 'date', false, 'Perawatan rutin'),
     field('perawatan_merek_oli_pengganti', 'Merek Oli Pengganti', 'text', false, 'Perawatan rutin'),
@@ -74,9 +77,9 @@ export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
     field('peralatan_tanggap_darurat', 'Peralatan Tanggap Darurat', 'text', false),
   ],
   kapasitor: [
-    field('no', 'Nomor', 'integer', true),
-    field('nama_merek', 'Nama / Merek Kapasitor', 'text', true),
-    field('nomor_serial', 'Nomor Serial', 'text', true),
+    field('no', 'Nomor', 'integer', false),
+    field('nama_merek', 'Nama / Merek Kapasitor', 'text', false),
+    field('nomor_serial', 'Nomor Serial', 'text', false),
     field('tahun_pembuatan', 'Tahun Pembuatan', 'integer', false),
     field('negara_asal', 'Negara Asal', 'text', false),
     field('merek_minyak_dielektrik', 'Merek Minyak Dielektrik', 'text', false),
@@ -85,8 +88,8 @@ export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
     field('status_alat', 'Status Alat', 'text', false),
   ],
   minyak_dielektrik: [
-    field('no', 'Nomor', 'integer', true),
-    field('merek_minyak_dielektrik', 'Merek Minyak Dielektrik', 'text', true),
+    field('no', 'Nomor', 'integer', false),
+    field('merek_minyak_dielektrik', 'Merek Minyak Dielektrik', 'text', false),
     field('volume_l', 'Volume (L)', 'numeric', false),
     field('tahun_pembuatan', 'Tahun Pembuatan', 'integer', false),
     field('negara_asal', 'Negara Asal', 'text', false),

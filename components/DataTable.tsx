@@ -1,7 +1,10 @@
 'use client';
 
-import { Fragment, useState, useMemo } from 'react';
-import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save } from 'lucide-react';
+import { Fragment, useState, useEffect, useMemo } from 'react';
+import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import type { InventoryCategory } from '@/lib/inventory';
+import { fetchInventoryDetails, fetchInventoryPage, type CategoryFilter, type InventoryRow, type PcbRange } from '@/lib/inventory-query';
 
 export interface InventoryItem {
   id: string;
@@ -20,9 +23,17 @@ export interface InventoryItem {
   details?: Record<string, unknown>;
 }
 
+export interface CompanyOption {
+  id: string;
+  name: string;
+}
+
 interface DataTableProps {
-  items: InventoryItem[];
-  companies: string[];
+  /** Fixed category (category pages); omit to show all with a category filter. */
+  category?: InventoryCategory;
+  companies: CompanyOption[];
+  /** Change to refetch the current page, e.g. after an edit elsewhere. */
+  reloadKey?: number;
   onEdit?: (item: InventoryItem, changes: EditableInventoryFields) => Promise<void> | void;
   onDelete?: (item: InventoryItem) => Promise<void> | void;
 }
@@ -35,63 +46,105 @@ export interface EditableInventoryFields {
   status: string;
 }
 
-export default function DataTable({ items, companies, onEdit, onDelete }: DataTableProps) {
+const toNumber = (value: unknown) => (value === null || value === undefined || value === '' ? null : Number(value));
+
+export function toInventoryItem(row: InventoryRow, companyNames: Map<string, string>): InventoryItem {
+  const daya = toNumber(row.daya_kva);
+  const volume = toNumber(row.volume_l);
+  return {
+    id: row.id,
+    no: row.no,
+    type: row.category,
+    name: row.name ?? '',
+    companyName: companyNames.get(row.company_id) ?? 'Perusahaan',
+    serialNumber: row.serial ?? '',
+    location: row.location ?? '',
+    latitude: toNumber(row.lat),
+    longitude: toNumber(row.lng),
+    pcbConcentration: toNumber(row.ppm),
+    status: row.status,
+    capacity: daya !== null ? `${daya} kVA` : volume !== null ? `${volume} L` : null,
+    createdAt: row.created_at,
+  };
+}
+
+const PAGE_SIZE = 10;
+
+export default function DataTable({ category, companies, reloadKey = 0, onEdit, onDelete }: DataTableProps) {
+  const supabase = useMemo(() => createClient(), []);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedType, setSelectedType] = useState<string>('all');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedType, setSelectedType] = useState<CategoryFilter>('all');
   const [selectedCompany, setSelectedCompany] = useState<string>('all');
-  const [selectedPcbRange, setSelectedPcbRange] = useState<string>('all');
+  const [selectedPcbRange, setSelectedPcbRange] = useState<PcbRange>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
   const [saving, setSaving] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const pageSize = 10;
+  const [details, setDetails] = useState<Record<string, Record<string, unknown>>>({});
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      // 1. Filter tipe alat
-      if (selectedType !== 'all' && item.type !== selectedType) {
-        return false;
+  const [paginatedItems, setPaginatedItems] = useState<InventoryItem[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const companyNames = useMemo(() => new Map(companies.map((company) => [company.id, company.name])), [companies]);
+
+  // Tunggu sebentar setelah mengetik agar tidak mengirim query per huruf.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Data diambil per halaman dari server; filter dan pencarian dijalankan di database.
+  const query = useMemo(() => ({
+    category: category ?? selectedType,
+    companyId: selectedCompany === 'all' ? null : selectedCompany,
+    pcbRange: selectedPcbRange,
+    search: debouncedSearch,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+  }), [category, selectedType, selectedCompany, selectedPcbRange, debouncedSearch, currentPage]);
+  const queryKey = `${JSON.stringify(query)}#${reloadKey}`;
+  const loading = loadedKey !== queryKey;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchInventoryPage(supabase, query)
+      .then(({ rows, total }) => {
+        if (cancelled) return;
+        setPaginatedItems(rows.map((row) => toInventoryItem(row, companyNames)));
+        setDetails({});
+        setTotalItems(total);
+        setLoadError(null);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setLoadError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedKey(queryKey);
+      });
+    return () => { cancelled = true; };
+  }, [supabase, query, queryKey, companyNames]);
+
+  const toggleDetails = async (item: InventoryItem) => {
+    const next = expandedItemId === item.id ? null : item.id;
+    setExpandedItemId(next);
+    if (next && !details[item.id]) {
+      try {
+        const record = await fetchInventoryDetails(supabase, item.type as InventoryCategory, item.id);
+        setDetails((prev) => ({ ...prev, [item.id]: record }));
+      } catch (err) {
+        setLoadError((err as Error).message);
       }
+    }
+  };
 
-      // 2. Filter perusahaan
-      if (selectedCompany !== 'all' && item.companyName !== selectedCompany) {
-        return false;
-      }
-
-      // 3. Filter rentang PCB
-      if (selectedPcbRange !== 'all') {
-        const conc = item.pcbConcentration;
-        if (selectedPcbRange === 'safe') {
-          if (conc === null || conc === undefined || conc >= 50) return false;
-        } else if (selectedPcbRange === 'moderate') {
-          if (conc === null || conc === undefined || conc < 50 || conc > 500) return false;
-        } else if (selectedPcbRange === 'high') {
-          if (conc === null || conc === undefined || conc <= 500) return false;
-        } else if (selectedPcbRange === 'untested') {
-          if (conc !== null && conc !== undefined) return false;
-        }
-      }
-
-      // 4. Search query
-      if (searchTerm.trim()) {
-        const term = searchTerm.toLowerCase();
-        const matchName = item.name?.toLowerCase().includes(term);
-        const matchSerial = item.serialNumber?.toLowerCase().includes(term);
-        const matchCompany = item.companyName?.toLowerCase().includes(term);
-        const matchLocation = item.location?.toLowerCase().includes(term);
-        return matchName || matchSerial || matchCompany || matchLocation;
-      }
-
-      return true;
-    });
-  }, [items, selectedType, selectedCompany, selectedPcbRange, searchTerm]);
-
-  const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
-  const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredItems.slice(start, start + pageSize);
-  }, [filteredItems, currentPage, pageSize]);
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
   const showTrafoCapacity = paginatedItems.some((item) => item.type.startsWith('transformator'));
   const showOilVolume = paginatedItems.some((item) => item.type === 'minyak_dielektrik');
   const showPcb = paginatedItems.some((item) => item.pcbConcentration !== null && item.pcbConcentration !== undefined);
@@ -105,7 +158,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
             Tabel Data Inventarisasi Peralatan & Minyak
           </h3>
           <p className="text-xs text-slate-500 font-medium">
-            Menampilkan {filteredItems.length} data dari total {items.length} unit terdaftar
+            {loading ? 'Memuat data...' : `${totalItems.toLocaleString('id-ID')} data sesuai filter`}
           </p>
         </div>
 
@@ -132,11 +185,11 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
           <span>Filter:</span>
         </div>
 
-        {/* Tipe Alat */}
-        <select
+        {/* Tipe Alat (hanya di halaman gabungan) */}
+        {!category && <select
           value={selectedType}
           onChange={(e) => {
-            setSelectedType(e.target.value);
+            setSelectedType(e.target.value as CategoryFilter);
             setCurrentPage(1);
           }}
           className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
@@ -145,7 +198,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
           <option value="transformator">Transformator</option>
           <option value="kapasitor">Kapasitor</option>
           <option value="minyak_dielektrik">Minyak Dielektrik</option>
-        </select>
+        </select>}
 
         {/* Perusahaan */}
         <select
@@ -158,8 +211,8 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
         >
           <option value="all">Semua Perusahaan</option>
           {companies.map((c) => (
-            <option key={c} value={c}>
-              {c}
+            <option key={c.id} value={c.id}>
+              {c.name}
             </option>
           ))}
         </select>
@@ -168,7 +221,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
         <select
           value={selectedPcbRange}
           onChange={(e) => {
-            setSelectedPcbRange(e.target.value);
+            setSelectedPcbRange(e.target.value as PcbRange);
             setCurrentPage(1);
           }}
           className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
@@ -181,8 +234,15 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
         </select>
       </div>
 
+      {loadError && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {loadError}
+        </div>
+      )}
+
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+      <div className={`relative overflow-x-auto rounded-xl border border-slate-200/80 ${loading ? 'opacity-60' : ''}`}>
+        {loading && <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-slate-400" />}
         <table className="w-full text-left text-xs">
           <thead className="border-b border-slate-200 bg-slate-50/80 font-bold text-slate-700">
             <tr>
@@ -201,7 +261,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
             {paginatedItems.length === 0 ? (
               <tr>
                 <td colSpan={tableColumnCount} className="py-12 text-center text-slate-400 font-medium">
-                  Tidak ada data yang sesuai dengan kriteria pencarian/filter.
+                  {loading ? 'Memuat data...' : 'Tidak ada data yang sesuai dengan kriteria pencarian/filter.'}
                 </td>
               </tr>
             ) : (
@@ -226,16 +286,16 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
                 }
 
                 const isExpanded = expandedItemId === item.id;
-                const detailEntries = Object.entries(item.details || {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
+                const detailEntries = Object.entries(details[item.id] || {}).filter(([key]) => !['id', 'company_id', 'import_batch_id'].includes(key)).filter(([, value]) => value !== null && value !== undefined && value !== '');
                 return (
                   <Fragment key={item.id}>
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4 font-medium">{item.no ?? '-'}</td>
                     <td className="py-3.5 px-4">
-                      <button type="button" onClick={() => setExpandedItemId(isExpanded ? null : item.id)} className="text-left font-bold text-slate-900 hover:text-emerald-700">{item.name}</button>
-                      {item.serialNumber && (
+                      <button type="button" onClick={() => toggleDetails(item)} className={`text-left font-bold hover:text-emerald-700 ${item.name ? 'text-slate-900' : 'italic text-slate-400'}`}>{item.name || 'Merek tidak tercatat'}</button>
+                      {item.type !== 'minyak_dielektrik' && (
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          S/N: {item.serialNumber}
+                          S/N: {item.serialNumber || <span className="font-sans italic text-slate-400">tidak tercatat</span>}
                         </div>
                       )}
                     </td>
@@ -261,7 +321,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
                         <button
                           type="button"
                           title="Edit data"
-                          aria-label={`Edit ${item.name}`}
+                          aria-label={`Edit ${item.name || 'data'}`}
                           onClick={() => {
                             setEditingItem(item);
                             setEditForm({
@@ -279,9 +339,9 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
                         <button
                           type="button"
                           title="Hapus data"
-                          aria-label={`Hapus ${item.name}`}
+                          aria-label={`Hapus ${item.name || 'data'}`}
                           onClick={async () => {
-                            if (onDelete && window.confirm(`Hapus data ${item.name}?`)) {
+                            if (onDelete && window.confirm(`Hapus data ${item.name || `nomor ${item.no ?? '-'}`}?`)) {
                               await onDelete(item);
                             }
                           }}
@@ -292,7 +352,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
                       </div>
                     </td>
                   </tr>
-                  {isExpanded && <tr key={`${item.id}-details`} className="bg-slate-50/70"><td colSpan={tableColumnCount} className="px-6 py-4"><div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">{detailEntries.length > 0 ? detailEntries.map(([key, value]) => <div key={key}><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{key.replaceAll('_', ' ')}</div><div className="text-xs font-medium text-slate-700">{String(value)}</div></div>) : <span className="text-xs text-slate-500">Tidak ada detail tambahan.</span>}</div></td></tr>}
+                  {isExpanded && <tr key={`${item.id}-details`} className="bg-slate-50/70"><td colSpan={tableColumnCount} className="px-6 py-4"><div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">{detailEntries.length > 0 ? detailEntries.map(([key, value]) => <div key={key}><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{key.replaceAll('_', ' ')}</div><div className="text-xs font-medium text-slate-700">{String(value)}</div></div>) : <span className="text-xs text-slate-500">{details[item.id] ? 'Tidak ada detail tambahan.' : 'Memuat detail...'}</span>}</div></td></tr>}
                   </Fragment>
                 );
               })
@@ -305,7 +365,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
           <div className="text-xs text-slate-500 font-medium">
-            Halaman {currentPage} dari {totalPages}
+            Halaman {currentPage.toLocaleString('id-ID')} dari {totalPages.toLocaleString('id-ID')}
           </div>
           <div className="flex gap-2">
             <button
@@ -332,7 +392,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
             <div className="mb-5 flex items-start justify-between">
               <div>
                 <h4 id="edit-inventory-title" className="text-lg font-bold text-slate-900">Edit Data Inventarisasi</h4>
-                <p className="mt-1 text-xs text-slate-500">Perbarui informasi {editingItem.name}.</p>
+                <p className="mt-1 text-xs text-slate-500">Perbarui informasi {editingItem.name || 'alat ini'}.</p>
               </div>
               <button type="button" title="Tutup" aria-label="Tutup form edit" onClick={() => setEditingItem(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                 <X className="h-5 w-5" />
@@ -366,7 +426,7 @@ export default function DataTable({ items, companies, onEdit, onDelete }: DataTa
               <button type="button" onClick={() => setEditingItem(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
               <button
                 type="button"
-                disabled={saving || !(editForm.name || '').trim()}
+                disabled={saving}
                 onClick={async () => {
                   if (!onEdit) return;
                   setSaving(true);

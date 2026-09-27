@@ -142,6 +142,29 @@ export function parseDMSCoordinate(rawInput: string | null | undefined): ParsedC
     return result;
   }
 
+  // Pasangan desimal biasa, termasuk koma desimal gaya Indonesia:
+  // "-6,858005 107,578106", "-6,1711789, 106,7265942", "6.35 ; 106.85",
+  // dan titik sebagai pemisah "-6.150885.106.659203".
+  const decimalPair =
+    /^\s*(-?\d{1,3}(?:[.,]\d+)?)\s*(?:[;/|]\s*|,\s+|\s+|,(?=-?\d{1,3}\.))(-?\d{1,3}(?:[.,]\d+)?)\s*$/.exec(rawInput) ??
+    /^\s*(-?\d{1,2}\.\d+)\.(\d{2,3}\.\d+)\s*$/.exec(rawInput);
+  // Desimal dengan huruf arah di belakang: "7.1000S 107.1263E".
+  const hemiPair = /^\s*(\d{1,2}(?:[.,]\d+)?)\s*([NS])[\s,;]+(\d{1,3}(?:[.,]\d+)?)\s*([EW])\s*$/i.exec(rawInput);
+  if (hemiPair) {
+    const latitude = parseFloat(hemiPair[1].replace(',', '.')) * (/s/i.test(hemiPair[2]) ? -1 : 1);
+    const longitude = parseFloat(hemiPair[3].replace(',', '.')) * (/w/i.test(hemiPair[4]) ? -1 : 1);
+    if (Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180) {
+      return { ...result, latitude, longitude, isValid: true };
+    }
+  }
+  if (decimalPair) {
+    const latitude = parseFloat(decimalPair[1].replace(',', '.'));
+    const longitude = parseFloat(decimalPair[2].replace(',', '.'));
+    if (Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180) {
+      return { ...result, latitude, longitude, isValid: true };
+    }
+  }
+
   const normalized = normalizeCoordinateString(rawInput);
   if (!normalized) return result;
 

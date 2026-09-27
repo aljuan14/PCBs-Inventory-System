@@ -1,149 +1,206 @@
 import * as XLSX from 'xlsx';
 
-export interface ExcelParseResult {
-  sheetNames: string[];
-  selectedSheet: string;
+export interface SheetParseResult {
+  sheetName: string;
+  /** 0-based worksheet row index of the main label row, or -1 if none was found. */
   headerRowIndex: number;
   headers: string[];
-  previewRows: Record<string, any>[];
+  previewRows: Record<string, unknown>[];
   totalRows: number;
-  allRows: Record<string, any>[];
+  allRows: Record<string, unknown>[];
+  /** 1-based worksheet row number of each entry in allRows, for pointing admins at problem rows. */
+  rowNumbers: number[];
+}
+
+export interface ExcelParseResult extends SheetParseResult {
+  sheetNames: string[];
+  selectedSheet: string;
+}
+
+const HEADER_KEYWORDS = [
+  'no', 'nomor', 'nama', 'merk', 'merek', 'seri', 'serial', 'lokasi', 'tahun',
+  'daya', 'minyak', 'oli', 'koordinat', 'uji', 'kondisi', 'status', 'kva', 'ton',
+  'ppm', 'alat', 'volume', 'negara', 'wadah', 'berat', 'perawatan', 'digunakan',
+  'kode', 'unit', 'jenis', 'analisa', 'hasil', 'tanggal', 'pabrikan', 'produksi',
+];
+const HEADER_SCAN_ROWS = 20;
+const MAX_GROUP_ROWS = 3;
+const MAX_SUBLABEL_ROWS = 2;
+
+const text = (value: unknown) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(value ?? '')).replace(/\s+/g, ' ').trim();
+const isNumericLike = (value: string) => /^[\d.,\s-]+$/.test(value);
+const isLabel = (value: string) => value !== '' && !isNumericLike(value);
+
+function isOrdinalOnlyRow(row: unknown[]) {
+  const values = row.map(text).filter(Boolean);
+  return values.length > 1 && values.every((value, index) => /^\d{1,3}$/.test(value) && Number(value) === index + 1);
+}
+
+function scoreLabelRow(row: unknown[]) {
+  if (isOrdinalOnlyRow(row)) return -Infinity;
+  const labels = row.map(text).filter(isLabel);
+  const distinct = new Set(labels.map((label) => label.toLowerCase()));
+  if (distinct.size < 2) return distinct.size;
+  const keywordHits = [...distinct].filter((label) => HEADER_KEYWORDS.some((keyword) => new RegExp(`\\b${keyword}`).test(label))).length;
+  // Repeated values ("Inventarisasi | Inventarisasi | ...") mark a group row, not labels.
+  return distinct.size + keywordHits * 3 - (labels.length - distinct.size);
 }
 
 /**
- * Deteksi baris header terbaik pada berkas Excel yang sering kali memiliki
- * 1-4 baris judul dokumen / header bertingkat di awal sheet.
+ * Formatting-only cells can stretch a sheet's range to ~1M rows. Shrink it to
+ * the cells that actually hold values so parsing stays proportional to data.
  */
-export function parseExcelWithSmartHeader(buffer: ArrayBuffer | Uint8Array): ExcelParseResult {
+function tightenRange(worksheet: XLSX.WorkSheet) {
+  let maxRow = -1;
+  let maxCol = -1;
+  for (const key of Object.keys(worksheet)) {
+    if (key[0] === '!') continue;
+    const cell = worksheet[key] as XLSX.CellObject;
+    if (cell.v === undefined || cell.v === null || cell.v === '') continue;
+    const { r, c } = XLSX.utils.decode_cell(key);
+    if (r > maxRow) maxRow = r;
+    if (c > maxCol) maxCol = c;
+  }
+  if (maxRow < 0) return false;
+  worksheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRow, c: maxCol } });
+  return true;
+}
+
+export function readWorkbook(buffer: ArrayBuffer | Uint8Array) {
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-  const sheetNames = workbook.SheetNames;
-  if (sheetNames.length === 0) {
-    throw new Error('File Excel tidak memiliki sheet.');
-  }
+  if (workbook.SheetNames.length === 0) throw new Error('File Excel tidak memiliki sheet.');
+  return workbook;
+}
 
-  const selectedSheet = sheetNames[0];
-  const worksheet = workbook.Sheets[selectedSheet];
+/**
+ * Detect the real header of one sheet. Handles report-style layouts:
+ * title rows, merged group headers ("UJI LANJUTAN") with sub-labels in the
+ * row below, ordinal "1 2 3 ..." rows, and PLN forms with 8-10 note rows.
+ */
+export function parseSheet(workbook: XLSX.WorkBook, sheetName: string): SheetParseResult {
+  const empty: SheetParseResult = { sheetName, headerRowIndex: -1, headers: [], previewRows: [], totalRows: 0, allRows: [], rowNumbers: [] };
+  const worksheet = workbook.Sheets[sheetName];
+  if (!worksheet || !tightenRange(worksheet)) return empty;
 
-  // Konversi sheet menjadi array of arrays (matrix 2D)
-  const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
-    header: 1,
-    defval: '',
-    blankrows: false,
-  });
+  // Keep blank rows so indices match the worksheet (needed for merge ranges).
+  const rawRows: unknown[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: true });
+  if (rawRows.length === 0) return empty;
 
-  if (rawRows.length === 0) {
-    throw new Error('Sheet Excel kosong.');
-  }
-
-  const headerKeywords = [
-    'no', 'nomor', 'nama', 'merk', 'merek', 'seri', 'serial', 'lokasi', 'tahun',
-    'daya', 'minyak', 'koordinat', 'uji', 'kondisi', 'status', 'kva', 'ton',
-    'ppm', 'alat', 'volume', 'negara', 'wadah', 'berat', 'perawatan', 'digunakan',
-  ];
-  const clean = (value: unknown) => String(value ?? '').trim();
-  const isEmpty = (value: unknown) => clean(value) === '';
-  const isOrdinalOnlyRow = (row: any[]) => {
-    const values = row.filter((cell) => !isEmpty(cell)).map((cell) => clean(cell));
-    return values.length > 0 && values.every((value, index) => /^\d{1,3}$/.test(value) && Number(value) === index + 1);
-  };
-  const scoreLabelRow = (row: any[]) => {
-    if (isOrdinalOnlyRow(row)) return -Infinity;
-    return row.reduce((score, cell) => {
-      const value = clean(cell).toLowerCase();
-      if (!value || /^\d+$/.test(value)) return score;
-      return score + 1 + (headerKeywords.some((keyword) => value.includes(keyword)) ? 3 : 0);
-    }, 0);
-  };
-
-  // The final textual label row wins. Numeric-only ordinal rows are explicitly
-  // excluded, so templates with a separate 1..N row remain intact.
-  const maxScanRows = Math.min(14, rawRows.length);
-  let bestRowIndex = 0;
-  let maxScore = -Infinity;
-  for (let i = 0; i < maxScanRows; i++) {
+  let anchor = -1;
+  let bestScore = -Infinity;
+  for (let i = 0; i < Math.min(HEADER_SCAN_ROWS, rawRows.length); i++) {
     const score = scoreLabelRow(rawRows[i] || []);
-    if (score >= maxScore) {
-      maxScore = score;
-      bestRowIndex = i;
+    if (score > bestScore) {
+      bestScore = score;
+      anchor = i;
     }
   }
+  if (anchor < 0 || bestScore < 2) return empty;
 
-  const labelRow = rawRows[bestRowIndex] || [];
-  const groupKeywords = ['perawatan', 'uji lanjutan', 'uji', 'kondisi'];
-  const groupRows = rawRows.slice(Math.max(0, bestRowIndex - 3), bestRowIndex);
-  const groupByColumn: string[] = Array.from({ length: labelRow.length }, () => '');
-  for (const row of groupRows) {
-    const anchors = row
-      .map((cell, column) => ({ column, value: clean(cell) }))
-      .filter(({ value }) => value && !/^\d+$/.test(value) && groupKeywords.some((keyword) => value.toLowerCase().includes(keyword)));
-    for (let anchorIndex = 0; anchorIndex < anchors.length; anchorIndex++) {
-      const anchor = anchors[anchorIndex];
-      const nextColumn = anchors[anchorIndex + 1]?.column ?? labelRow.length;
-      for (let column = anchor.column; column < nextColumn; column++) {
-        groupByColumn[column] = anchor.value;
+  const anchorRow = rawRows[anchor].map(text);
+
+  // Sub-label rows sit directly below the anchor and only fill columns whose
+  // anchor cell is empty or an ordinal number (the template's merged groups).
+  let bandEnd = anchor;
+  for (let r = anchor + 1; r <= anchor + MAX_SUBLABEL_ROWS && r < rawRows.length; r++) {
+    const row = rawRows[r].map(text);
+    if (isOrdinalOnlyRow(row)) { bandEnd = r; continue; }
+    const labelColumns = row.map((value, column) => (isLabel(value) ? column : -1)).filter((column) => column >= 0);
+    if (labelColumns.length === 0 || labelColumns.some((column) => isLabel(anchorRow[column] ?? ''))) break;
+    bandEnd = r;
+  }
+
+  const colCount = Math.max(...rawRows.slice(Math.max(0, anchor - MAX_GROUP_ROWS), bandEnd + 1).map((row) => row.length));
+  const merges = worksheet['!merges'] ?? [];
+
+  // Group label for a column: nearest label above `belowRow` in the band,
+  // taken from a merged range or forward-filled from the left. Title rows
+  // (a single label, or merges spanning most of the sheet) are ignored.
+  const groupFor = (column: number, belowRow: number, forwardFill = true) => {
+    for (let r = belowRow - 1; r >= Math.max(0, anchor - MAX_GROUP_ROWS); r--) {
+      const row = rawRows[r].map(text);
+      if (row.filter(isLabel).length < 2) continue;
+      const merge = merges.find((range) => range.s.r <= r && range.e.r >= r && range.s.c <= column && range.e.c >= column);
+      if (merge) {
+        const value = text(rawRows[merge.s.r]?.[merge.s.c]);
+        if (isLabel(value) && merge.e.c - merge.s.c + 1 <= colCount * 0.6) return value;
+        continue;
+      }
+      if (!forwardFill) continue;
+      for (let c = column; c >= 0; c--) {
+        if (row[c] === '') continue;
+        if (isLabel(row[c])) return row[c];
+        break;
       }
     }
-  }
-
-  // Merge a meaningful group label with the per-column label. Do not carry a
-  // document title or an ordinal row into the field name.
-  const headers: string[] = [];
-  const colCount = labelRow.length;
-
-  for (let c = 0; c < colCount; c++) {
-    const label = clean(labelRow[c]);
-    const group = groupByColumn[c];
-    let headerName = label;
-    if (group && label && group.toLowerCase() !== label.toLowerCase()) {
-      headerName = `${group} - ${label}`;
-    } else if (group && !label) {
-      headerName = group;
-    }
-    if (!headerName) {
-      headerName = `Kolom_${c + 1}`;
-    }
-
-    // Hindari header duplikat
-    let uniqueName = headerName;
-    let counter = 2;
-    while (headers.includes(uniqueName)) {
-      uniqueName = `${headerName}_${counter}`;
-      counter++;
-    }
-
-    headers.push(uniqueName);
-  }
-
-  // Data begins after the textual label row. Any remaining ordinal-only row is
-  // skipped defensively in case the source template places it below labels.
-  const dataRows: Record<string, any>[] = [];
-  for (let r = bestRowIndex + 1; r < rawRows.length; r++) {
-    const row = rawRows[r];
-    if (!row || !Array.isArray(row)) continue;
-    if (isOrdinalOnlyRow(row)) continue;
-
-    // Abaikan baris yang seluruhnya kosong
-    const isRowEmpty = row.every(
-      (cell) => cell === null || cell === undefined || String(cell).trim() === ''
-    );
-    if (isRowEmpty) continue;
-
-    const rowObj: Record<string, any> = {};
-    for (let c = 0; c < headers.length; c++) {
-      const headerKey = headers[c];
-      const val = row[c];
-      rowObj[headerKey] = val !== undefined ? val : null;
-    }
-    dataRows.push(rowObj);
-  }
-
-  return {
-    sheetNames,
-    selectedSheet,
-    headerRowIndex: bestRowIndex,
-    headers,
-    previewRows: dataRows.slice(0, 5),
-    totalRows: dataRows.length,
-    allRows: dataRows,
+    return '';
   };
+
+  const headers: string[] = [];
+  for (let column = 0; column < colCount; column++) {
+    let label = isLabel(anchorRow[column] ?? '') ? anchorRow[column] : '';
+    let group = '';
+    if (!label) {
+      for (let r = bandEnd; r > anchor; r--) {
+        const value = text(rawRows[r][column]);
+        if (isLabel(value)) {
+          label = value;
+          group = groupFor(column, r);
+          break;
+        }
+      }
+      if (!label) group = groupFor(column, anchor, false);
+    }
+    let header = group && label && group.toLowerCase() !== label.toLowerCase() ? `${group} - ${label}` : label || group || `Kolom_${column + 1}`;
+    if (headers.includes(header)) {
+      let counter = 2;
+      while (headers.includes(`${header} (${counter})`)) counter++;
+      header = `${header} (${counter})`;
+    }
+    headers.push(header);
+  }
+
+  const headerTexts = new Set(anchorRow.filter(isLabel).map((value) => value.toLowerCase()));
+  const allRows: Record<string, unknown>[] = [];
+  const rowNumbers: number[] = [];
+  const filledCounts: number[] = [];
+  let blankGap = false;
+  for (let r = bandEnd + 1; r < rawRows.length; r++) {
+    const row = rawRows[r];
+    const values = row.map(text);
+    const filled = values.filter(Boolean);
+    // Skip blank rows, footnotes, rows holding only a running number, and
+    // header rows repeated further down the sheet.
+    if (filled.length < 2 || isOrdinalOnlyRow(row)) {
+      if (filled.length === 0) blankGap = true;
+      continue;
+    }
+    if (filled.filter((value) => headerTexts.has(value.toLowerCase())).length >= filled.length / 2) continue;
+    // A much sparser row after a blank gap starts a trailing section
+    // (documentation checklist, signatures), not more inventory rows.
+    if (blankGap && filledCounts.length > 0) {
+      const median = [...filledCounts].sort((a, b) => a - b)[Math.floor(filledCounts.length / 2)];
+      if (filled.length < median * 0.3) break;
+    }
+    blankGap = false;
+    if (filledCounts.length < 200) filledCounts.push(filled.length);
+    const rowObj: Record<string, unknown> = {};
+    headers.forEach((header, column) => {
+      const value = row[column];
+      rowObj[header] = value === undefined || value === '' ? null : value;
+    });
+    allRows.push(rowObj);
+    rowNumbers.push(r + 1);
+  }
+
+  return { sheetName, headerRowIndex: anchor, headers, previewRows: allRows.slice(0, 5), totalRows: allRows.length, allRows, rowNumbers };
+}
+
+/** Parse one sheet (the first by default) of an Excel buffer. */
+export function parseExcelWithSmartHeader(buffer: ArrayBuffer | Uint8Array, sheetName?: string): ExcelParseResult {
+  const workbook = readWorkbook(buffer);
+  const selectedSheet = sheetName && workbook.SheetNames.includes(sheetName) ? sheetName : workbook.SheetNames[0];
+  const result = parseSheet(workbook, selectedSheet);
+  if (result.headers.length === 0) throw new Error(`Sheet "${selectedSheet}" kosong atau header tidak ditemukan.`);
+  return { ...result, sheetNames: workbook.SheetNames, selectedSheet };
 }

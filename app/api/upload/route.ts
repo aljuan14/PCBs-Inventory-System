@@ -1,28 +1,66 @@
+import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { parseExcelWithSmartHeader } from '@/lib/excel';
-import fs from 'fs';
-import path from 'path';
+import { parseSheet, readWorkbook } from '@/lib/excel';
+import { buildSuggestedMapping, detectSheet, hasIdentity } from '@/lib/import-profiles';
+import { saveWorkbook, writeUploadSession, type UploadSheet } from '@/lib/upload-store';
 
+/**
+ * Step 1 of an import: store the workbook and scan every sheet. Each sheet is
+ * classified (profile, category, include by default) for the admin to review;
+ * batches are only created once the admin confirms (see ./confirm).
+ */
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     let companyId = formData.get('company_id') as string | null;
     const newCompanyName = formData.get('new_company_name') as string | null;
-    const jenisData = formData.get('jenis_data') as string | null;
 
     if (!file) {
       return NextResponse.json({ error: 'File Excel wajib diunggah.' }, { status: 400 });
     }
+    if (!companyId && !newCompanyName?.trim()) {
+      return NextResponse.json({ error: 'Perusahaan wajib dipilih atau diisi.' }, { status: 400 });
+    }
 
-    if (!jenisData || !['transformator_digunakan', 'transformator_tidak_digunakan', 'kapasitor', 'minyak_dielektrik'].includes(jenisData)) {
-      return NextResponse.json({ error: 'Jenis data inventaris tidak valid.' }, { status: 400 });
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Parse before touching the database so an unreadable file leaves no trace.
+    let workbook;
+    try {
+      workbook = readWorkbook(buffer);
+    } catch (parseErr) {
+      return NextResponse.json({ error: `Berkas tidak dapat dibaca sebagai Excel: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}` }, { status: 400 });
+    }
+
+    const sheets: UploadSheet[] = workbook.SheetNames.map((sheetName) => {
+      const parsed = parseSheet(workbook, sheetName);
+      const initial = detectSheet(sheetName, parsed.headers, parsed.totalRows, workbook.SheetNames.length);
+      let dataRows = parsed.allRows;
+      if (initial.category) {
+        const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers);
+        dataRows = parsed.allRows.filter((row) => hasIdentity(row, mapping));
+      }
+      // Re-run with the real row count so sheets of empty form rows are skipped.
+      const detection = detectSheet(sheetName, parsed.headers, dataRows.length, workbook.SheetNames.length);
+      return {
+        sheetName,
+        headerRowIndex: parsed.headerRowIndex,
+        headers: parsed.headers,
+        totalRows: parsed.totalRows,
+        dataRows: dataRows.length,
+        previewRows: dataRows.slice(0, 5),
+        ...detection,
+      };
+    });
+
+    if (sheets.every((sheet) => sheet.headers.length === 0)) {
+      return NextResponse.json({ error: 'Tidak ada sheet dengan header tabel yang dapat dikenali.' }, { status: 400 });
     }
 
     const supabase = await createClient();
 
-    // 1. Jika ada nama perusahaan baru, simpan ke tabel companies
     if (!companyId && newCompanyName?.trim()) {
       const { data: newComp, error: compErr } = await supabase
         .from('companies')
@@ -37,91 +75,43 @@ export async function POST(req: NextRequest) {
       companyId = newComp.id;
     }
 
-    if (!companyId) {
-      return NextResponse.json({ error: 'Perusahaan wajib dipilih atau diisi.' }, { status: 400 });
-    }
+    const uploadId = randomUUID();
+    saveWorkbook(uploadId, buffer);
 
-    // 2. Baca buffer file
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // 3. Parse headers & preview rows
-    const parseResult = parseExcelWithSmartHeader(arrayBuffer);
-
-    // 4. Buat record import_batches di database
-    const { data: batch, error: batchErr } = await supabase
-      .from('import_batches')
-      .insert({
-        company_id: companyId,
-        jenis_data: jenisData,
-        nama_file_asli: file.name,
-        status: 'pending_mapping',
-      })
-      .select('id')
-      .single();
-
-    if (batchErr) {
-      console.error('Error creating import batch:', batchErr);
-      return NextResponse.json({ error: `Gagal membuat batch import: ${batchErr.message}` }, { status: 500 });
-    }
-
-    const batchId = batch.id;
-
-    // 5. Simpan file secara lokal ke tmp_uploads sebagai cadangan instan
-    const uploadDir = path.join(process.cwd(), 'tmp_uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    const localFilePath = path.join(uploadDir, `${batchId}.xlsx`);
-    fs.writeFileSync(localFilePath, buffer);
-
-    // Simpan juga json preview untuk akses cepat di halaman mapping
-    const metaPath = path.join(uploadDir, `${batchId}.json`);
-    fs.writeFileSync(
-      metaPath,
-      JSON.stringify({
-        batchId,
-        companyId,
-        jenisData,
-        fileName: file.name,
-        headers: parseResult.headers,
-        totalRows: parseResult.totalRows,
-        previewRows: parseResult.previewRows,
-      })
-    );
-
-    // 6. Coba upload ke Supabase Storage (opsional)
+    // Supabase Storage copy is optional; the local file is used first.
+    let storagePath: string | null = null;
     try {
-      const storagePath = `${batchId}/${file.name}`;
+      const path = `${uploadId}/${file.name}`;
       const { error: storageErr } = await supabase.storage
         .from('pcbs-files')
-        .upload(storagePath, buffer, {
+        .upload(path, buffer, {
           contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           upsert: true,
         });
-
-      if (!storageErr) {
-        await supabase
-          .from('import_batches')
-          .update({ file_storage_path: storagePath })
-          .eq('id', batchId);
-      }
+      if (!storageErr) storagePath = path;
     } catch (stErr) {
       console.warn('Supabase storage upload skipped/warning:', stErr);
     }
 
+    writeUploadSession({
+      uploadId,
+      companyId: companyId as string,
+      fileName: file.name,
+      storagePath,
+      createdAt: new Date().toISOString(),
+      sheets,
+      batches: [],
+    });
+
     return NextResponse.json({
       success: true,
-      batchId,
+      uploadId,
       companyId,
-      jenisData,
       fileName: file.name,
-      headers: parseResult.headers,
-      previewRows: parseResult.previewRows,
-      totalRows: parseResult.totalRows,
+      sheets: sheets.map(({ headers, ...sheet }) => ({ ...sheet, headerCount: headers.length, headers: headers.slice(0, 60) })),
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Upload error:', err);
-    return NextResponse.json({ error: err.message || 'Terjadi kesalahan pada server saat memproses file.' }, { status: 500 });
+    return NextResponse.json({ error: (err instanceof Error && err.message) || 'Terjadi kesalahan pada server saat memproses file.' }, { status: 500 });
   }
 }

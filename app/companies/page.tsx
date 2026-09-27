@@ -1,22 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2, Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export default function CompaniesPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [companies, setCompanies] = useState<Array<{ id: string; nama_perusahaan: string; alamat?: string | null }>>([]);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const loadCompanies = async () => {
+  const loadCompanies = useCallback(async () => {
     const { data } = await supabase.from('companies').select('id, nama_perusahaan, alamat').order('nama_perusahaan');
     setCompanies(data || []);
     setLoading(false);
-  };
+  }, [supabase]);
 
-  useEffect(() => { loadCompanies(); }, []);
+  useEffect(() => {
+    let active = true;
+    supabase.from('companies').select('id, nama_perusahaan, alamat').order('nama_perusahaan').then(({ data }) => {
+      if (!active) return;
+      setCompanies(data || []);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [supabase]);
 
   const addCompany = async (event: React.FormEvent) => {
     event.preventDefault();
