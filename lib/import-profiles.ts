@@ -141,8 +141,12 @@ function applyRules(rules: Rule[], category: InventoryCategory, headers: string[
   return mapping;
 }
 
-/** Column mapping for a sheet: profile rules when the layout is known, keyword guesses otherwise. */
-export function buildSuggestedMapping(profile: ImportProfile | null, category: InventoryCategory, headers: string[]) {
+/**
+ * Column mapping for a sheet: profile rules when the layout is known, keyword
+ * guesses otherwise. `sampleRows` (first rows of the sheet) lets it spot a
+ * coordinate split over two columns.
+ */
+export function buildSuggestedMapping(profile: ImportProfile | null, category: InventoryCategory, headers: string[], sampleRows: Record<string, unknown>[] = []) {
   let mapping: Record<string, string> = {};
   if (profile === 'pln') mapping = applyRules(PLN_RULES[category], category, headers);
   else if (profile === 'template_klhk') mapping = applyRules(TEMPLATE_RULES, category, headers);
@@ -155,11 +159,22 @@ export function buildSuggestedMapping(profile: ImportProfile | null, category: I
     }
   }
   // A merged "Titik Koordinat" header often spans two columns (latitude,
-  // longitude); the second one has no label of its own.
+  // longitude). The second one has no label of its own, or picks up an
+  // unrelated one from another header row ("Inventarisasi", "... Y").
   const coordinateIndex = headers.findIndex((header) => mapping[header] === 'koordinat_raw');
   const next = headers[coordinateIndex + 1];
-  if (coordinateIndex >= 0 && next && /^Kolom_\d+$/.test(next) && mapping[next] === IGNORE) mapping[next] = '@koordinat_bujur';
+  if (coordinateIndex >= 0 && next && mapping[next] === IGNORE) {
+    if (/^Kolom_\d+$/.test(next) || (mostlySingleNumbers(sampleRows, headers[coordinateIndex]) && mostlySingleNumbers(sampleRows, next))) {
+      mapping[next] = '@koordinat_bujur';
+    }
+  }
   return mapping;
+}
+
+const SINGLE_NUMBER = /^'?-?\d+(?:[.,]\d+)*$/;
+function mostlySingleNumbers(rows: Record<string, unknown>[], header: string) {
+  const values = rows.map((row) => row[header]).filter(isMeaningful);
+  return values.length > 0 && values.filter((value) => typeof value === 'number' || SINGLE_NUMBER.test(String(value).trim())).length >= values.length * 0.6;
 }
 
 export interface SheetDetection {

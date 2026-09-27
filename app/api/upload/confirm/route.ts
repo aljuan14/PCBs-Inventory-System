@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         total_rows: sheet.totalRows,
         data_rows: sheet.dataRows,
         preview_rows: sheet.previewRows,
-        suggested_mapping: buildSuggestedMapping(sheet.profile, category, sheet.headers),
+        suggested_mapping: buildSuggestedMapping(sheet.profile, category, sheet.headers, sheet.sampleRows ?? sheet.previewRows),
       })));
 
     if (batchErr) {

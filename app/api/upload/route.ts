@@ -7,6 +7,9 @@ import { downloadWorkbook, isUploadId, readUploadSession, saveUploadScan, type U
 // Parsing a large multi-sheet workbook can take a while.
 export const maxDuration = 60;
 
+// Rows kept per sheet so the mapping can be suggested again once the admin picks a category.
+const SAMPLE_ROWS = 30;
+
 /**
  * Step 1 of an import: scan every sheet of a workbook the browser already put
  * in Storage (see ./init). Each sheet is classified (profile, category,
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
       const initial = detectSheet(sheetName, parsed.headers, parsed.totalRows, workbook.SheetNames.length);
       let dataRows = parsed.allRows;
       if (initial.category) {
-        const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers);
+        const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers, parsed.allRows.slice(0, SAMPLE_ROWS));
         dataRows = parsed.allRows.filter((row) => hasIdentity(row, mapping));
       }
       // Re-run with the real row count so sheets of empty form rows are skipped.
@@ -55,6 +58,7 @@ export async function POST(req: NextRequest) {
         totalRows: parsed.totalRows,
         dataRows: dataRows.length,
         previewRows: dataRows.slice(0, 5),
+        sampleRows: dataRows.slice(0, SAMPLE_ROWS),
         ...detection,
       };
     });
@@ -70,7 +74,8 @@ export async function POST(req: NextRequest) {
       uploadId,
       companyId: session.company_id,
       fileName: session.file_name,
-      sheets: sheets.map(({ headers, ...sheet }) => ({ ...sheet, headerCount: headers.length, headers: headers.slice(0, 60) })),
+      // Sample rows stay server-side (only the mapping suggestion needs them).
+      sheets: sheets.map(({ headers, ...sheet }) => ({ ...sheet, sampleRows: undefined, headerCount: headers.length, headers: headers.slice(0, 60) })),
     });
   } catch (err) {
     console.error('Upload error:', err);

@@ -59,12 +59,12 @@ for (const file of targets.flatMap(listWorkbooks)) {
     totals.sheets++;
     const parsed = parseSheet(workbook, sheetName);
     const initial = detectSheet(sheetName, parsed.headers, parsed.totalRows, workbook.SheetNames.length);
-    let dataRows = parsed.allRows.length;
+    let dataRows = parsed.allRows;
     if (initial.category) {
-      const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers);
-      dataRows = parsed.allRows.filter((row) => hasIdentity(row, mapping)).length;
+      const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers, parsed.allRows.slice(0, 30));
+      dataRows = parsed.allRows.filter((row) => hasIdentity(row, mapping));
     }
-    const detection = detectSheet(sheetName, parsed.headers, dataRows, workbook.SheetNames.length);
+    const detection = detectSheet(sheetName, parsed.headers, dataRows.length, workbook.SheetNames.length);
 
     if (!detection.include || !detection.category) {
       totals.skipped++;
@@ -75,7 +75,7 @@ for (const file of targets.flatMap(listWorkbooks)) {
     if (!detection.profile) totals.unknownProfile++;
 
     const category = detection.category as InventoryCategory;
-    const mapping = buildSuggestedMapping(detection.profile, category, parsed.headers);
+    const mapping = buildSuggestedMapping(detection.profile, category, parsed.headers, dataRows.slice(0, 30));
     const { rows, issues } = transformRows(category, parsed, mapping);
 
     const withSerial = rows.filter((row) => isMeaningful(row.item.nomor_serial)).length;

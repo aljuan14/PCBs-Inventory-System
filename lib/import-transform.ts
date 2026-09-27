@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseExcelWithSmartHeader } from '@/lib/excel';
-import { parseDMSCoordinate } from '@/lib/dms';
+import { parseDMSCoordinate, repairIndonesianCoordinate } from '@/lib/dms';
 import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
 import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isMeaningful } from '@/lib/import-profiles';
 import { downloadWorkbook } from '@/lib/upload-store';
@@ -137,7 +137,7 @@ class IssueCollector {
     }
     issue.count++;
     if (issue.rows.length < 8) issue.rows.push(rowNumber);
-    const text = example === undefined || example === null ? '' : String(example).slice(0, 60);
+    const text = example === undefined || example === null ? '' : String(example).slice(0, 90);
     if (text && issue.examples.length < 4 && !issue.examples.includes(text)) issue.examples.push(text);
   }
 
@@ -189,7 +189,9 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
     for (const [header, fieldKey] of active) {
       const raw = rawRow[header];
       const value = convertValue(fieldKey, types.get(fieldKey), raw);
-      if (value === null && isMeaningful(raw)) {
+      // A date column answered in words ("Tidak", "Tidak Pernah") just means no date.
+      const wordsOnly = types.get(fieldKey) === 'date' && typeof raw === 'string' && !/\d/.test(raw);
+      if (value === null && isMeaningful(raw) && !wordsOnly) {
         issues.add(`invalid:${fieldKey}`, 'warning', `Nilai tidak terbaca di kolom "${header}" (${labels.get(fieldKey)}), dikosongkan`, rowNumber, raw instanceof Date ? raw.toISOString().slice(0, 10) : raw);
       }
       if (fieldKey.startsWith('@')) derived[fieldKey] = value;
@@ -204,6 +206,7 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
     if (typeof item.tahun_pembuatan === 'number' && item.tahun_pembuatan > 20000 && item.tahun_pembuatan < 80000) {
       item.tahun_pembuatan = new Date(Date.UTC(1899, 11, 30) + item.tahun_pembuatan * 86400000).getUTCFullYear();
     }
+    if (item.tahun_pembuatan === 0) item.tahun_pembuatan = null;
     if (typeof item.tahun_pembuatan === 'number' && (item.tahun_pembuatan < 1900 || item.tahun_pembuatan > currentYear)) {
       issues.add('invalid:tahun_range', 'warning', `Tahun pembuatan di luar 1900–${currentYear}, dikosongkan`, rowNumber, item.tahun_pembuatan);
       item.tahun_pembuatan = null;
@@ -215,14 +218,27 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
 
     if (typeof item.koordinat_raw === 'string') {
       const parsed = parseDMSCoordinate(item.koordinat_raw);
-      if (!parsed.isValid) {
-        issues.add('coordinate:unreadable', 'warning', 'Koordinat tidak terbaca (tidak tampil di peta)', rowNumber, item.koordinat_raw);
-      } else if (!inIndonesia(parsed.latitude as number, parsed.longitude as number)) {
-        const swapped = inIndonesia(parsed.longitude as number, parsed.latitude as number);
-        issues.add(swapped ? 'coordinate:swapped' : 'coordinate:outside', 'warning', swapped ? 'Koordinat kemungkinan tertukar lintang/bujur (tidak tampil di peta)' : 'Koordinat di luar wilayah Indonesia (tidak tampil di peta)', rowNumber, item.koordinat_raw);
+      const lat = parsed.latitude as number;
+      const lng = parsed.longitude as number;
+      if (parsed.isValid && inIndonesia(lat, lng)) {
+        item.koordinat_lat = lat;
+        item.koordinat_lng = lng;
+      } else if (parsed.isValid && inIndonesia(lng, lat)) {
+        // Indonesia's latitude and longitude ranges do not overlap, so a swap is unambiguous.
+        item.koordinat_lat = lng;
+        item.koordinat_lng = lat;
+        issues.add('coordinate:swapped', 'info', 'Koordinat tertukar lintang/bujur, dibalik otomatis', rowNumber, item.koordinat_raw);
       } else {
-        item.koordinat_lat = parsed.latitude;
-        item.koordinat_lng = parsed.longitude;
+        const repaired = repairIndonesianCoordinate(item.koordinat_raw);
+        if (repaired) {
+          item.koordinat_lat = repaired.latitude;
+          item.koordinat_lng = repaired.longitude;
+          issues.add('coordinate:repaired', 'info', 'Koordinat berformat tidak baku, diperbaiki otomatis (periksa contoh)', rowNumber, `${item.koordinat_raw} → ${repaired.latitude}, ${repaired.longitude}`);
+        } else if (!parsed.isValid) {
+          issues.add('coordinate:unreadable', 'warning', 'Koordinat tidak terbaca (tidak tampil di peta)', rowNumber, item.koordinat_raw);
+        } else {
+          issues.add('coordinate:outside', 'warning', 'Koordinat di luar wilayah Indonesia (tidak tampil di peta)', rowNumber, item.koordinat_raw);
+        }
       }
     }
 

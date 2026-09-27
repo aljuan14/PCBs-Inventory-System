@@ -23,6 +23,8 @@ export interface UploadSheet {
   /** Rows carrying real inventory data (excludes empty pre-filled form rows). */
   dataRows: number;
   previewRows: Record<string, unknown>[];
+  /** First data rows, for mapping suggestions that look at values (split coordinates). */
+  sampleRows?: Record<string, unknown>[];
   profile: ImportProfile | null;
   category: InventoryCategory | null;
   include: boolean;
