@@ -1,10 +1,19 @@
 'use client';
 
 import { Fragment, useState, useEffect, useMemo } from 'react';
-import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2 } from 'lucide-react';
+import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import type { InventoryCategory } from '@/lib/inventory';
-import { fetchInventoryDetails, fetchInventoryPage, type CategoryFilter, type InventoryRow, type PcbRange } from '@/lib/inventory-query';
+import { getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
+import {
+  DEFAULT_FILTERS,
+  fetchImportedBatches,
+  fetchInventoryDetails,
+  fetchInventoryPage,
+  type CategoryFilter,
+  type InventoryFilters,
+  type InventoryRow,
+  type InventorySort,
+} from '@/lib/inventory-query';
 
 export interface InventoryItem {
   id: string;
@@ -70,13 +79,62 @@ export function toInventoryItem(row: InventoryRow, companyNames: Map<string, str
 
 const PAGE_SIZE = 10;
 
+const SELECT_CLASS = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none';
+const FIELD_LABEL_CLASS = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500';
+
+const PCB_LABELS: Record<InventoryFilters['pcbRange'], string> = { all: 'Semua kadar PCB', safe: 'Bebas PCB (< 50 ppm)', moderate: 'Terkontaminasi (50–500 ppm)', high: 'Bahaya tinggi (> 500 ppm)', untested: 'Belum diuji' };
+const TEST_LABELS: Record<InventoryFilters['test'], string> = { all: 'Semua jenis uji', lab: 'Uji lab (GC)', cepat: 'Uji cepat (Dexil)', none: 'Belum diuji' };
+const YEAR_LABELS: Record<InventoryFilters['yearRange'], string> = { all: 'Semua tahun', pre1985: 'Sebelum 1985', '1985_1996': '1985 – 1996', from1997: '1997 ke atas', unknown: 'Tahun tidak diketahui', custom: 'Rentang tertentu' };
+const COORDINATE_LABELS: Record<InventoryFilters['coordinates'], string> = { all: 'Semua', with: 'Ada koordinat (tampil di peta)', without: 'Tanpa koordinat' };
+const MISSING_LABELS: Record<InventoryFilters['missing'], string> = { all: 'Semua', serial: 'Tanpa nomor seri', name: 'Tanpa merek', year: 'Tanpa tahun pembuatan', location: 'Tanpa lokasi' };
+const ADDED_LABELS: Record<InventoryFilters['addedWithin'], string> = { all: 'Kapan saja', '1d': '24 jam terakhir', '7d': '7 hari terakhir', '30d': '30 hari terakhir' };
+const SORT_LABELS: Record<InventorySort, string> = { newest: 'Terbaru diinput', oldest: 'Terlama diinput', ppm_desc: 'Kadar PCB tertinggi', year_asc: 'Tahun pembuatan tertua', year_desc: 'Tahun pembuatan terbaru', daya_desc: 'Daya terbesar', name_asc: 'Merek A–Z' };
+const CATEGORY_FILTER_LABELS: Record<CategoryFilter, string> = {
+  all: 'Semua jenis alat',
+  transformator: 'Semua transformator',
+  transformator_digunakan: 'Trafo masih digunakan',
+  transformator_tidak_digunakan: 'Trafo tidak digunakan',
+  kapasitor: 'Kapasitor',
+  minyak_dielektrik: 'Minyak dielektrik',
+};
+
+/** Number field that only applies its value on blur or Enter, so typing "1985" does not query "1", "19", ... */
+function NumberFilter({ value, onCommit, placeholder, label }: { value: number | null; onCommit: (value: number | null) => void; placeholder: string; label: string }) {
+  const [draft, setDraft] = useState(value === null ? '' : String(value));
+  const [committed, setCommitted] = useState(value);
+  if (committed !== value) {
+    // Reset from outside (chip removed, "reset all").
+    setCommitted(value);
+    setDraft(value === null ? '' : String(value));
+  }
+  const commit = () => {
+    const next = draft.trim() === '' ? null : Number(draft.replace(',', '.'));
+    if (next === null || Number.isFinite(next)) onCommit(next);
+  };
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      aria-label={label}
+      placeholder={placeholder}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 focus:border-emerald-500 focus:outline-none"
+    />
+  );
+}
+
 export default function DataTable({ category, companies, reloadKey = 0, onEdit, onDelete }: DataTableProps) {
   const supabase = useMemo(() => createClient(), []);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedType, setSelectedType] = useState<CategoryFilter>('all');
-  const [selectedCompany, setSelectedCompany] = useState<string>('all');
-  const [selectedPcbRange, setSelectedPcbRange] = useState<PcbRange>('all');
+  const [filters, setFilters] = useState<InventoryFilters>(DEFAULT_FILTERS);
+  const [sort, setSort] = useState<InventorySort>('newest');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [batches, setBatches] = useState<Awaited<ReturnType<typeof fetchImportedBatches>>>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
@@ -100,15 +158,63 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  const updateFilter = <K extends keyof InventoryFilters>(key: K, value: InventoryFilters[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setCurrentPage(1);
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    if (!category) setSelectedType('all');
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
+
+  // Batch list for the "import batch" filter, loaded once the advanced panel is opened.
+  useEffect(() => {
+    if (!showAdvanced) return;
+    let cancelled = false;
+    fetchImportedBatches(supabase, filters.companyId)
+      .then((rows) => { if (!cancelled) setBatches(category ? rows.filter((row) => row.jenis_data === category) : rows); })
+      .catch(() => { if (!cancelled) setBatches([]); });
+    return () => { cancelled = true; };
+  }, [supabase, showAdvanced, filters.companyId, category]);
+
+  const effectiveCategory = category ?? selectedType;
+  const hasTransformers = effectiveCategory === 'all' || effectiveCategory.startsWith('transformator');
+  const hasTests = effectiveCategory !== 'kapasitor';
+
   // Data diambil per halaman dari server; filter dan pencarian dijalankan di database.
   const query = useMemo(() => ({
-    category: category ?? selectedType,
-    companyId: selectedCompany === 'all' ? null : selectedCompany,
-    pcbRange: selectedPcbRange,
+    category: effectiveCategory,
     search: debouncedSearch,
+    filters,
+    sort,
     page: currentPage,
     pageSize: PAGE_SIZE,
-  }), [category, selectedType, selectedCompany, selectedPcbRange, debouncedSearch, currentPage]);
+  }), [effectiveCategory, debouncedSearch, filters, sort, currentPage]);
+
+  // Active filters as removable chips.
+  const batchLabel = (id: string) => {
+    const batch = batches.find((item) => item.id === id);
+    return batch ? `${batch.nama_file_asli}${batch.sheet_name ? ` › ${batch.sheet_name}` : ''}` : 'batch terpilih';
+  };
+  const yearChip = filters.yearRange === 'custom'
+    ? `Tahun ${filters.yearMin ?? '…'} – ${filters.yearMax ?? '…'}`
+    : YEAR_LABELS[filters.yearRange];
+  const activeChips: Array<{ key: string; label: string; clear: () => void }> = [
+    !category && selectedType !== 'all' ? { key: 'type', label: CATEGORY_FILTER_LABELS[selectedType], clear: () => { setSelectedType('all'); setCurrentPage(1); } } : null,
+    filters.companyId ? { key: 'company', label: companyNames.get(filters.companyId) ?? 'Perusahaan', clear: () => updateFilter('companyId', null) } : null,
+    filters.pcbRange !== 'all' ? { key: 'pcb', label: PCB_LABELS[filters.pcbRange], clear: () => updateFilter('pcbRange', 'all') } : null,
+    filters.test !== 'all' ? { key: 'test', label: TEST_LABELS[filters.test], clear: () => updateFilter('test', 'all') } : null,
+    filters.yearRange !== 'all' ? { key: 'year', label: yearChip, clear: () => setFilters((prev) => ({ ...prev, yearRange: 'all', yearMin: null, yearMax: null })) } : null,
+    filters.dayaMin !== null || filters.dayaMax !== null ? { key: 'daya', label: `Daya ${filters.dayaMin ?? '…'} – ${filters.dayaMax ?? '…'} kVA`, clear: () => setFilters((prev) => ({ ...prev, dayaMin: null, dayaMax: null })) } : null,
+    filters.coordinates !== 'all' ? { key: 'coords', label: COORDINATE_LABELS[filters.coordinates], clear: () => updateFilter('coordinates', 'all') } : null,
+    filters.missing !== 'all' ? { key: 'missing', label: MISSING_LABELS[filters.missing], clear: () => updateFilter('missing', 'all') } : null,
+    filters.batchId ? { key: 'batch', label: `Batch: ${batchLabel(filters.batchId)}`, clear: () => updateFilter('batchId', null) } : null,
+    filters.addedWithin !== 'all' ? { key: 'added', label: `Diinput ${ADDED_LABELS[filters.addedWithin].toLowerCase()}`, clear: () => updateFilter('addedWithin', 'all') } : null,
+  ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
+  const advancedCount = activeChips.filter((chip) => !['type', 'company', 'pcb'].includes(chip.key)).length;
   const queryKey = `${JSON.stringify(query)}#${reloadKey}`;
   const loading = loadedKey !== queryKey;
 
@@ -178,61 +284,153 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
         </div>
       </div>
 
-      {/* Filter Chips / Selectors */}
-      <div className="mb-6 flex flex-wrap items-center gap-2.5">
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mr-1">
+      {/* Filter utama */}
+      <div className="mb-3 flex flex-wrap items-center gap-2.5">
+        <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-slate-500">
           <Filter className="h-3.5 w-3.5" />
           <span>Filter:</span>
         </div>
 
-        {/* Tipe Alat (hanya di halaman gabungan) */}
-        {!category && <select
-          value={selectedType}
-          onChange={(e) => {
-            setSelectedType(e.target.value as CategoryFilter);
-            setCurrentPage(1);
-          }}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
-        >
-          <option value="all">Semua Jenis Alat</option>
-          <option value="transformator">Transformator</option>
-          <option value="kapasitor">Kapasitor</option>
-          <option value="minyak_dielektrik">Minyak Dielektrik</option>
-        </select>}
+        {/* Jenis alat (hanya di halaman gabungan) */}
+        {!category && (
+          <select
+            aria-label="Jenis alat"
+            value={selectedType}
+            onChange={(e) => {
+              setSelectedType(e.target.value as CategoryFilter);
+              setCurrentPage(1);
+            }}
+            className={SELECT_CLASS}
+          >
+            {(Object.keys(CATEGORY_FILTER_LABELS) as CategoryFilter[]).map((key) => <option key={key} value={key}>{CATEGORY_FILTER_LABELS[key]}</option>)}
+          </select>
+        )}
 
-        {/* Perusahaan */}
-        <select
-          value={selectedCompany}
-          onChange={(e) => {
-            setSelectedCompany(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
-        >
-          <option value="all">Semua Perusahaan</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
+        <select aria-label="Perusahaan" value={filters.companyId ?? 'all'} onChange={(e) => updateFilter('companyId', e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
+          <option value="all">Semua perusahaan</option>
+          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
 
-        {/* Rentang PCB */}
-        <select
-          value={selectedPcbRange}
-          onChange={(e) => {
-            setSelectedPcbRange(e.target.value as PcbRange);
-            setCurrentPage(1);
-          }}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
+        {hasTests && (
+          <select aria-label="Kadar PCB" value={filters.pcbRange} onChange={(e) => updateFilter('pcbRange', e.target.value as InventoryFilters['pcbRange'])} className={SELECT_CLASS}>
+            {(Object.keys(PCB_LABELS) as Array<InventoryFilters['pcbRange']>).map((key) => <option key={key} value={key}>{PCB_LABELS[key]}</option>)}
+          </select>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((open) => !open)}
+          aria-expanded={showAdvanced}
+          className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold shadow-2xs transition-colors ${showAdvanced || advancedCount > 0 ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
         >
-          <option value="all">Semua Kadar PCB</option>
-          <option value="safe">Bebas PCB (&lt; 50 ppm)</option>
-          <option value="moderate">Terkontaminasi (50 - 500 ppm)</option>
-          <option value="high">Bahaya Tinggi (&gt; 500 ppm)</option>
-          <option value="untested">Belum Diuji</option>
-        </select>
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Filter lanjutan{advancedCount > 0 ? ` (${advancedCount})` : ''}
+        </button>
+
+        <label className="ml-auto flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <ArrowUpDown className="h-3.5 w-3.5" />
+          <span className="sr-only sm:not-sr-only">Urutkan:</span>
+          <select aria-label="Urutkan" value={sort} onChange={(e) => { setSort(e.target.value as InventorySort); setCurrentPage(1); }} className={SELECT_CLASS}>
+            {(Object.keys(SORT_LABELS) as InventorySort[])
+              .filter((key) => (key === 'daya_desc' ? hasTransformers : key === 'ppm_desc' ? hasTests : true))
+              .map((key) => <option key={key} value={key}>{SORT_LABELS[key]}</option>)}
+          </select>
+        </label>
       </div>
+
+      {/* Filter lanjutan */}
+      {showAdvanced && (
+        <div className="mb-3 grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          {hasTests && (
+            <label className={FIELD_LABEL_CLASS}>
+              Jenis uji PCB
+              <select value={filters.test} onChange={(e) => updateFilter('test', e.target.value as InventoryFilters['test'])} className={SELECT_CLASS}>
+                {(Object.keys(TEST_LABELS) as Array<InventoryFilters['test']>).map((key) => <option key={key} value={key}>{TEST_LABELS[key]}</option>)}
+              </select>
+            </label>
+          )}
+
+          <div className={FIELD_LABEL_CLASS}>
+            <label htmlFor="filter-year">Tahun pembuatan</label>
+            <select id="filter-year" value={filters.yearRange} onChange={(e) => updateFilter('yearRange', e.target.value as InventoryFilters['yearRange'])} className={SELECT_CLASS}>
+              {(Object.keys(YEAR_LABELS) as Array<InventoryFilters['yearRange']>).map((key) => <option key={key} value={key}>{YEAR_LABELS[key]}</option>)}
+            </select>
+            {filters.yearRange === 'custom' && (
+              <div className="flex items-center gap-2 normal-case tracking-normal">
+                <NumberFilter label="Tahun dari" placeholder="Dari" value={filters.yearMin} onCommit={(value) => updateFilter('yearMin', value)} />
+                <span className="text-slate-400">–</span>
+                <NumberFilter label="Tahun sampai" placeholder="Sampai" value={filters.yearMax} onCommit={(value) => updateFilter('yearMax', value)} />
+              </div>
+            )}
+          </div>
+
+          {hasTransformers && (
+            <div className={FIELD_LABEL_CLASS}>
+              <span>Daya trafo (kVA)</span>
+              <div className="flex items-center gap-2 normal-case tracking-normal">
+                <NumberFilter label="Daya minimal" placeholder="Min" value={filters.dayaMin} onCommit={(value) => updateFilter('dayaMin', value)} />
+                <span className="text-slate-400">–</span>
+                <NumberFilter label="Daya maksimal" placeholder="Maks" value={filters.dayaMax} onCommit={(value) => updateFilter('dayaMax', value)} />
+              </div>
+            </div>
+          )}
+
+          <label className={FIELD_LABEL_CLASS}>
+            Koordinat
+            <select value={filters.coordinates} onChange={(e) => updateFilter('coordinates', e.target.value as InventoryFilters['coordinates'])} className={SELECT_CLASS}>
+              {(Object.keys(COORDINATE_LABELS) as Array<InventoryFilters['coordinates']>).map((key) => <option key={key} value={key}>{COORDINATE_LABELS[key]}</option>)}
+            </select>
+          </label>
+
+          <label className={FIELD_LABEL_CLASS}>
+            Kelengkapan data
+            <select value={filters.missing} onChange={(e) => updateFilter('missing', e.target.value as InventoryFilters['missing'])} className={SELECT_CLASS}>
+              {(Object.keys(MISSING_LABELS) as Array<InventoryFilters['missing']>).map((key) => <option key={key} value={key}>{MISSING_LABELS[key]}</option>)}
+            </select>
+          </label>
+
+          <label className={`${FIELD_LABEL_CLASS} lg:col-span-2`}>
+            Batch import (berkas › sheet)
+            <select value={filters.batchId ?? 'all'} onChange={(e) => updateFilter('batchId', e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
+              <option value="all">Semua batch</option>
+              {batches.map((batch) => (
+                <option key={batch.id} value={batch.id}>
+                  {new Date(batch.uploaded_at).toLocaleDateString('id-ID')} · {batch.nama_file_asli}{batch.sheet_name ? ` › ${batch.sheet_name}` : ''}{category ? '' : ` (${getCategoryLabel(batch.jenis_data)})`}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={FIELD_LABEL_CLASS}>
+            Waktu input
+            <select value={filters.addedWithin} onChange={(e) => updateFilter('addedWithin', e.target.value as InventoryFilters['addedWithin'])} className={SELECT_CLASS}>
+              {(Object.keys(ADDED_LABELS) as Array<InventoryFilters['addedWithin']>).map((key) => <option key={key} value={key}>{ADDED_LABELS[key]}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+
+      {/* Filter aktif */}
+      {(activeChips.length > 0 || searchTerm) && (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          {searchTerm && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white py-1 pl-3 pr-1 text-[11px] font-semibold text-slate-700">
+              Cari: “{searchTerm}”
+              <button type="button" aria-label="Hapus pencarian" onClick={() => setSearchTerm('')} className="rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {activeChips.map((chip) => (
+            <span key={chip.key} className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-3 pr-1 text-[11px] font-semibold text-emerald-800">
+              {chip.label}
+              <button type="button" aria-label={`Hapus filter ${chip.label}`} onClick={() => { chip.clear(); setCurrentPage(1); }} className="rounded-full p-0.5 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-900"><X className="h-3 w-3" /></button>
+            </span>
+          ))}
+          <button type="button" onClick={resetFilters} className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800">
+            <RotateCcw className="h-3 w-3" /> Reset semua
+          </button>
+        </div>
+      )}
+      {activeChips.length === 0 && !searchTerm && <div className="mb-3" />}
 
       {loadError && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
