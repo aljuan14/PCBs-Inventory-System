@@ -3,7 +3,7 @@ import { parseExcelWithSmartHeader } from '@/lib/excel';
 import { parseDMSCoordinate } from '@/lib/dms';
 import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
 import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isMeaningful } from '@/lib/import-profiles';
-import { readBatchMeta, readBatchWorkbook } from '@/lib/upload-store';
+import { downloadWorkbook } from '@/lib/upload-store';
 
 /**
  * Row transformation shared by the pre-import check (dry run) and the import
@@ -16,7 +16,7 @@ export class BatchFileError extends Error {
   }
 }
 
-interface LoadedSheet {
+export interface LoadedSheet {
   headers: string[];
   allRows: Record<string, unknown>[];
   rowNumbers: number[];
@@ -27,22 +27,22 @@ interface LoadedSheet {
 const sheetCache = new Map<string, LoadedSheet>();
 const SHEET_CACHE_LIMIT = 2;
 
-export async function loadBatchSheet(supabase: SupabaseClient, batchId: string, storagePath: string | null): Promise<LoadedSheet> {
-  const cached = sheetCache.get(batchId);
+export async function loadBatchSheet(
+  supabase: SupabaseClient,
+  batch: { id: string; file_storage_path: string | null; sheet_name: string | null },
+): Promise<LoadedSheet> {
+  const cached = sheetCache.get(batch.id);
   if (cached) return cached;
 
-  const meta = readBatchMeta(batchId);
-  let buffer = readBatchWorkbook(batchId, meta);
-  if (!buffer && storagePath) {
-    const { data, error } = await supabase.storage.from('pcbs-files').download(storagePath);
-    if (error || !data) throw new BatchFileError('Berkas Excel tidak dapat diakses dari penyimpanan.', 404);
-    buffer = Buffer.from(await data.arrayBuffer());
+  if (!batch.file_storage_path) {
+    throw new BatchFileError('Berkas Excel batch ini tidak tersimpan di penyimpanan. Unggah ulang berkasnya.', 404);
   }
-  if (!buffer) throw new BatchFileError('Berkas fisik Excel tidak ditemukan.', 404);
+  const buffer = await downloadWorkbook(supabase, batch.file_storage_path);
+  if (!buffer) throw new BatchFileError('Berkas Excel tidak dapat diakses dari penyimpanan.', 404);
 
-  const { headers, allRows, rowNumbers } = parseExcelWithSmartHeader(buffer, meta?.sheetName);
+  const { headers, allRows, rowNumbers } = parseExcelWithSmartHeader(buffer, batch.sheet_name ?? undefined);
   const sheet = { headers, allRows, rowNumbers };
-  sheetCache.set(batchId, sheet);
+  sheetCache.set(batch.id, sheet);
   if (sheetCache.size > SHEET_CACHE_LIMIT) sheetCache.delete(sheetCache.keys().next().value as string);
   return sheet;
 }

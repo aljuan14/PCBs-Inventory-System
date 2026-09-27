@@ -12,6 +12,9 @@ import {
   transformRows,
 } from '@/lib/import-transform';
 
+// Parsing and checking a large sheet can take a while.
+export const maxDuration = 60;
+
 /**
  * Dry run of an import: applies the mapping to every row without writing, and
  * reports what would be stored, skipped, or needs the admin's attention.
@@ -27,7 +30,7 @@ export async function POST(
 
     const { data: batch, error } = await supabase
       .from('import_batches')
-      .select('id, company_id, jenis_data, file_storage_path, status')
+      .select('id, company_id, jenis_data, file_storage_path, sheet_name, status')
       .eq('id', batchId)
       .single();
     if (error || !batch) {
@@ -38,7 +41,7 @@ export async function POST(
     const mappingError = checkMappings(category, mappings ?? {});
     if (mappingError) return NextResponse.json({ error: mappingError }, { status: 400 });
 
-    const sheet = await loadBatchSheet(supabase, batchId, batch.file_storage_path);
+    const sheet = await loadBatchSheet(supabase, batch);
     const { rows, skippedEmpty, issues } = transformRows(category, sheet, mappings);
 
     const existing = await fetchExistingFingerprints(supabase, category, batch.company_id);

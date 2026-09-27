@@ -25,6 +25,7 @@ export const DERIVED_FIELDS: Array<{ field_key: string; label: string; tipe_data
   { field_key: '@uji_lab_penyedia', label: 'Penguji lab / GC', tipe_data: 'text', categories: ['transformator_digunakan', 'transformator_tidak_digunakan', 'minyak_dielektrik'] },
   { field_key: '@uji_cepat_ppm', label: 'Hasil uji cepat / Dexil (ppm) → Uji cepat', tipe_data: 'numeric', categories: ['transformator_digunakan', 'transformator_tidak_digunakan', 'minyak_dielektrik'] },
   { field_key: '@uji_cepat_penyedia', label: 'Penguji uji cepat / Dexil', tipe_data: 'text', categories: ['transformator_digunakan', 'transformator_tidak_digunakan', 'minyak_dielektrik'] },
+  { field_key: '@koordinat_bujur', label: 'Bujur (kolom koordinat kedua) → digabung ke Koordinat', tipe_data: 'text', categories: ['transformator_digunakan', 'transformator_tidak_digunakan', 'kapasitor', 'minyak_dielektrik'] },
 ];
 
 export function getDerivedFields(category: InventoryCategory) {
@@ -142,15 +143,22 @@ function applyRules(rules: Rule[], category: InventoryCategory, headers: string[
 
 /** Column mapping for a sheet: profile rules when the layout is known, keyword guesses otherwise. */
 export function buildSuggestedMapping(profile: ImportProfile | null, category: InventoryCategory, headers: string[]) {
-  if (profile === 'pln') return applyRules(PLN_RULES[category], category, headers);
-  if (profile === 'template_klhk') return applyRules(TEMPLATE_RULES, category, headers);
-  const mapping: Record<string, string> = {};
-  const used = new Set<string>();
-  for (const header of headers) {
-    const fieldKey = suggestInventoryField(category, header);
-    mapping[header] = fieldKey !== IGNORE && !used.has(fieldKey) ? fieldKey : IGNORE;
-    used.add(fieldKey);
+  let mapping: Record<string, string> = {};
+  if (profile === 'pln') mapping = applyRules(PLN_RULES[category], category, headers);
+  else if (profile === 'template_klhk') mapping = applyRules(TEMPLATE_RULES, category, headers);
+  else {
+    const used = new Set<string>();
+    for (const header of headers) {
+      const fieldKey = suggestInventoryField(category, header);
+      mapping[header] = fieldKey !== IGNORE && !used.has(fieldKey) ? fieldKey : IGNORE;
+      used.add(fieldKey);
+    }
   }
+  // A merged "Titik Koordinat" header often spans two columns (latitude,
+  // longitude); the second one has no label of its own.
+  const coordinateIndex = headers.findIndex((header) => mapping[header] === 'koordinat_raw');
+  const next = headers[coordinateIndex + 1];
+  if (coordinateIndex >= 0 && next && /^Kolom_\d+$/.test(next) && mapping[next] === IGNORE) mapping[next] = '@koordinat_bujur';
   return mapping;
 }
 
@@ -289,7 +297,7 @@ export function parseDate(value: unknown): string | null {
 
 // Columns with CHECK constraints accept only these spellings.
 const ENUM_NORMALIZERS: Record<string, (value: string) => string | null> = {
-  ketersediaan_keran_buang: (value) => (/^tidak/i.test(value) ? 'Tidak Ada' : /^ada/i.test(value) ? 'Ada' : null),
+  ketersediaan_keran_buang: (value) => (/^(tidak|tdk|no\b)/i.test(value) ? 'Tidak Ada' : /^(ada|ya\b|yes\b)/i.test(value) ? 'Ada' : null),
   uji_jenis: (value) => (/lab|gc/i.test(value) ? 'Uji lab' : /cepat|dexil/i.test(value) ? 'Uji cepat' : null),
   status_alat: (value) => (/tidak|attb/i.test(value) ? 'Tidak digunakan' : /masih|^ya\b|^atb$|digunakan/i.test(value) ? 'Masih digunakan' : null),
 };
@@ -311,6 +319,9 @@ export function applyDerivedFields(item: Record<string, unknown>, derived: Recor
   const setIfEmpty = (key: string, value: unknown) => {
     if ((item[key] === null || item[key] === undefined) && value !== null && value !== undefined) item[key] = value;
   };
+  if (derived['@koordinat_bujur'] !== null && derived['@koordinat_bujur'] !== undefined && typeof item.koordinat_raw === 'string') {
+    item.koordinat_raw = `${item.koordinat_raw}, ${derived['@koordinat_bujur']}`;
+  }
   if (typeof derived['@berat_kg'] === 'number') setIfEmpty('berat_ton', Number((derived['@berat_kg'] / 1000).toFixed(4)));
 
   const hasDirectTest = item.uji_konsentrasi_ppm !== null && item.uji_konsentrasi_ppm !== undefined;

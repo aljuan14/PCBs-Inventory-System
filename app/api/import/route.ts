@@ -5,6 +5,9 @@ import { BatchFileError, checkMappings, fetchExistingFingerprints, forgetBatchSh
 
 const INSERT_CHUNK_SIZE = 500;
 
+// Large sheets (tens of thousands of rows) are parsed and inserted in one request.
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -24,7 +27,7 @@ export async function POST(req: NextRequest) {
     // 1. Ambil batch info
     const { data: batch, error: batchErr } = await supabase
       .from('import_batches')
-      .select('id, company_id, jenis_data, file_storage_path, status')
+      .select('id, company_id, jenis_data, file_storage_path, sheet_name, status')
       .eq('id', batchId)
       .single();
 
@@ -40,7 +43,7 @@ export async function POST(req: NextRequest) {
     if (mappingError) return NextResponse.json({ error: mappingError }, { status: 400 });
 
     // 2. Baca sheet & transformasi (logika yang sama dengan pemeriksaan data)
-    const sheet = await loadBatchSheet(supabase, batchId, batch.file_storage_path);
+    const sheet = await loadBatchSheet(supabase, batch);
     const { rows, skippedEmpty } = transformRows(jenisData, sheet, mappings);
 
     let skippedDuplicates = 0;

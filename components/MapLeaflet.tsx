@@ -17,6 +17,11 @@ export interface MapPoint {
   status?: string | null;
 }
 
+// Popup content is HTML built from spreadsheet values; escape them so a cell
+// cannot inject markup or scripts.
+const escapeHtml = (value: unknown) =>
+  String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] as string);
+
 interface MapProps {
   points: MapPoint[];
   height?: string;
@@ -125,11 +130,11 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
 
         const popupContent = `
           <div style="font-family: sans-serif; font-size: 13px; line-height: 1.4; min-width: 200px;">
-            <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #0f172a;">${point.name || 'Alat'}</div>
-            <div style="color: #64748b; font-size: 11px; margin-bottom: 8px;">${point.companyName || 'Perusahaan'}</div>
+            <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #0f172a;">${escapeHtml(point.name || 'Alat')}</div>
+            <div style="color: #64748b; font-size: 11px; margin-bottom: 8px;">${escapeHtml(point.companyName || 'Perusahaan')}</div>
             <div style="margin-bottom: 4px;"><strong>Jenis:</strong> ${typeBadge}</div>
-            ${point.serialNumber ? `<div><strong>No. Seri:</strong> ${point.serialNumber}</div>` : ''}
-            ${point.location ? `<div><strong>Lokasi:</strong> ${point.location}</div>` : ''}
+            ${point.serialNumber ? `<div><strong>No. Seri:</strong> ${escapeHtml(point.serialNumber)}</div>` : ''}
+            ${point.location ? `<div><strong>Lokasi:</strong> ${escapeHtml(point.location)}</div>` : ''}
             <div style="margin-top: 6px; padding: 4px 6px; border-radius: 4px; display: inline-block; font-size: 11px; font-weight: 600;" class="${pcbColor}">
               PCB: ${point.pcbConcentration !== undefined && point.pcbConcentration !== null ? `${point.pcbConcentration} ppm · ${pcbClass}` : pcbClass}
             </div>

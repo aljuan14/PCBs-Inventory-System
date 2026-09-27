@@ -1,32 +1,36 @@
-import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { parseSheet, readWorkbook } from '@/lib/excel';
 import { buildSuggestedMapping, detectSheet, hasIdentity } from '@/lib/import-profiles';
-import { saveWorkbook, writeUploadSession, type UploadSheet } from '@/lib/upload-store';
+import { downloadWorkbook, isUploadId, readUploadSession, saveUploadScan, type UploadSheet } from '@/lib/upload-store';
+
+// Parsing a large multi-sheet workbook can take a while.
+export const maxDuration = 60;
 
 /**
- * Step 1 of an import: store the workbook and scan every sheet. Each sheet is
- * classified (profile, category, include by default) for the admin to review;
- * batches are only created once the admin confirms (see ./confirm).
+ * Step 1 of an import: scan every sheet of a workbook the browser already put
+ * in Storage (see ./init). Each sheet is classified (profile, category,
+ * include by default) for the admin to review; batches are only created once
+ * the admin confirms (see ./confirm).
  */
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
-    let companyId = formData.get('company_id') as string | null;
-    const newCompanyName = formData.get('new_company_name') as string | null;
-
-    if (!file) {
-      return NextResponse.json({ error: 'File Excel wajib diunggah.' }, { status: 400 });
-    }
-    if (!companyId && !newCompanyName?.trim()) {
-      return NextResponse.json({ error: 'Perusahaan wajib dipilih atau diisi.' }, { status: 400 });
+    const { uploadId } = (await req.json()) as { uploadId?: string };
+    if (!isUploadId(uploadId)) {
+      return NextResponse.json({ error: 'ID unggahan tidak valid.' }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const supabase = await createClient();
+    const session = await readUploadSession(supabase, uploadId);
+    if (!session) {
+      return NextResponse.json({ error: 'Sesi unggahan tidak ditemukan. Unggah ulang berkasnya.' }, { status: 404 });
+    }
 
-    // Parse before touching the database so an unreadable file leaves no trace.
+    const buffer = await downloadWorkbook(supabase, session.storage_path);
+    if (!buffer) {
+      return NextResponse.json({ error: 'Berkas belum tersimpan di penyimpanan. Unggah ulang berkasnya.' }, { status: 404 });
+    }
+
     let workbook;
     try {
       workbook = readWorkbook(buffer);
@@ -59,55 +63,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Tidak ada sheet dengan header tabel yang dapat dikenali.' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-
-    if (!companyId && newCompanyName?.trim()) {
-      const { data: newComp, error: compErr } = await supabase
-        .from('companies')
-        .insert({ nama_perusahaan: newCompanyName.trim() })
-        .select('id')
-        .single();
-
-      if (compErr) {
-        console.error('Error inserting company:', compErr);
-        return NextResponse.json({ error: `Gagal menyimpan perusahaan: ${compErr.message}` }, { status: 500 });
-      }
-      companyId = newComp.id;
-    }
-
-    const uploadId = randomUUID();
-    saveWorkbook(uploadId, buffer);
-
-    // Supabase Storage copy is optional; the local file is used first.
-    let storagePath: string | null = null;
-    try {
-      const path = `${uploadId}/${file.name}`;
-      const { error: storageErr } = await supabase.storage
-        .from('pcbs-files')
-        .upload(path, buffer, {
-          contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          upsert: true,
-        });
-      if (!storageErr) storagePath = path;
-    } catch (stErr) {
-      console.warn('Supabase storage upload skipped/warning:', stErr);
-    }
-
-    writeUploadSession({
-      uploadId,
-      companyId: companyId as string,
-      fileName: file.name,
-      storagePath,
-      createdAt: new Date().toISOString(),
-      sheets,
-      batches: [],
-    });
+    await saveUploadScan(supabase, uploadId, sheets);
 
     return NextResponse.json({
       success: true,
       uploadId,
-      companyId,
-      fileName: file.name,
+      companyId: session.company_id,
+      fileName: session.file_name,
       sheets: sheets.map(({ headers, ...sheet }) => ({ ...sheet, headerCount: headers.length, headers: headers.slice(0, 60) })),
     });
   } catch (err) {

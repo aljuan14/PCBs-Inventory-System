@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { parseExcelWithSmartHeader } from '@/lib/excel';
 import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
 import { buildSuggestedMapping, getDerivedFields, IMPORT_PROFILE_LABELS } from '@/lib/import-profiles';
-import { readBatchMeta, readBatchWorkbook, readUploadSession } from '@/lib/upload-store';
+import { BatchFileError, loadBatchSheet } from '@/lib/import-transform';
+import type { BatchRow } from '@/lib/upload-store';
 
 export async function GET(
   _req: NextRequest,
@@ -12,45 +12,43 @@ export async function GET(
   try {
     const { batchId } = await params;
     const supabase = await createClient();
-    const { data: batch, error } = await supabase
+    const { data, error } = await supabase
       .from('import_batches')
       .select('*, companies(*)')
       .eq('id', batchId)
       .single();
 
-    if (error || !batch) {
+    if (error || !data) {
       return NextResponse.json({ error: 'Data batch tidak ditemukan di database.' }, { status: 404 });
     }
 
+    const batch = data as BatchRow & { companies: unknown };
     const category = batch.jenis_data as InventoryCategory;
-    const meta = readBatchMeta(batchId);
-    let headers: string[] = meta?.headers ?? [];
-    let sampleRow: Record<string, unknown> = meta?.previewRows?.[0] ?? {};
+    let headers: string[] = batch.headers ?? [];
+    let sampleRow: Record<string, unknown> = batch.preview_rows?.[0] ?? {};
 
-    // Batches from before multi-sheet uploads stored headers from the old
-    // parser; re-read them so the mapping keys match what import will parse.
-    if (meta && !meta.uploadId) {
-      const workbook = readBatchWorkbook(batchId, meta);
-      if (workbook) {
-        const parsed = parseExcelWithSmartHeader(workbook);
-        headers = parsed.headers;
-        sampleRow = parsed.previewRows[0] ?? {};
-      }
+    // Batches created before upload_sessions kept their headers on the local
+    // disk; re-read them from the workbook so the mapping keys match import.
+    if (!batch.headers) {
+      const sheet = await loadBatchSheet(supabase, batch);
+      headers = sheet.headers;
+      sampleRow = sheet.allRows[0] ?? {};
     }
 
-    const profile = meta?.profile ?? null;
-    const suggestedMapping = meta?.suggestedMapping ?? buildSuggestedMapping(profile, category, headers);
+    const profile = batch.profile ?? null;
+    const suggestedMapping = batch.suggested_mapping ?? buildSuggestedMapping(profile, category, headers);
 
     // Other sheets from the same workbook, so the admin can move on to the next one.
     let siblings: Array<{ batchId: string; sheetName: string; category: string; status: string }> = [];
-    const session = meta?.uploadId ? readUploadSession(meta.uploadId) : null;
-    if (session && session.batches.length > 1) {
-      const { data: statuses } = await supabase
+    if (batch.upload_id) {
+      const { data: rows } = await supabase
         .from('import_batches')
-        .select('id, status')
-        .in('id', session.batches.map((item) => item.batchId));
-      const statusById = new Map((statuses ?? []).map((row) => [row.id, row.status]));
-      siblings = session.batches.map((item) => ({ ...item, status: statusById.get(item.batchId) ?? 'pending_mapping' }));
+        .select('id, sheet_name, jenis_data, status, uploaded_at')
+        .eq('upload_id', batch.upload_id)
+        .order('uploaded_at');
+      if (rows && rows.length > 1) {
+        siblings = rows.map((row) => ({ batchId: row.id, sheetName: row.sheet_name ?? '', category: row.jenis_data, status: row.status }));
+      }
     }
 
     return NextResponse.json({
@@ -59,13 +57,14 @@ export async function GET(
       headers,
       sampleRow,
       suggestedMapping,
-      sheetName: meta?.sheetName ?? null,
+      sheetName: batch.sheet_name,
       profile,
       profileLabel: profile ? IMPORT_PROFILE_LABELS[profile] : null,
-      dataRows: meta?.dataRows ?? meta?.totalRows ?? null,
+      dataRows: batch.data_rows ?? batch.total_rows ?? null,
       siblings,
     });
   } catch (err) {
+    if (err instanceof BatchFileError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error('Mapping get error:', err);
     return NextResponse.json({ error: 'Gagal memuat konfigurasi mapping.' }, { status: 500 });
   }

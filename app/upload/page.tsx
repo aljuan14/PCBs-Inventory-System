@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { UploadCloud, FileSpreadsheet, Building2, Layers, CheckCircle, ArrowRight, Loader2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 import { IMPORT_PROFILE_LABELS, type ImportProfile } from '@/lib/import-profiles';
+import { MAX_UPLOAD_BYTES, STORAGE_BUCKET } from '@/lib/upload-store';
 
 interface CompanyOption {
   id: string;
@@ -78,7 +79,8 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
 
   // Upload & review states
-  const [uploading, setUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<'upload' | 'scan' | null>(null);
+  const uploading = uploadStage !== null;
   const [confirming, setConfirming] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -131,18 +133,46 @@ export default function UploadPage() {
       return;
     }
 
-    setUploading(true);
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setErrorMsg(`Ukuran berkas melebihi batas ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`);
+      return;
+    }
+
+    setUploadStage('upload');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (isNewCompany) {
-        formData.append('new_company_name', newCompanyName.trim());
-      } else {
-        formData.append('company_id', selectedCompanyId);
+      // 1. Reserve an upload slot, then send the workbook straight to Storage.
+      const initRes = await fetch('/api/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileSize: file.size,
+          companyId: isNewCompany ? null : selectedCompanyId,
+          newCompanyName: isNewCompany ? newCompanyName.trim() : null,
+        }),
+      });
+      const init = await initRes.json();
+      if (!initRes.ok || !init.success) {
+        throw new Error(init.error || 'Gagal menyiapkan unggahan.');
       }
 
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const { error: storageErr } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .uploadToSignedUrl(init.storagePath, init.token, file, {
+          contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+      if (storageErr) {
+        throw new Error(`Gagal mengunggah berkas ke penyimpanan: ${storageErr.message}`);
+      }
+
+      // 2. Scan every sheet of the stored workbook.
+      setUploadStage('scan');
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadId: init.uploadId }),
+      });
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || 'Gagal memproses berkas Excel.');
@@ -154,7 +184,7 @@ export default function UploadPage() {
     } catch (err) {
       setErrorMsg((err instanceof Error && err.message) || 'Terjadi kesalahan saat upload.');
     } finally {
-      setUploading(false);
+      setUploadStage(null);
     }
   };
 
@@ -326,7 +356,7 @@ export default function UploadPage() {
                 {uploading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Memindai semua sheet...</span>
+                    <span>{uploadStage === 'upload' ? 'Mengunggah berkas...' : 'Memindai semua sheet...'}</span>
                   </>
                 ) : (
                   <>
