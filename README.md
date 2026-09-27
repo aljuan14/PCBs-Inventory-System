@@ -55,6 +55,13 @@ Tantangan utamanya adalah **format pelaporan tiap perusahaan tidak seragam**: ur
 ### 4. Manajemen Perusahaan (`/companies`)
 Daftar dan penambahan perusahaan pemilik data.
 
+### 5. Unit Perusahaan & Kode Alat
+- Setiap baris inventaris menyimpan **unit** dan **sub-unit** di dalam perusahaan. Untuk PLN, keduanya adalah Unit Induk (UID Bali, UIT JBB, ...) dan Unit Pelaksana (UP3, UPT, ...). Untuk perusahaan lain bisa diisi pabrik, cabang, atau site.
+- Penulisan Unit Induk PLN yang beragam (`UIWRKR`, `UIW RKR`, `WRKR`, `PT PLN (Persero) Unit Induk Wilayah Sumatera Utara`, ...) dipetakan ke 28 nama baku (`lib/units.ts`). Nama berkas dipakai sebagai cadangan bila kolomnya kosong. Kapitalisasi sub-unit dirapikan (`UP3 PONTIANAK` → `UP3 Pontianak`).
+- **Kode alat** (PLN: Kode Trafo / Kode Kapasitor / Kode Oli Trafo) disimpan sebagai identitas alat. Kolom ini ikut dipakai dalam deteksi duplikat dan pencarian.
+- Tabel inventaris punya filter bertingkat **Perusahaan → Unit → Sub-unit**, lengkap dengan jumlah data per unit.
+- Berkas yang **identik** dengan berkas yang sudah pernah diimpor (dicek dari sidik SHA-256) memunculkan peringatan di langkah review upload.
+
 ---
 
 ## Skema Database (Supabase / PostgreSQL)
@@ -69,7 +76,8 @@ Daftar dan penambahan perusahaan pemilik data.
 | `kapasitor` | Inventaris kapasitor. |
 | `minyak_dielektrik` | Wadah / sampel minyak dielektrik. |
 | `field_definitions` | Kamus field baku (dipakai saat mapping). |
-| `inventory_items` (view) | Gabungan keempat tabel inventaris untuk tabel & peta dashboard (termasuk `import_batch_id` untuk filter batch). |
+| `inventory_items` (view) | Gabungan keempat tabel inventaris untuk tabel & peta dashboard (termasuk `import_batch_id`, `unit`, `sub_unit`, `kode_alat`). |
+| `inventory_units()` (function) | Daftar unit & sub-unit sebuah perusahaan beserta jumlah alat, jumlah yang sudah diuji, dan jumlah yang ≥ 50 ppm. |
 | Storage `pcbs-files` | Bucket privat berisi workbook yang diunggah (`uploads/<upload_id>/source.xlsx`). |
 | `inventory_stats()` (function) | Agregasi statistik dashboard di sisi server. |
 
@@ -113,6 +121,7 @@ Jalankan **semua** berkas di `supabase/migrations/` **secara berurutan** (nama f
 6. `20260926000002_inventory_stats.sql` — view `inventory_items` & fungsi `inventory_stats`
 7. `20260927000001_upload_storage.sql` — bucket `pcbs-files`, tabel `upload_sessions`, konteks batch di `import_batches` (**wajib** untuk fitur upload)
 8. `20260927000002_inventory_filters.sql` — kolom `import_batch_id` di view & indeks untuk filter tabel
+9. `20260928000001_units_and_asset_code.sql` — kolom `unit`, `sub_unit`, `kode_alat`, fungsi `inventory_units`, sidik berkas upload
 
 Lalu jalankan `supabase/seed.sql` untuk mengisi kamus field dan contoh perusahaan.
 
@@ -173,7 +182,9 @@ Tidak ada berkas yang disimpan di disk server (`lib/upload-store.ts`): workbook 
 ├── lib/
 │   ├── excel.ts                               # Parser Excel & header sniffer
 │   ├── import-profiles.ts                     # Profil format (Template KLHK, PLN) & mapping otomatis
-│   ├── import-transform.ts                    # Transformasi baris, validasi, deteksi duplikat
+│   ├── import-scan.ts                         # Pemindaian sheet workbook (dipakai web & skrip)
+│   ├── import-transform.ts                    # Transformasi baris, validasi, deteksi duplikat, insert per batch
+│   ├── units.ts                               # Normalisasi unit / sub-unit (Unit Induk PLN)
 │   ├── upload-store.ts                        # Sesi upload (Storage + upload_sessions)
 │   ├── inventory.ts                           # Kategori & definisi field resmi
 │   ├── inventory-query.ts                     # Query dashboard (stats, halaman tabel, titik peta)
@@ -183,6 +194,8 @@ Tidak ada berkas yang disimpan di disk server (`lib/upload-store.ts`): workbook 
 ├── Data-inventaris/data-template/             # Template formulir resmi KLHK (1.1 – 1.4)
 ├── scripts/
 │   ├── check-import.ts                        # Dry-run pipeline import atas berkas Excel (tanpa database)
+│   ├── import-folder.ts                       # Import massal satu folder untuk satu perusahaan
+│   ├── test-units.ts                          # Uji normalisasi nama unit PLN
 │   ├── test-dms.ts                            # Uji regresi parser koordinat
 │   └── test-supabase.ts                       # Uji koneksi Supabase
 ├── supabase/
@@ -195,6 +208,31 @@ Data riil perusahaan (mis. `Data-inventaris/Data-PLN/`) tidak disimpan di reposi
 
 ---
 
+## 📥 Import Massal (satu folder sekaligus)
+
+Untuk memuat banyak berkas milik satu perusahaan sekaligus, misalnya seluruh laporan unit PLN:
+
+```bash
+# 1. Dry run: tidak menyimpan apa pun, hanya menampilkan apa yang akan diimpor per berkas, sheet, dan unit
+npx tsx scripts/import-folder.ts "Data-inventaris/Data-PLN/0. Inven Ident PLN" --company "PT PLN (Persero)"
+
+# 2. Uji coba dengan satu unit dulu
+npx tsx scripts/import-folder.ts "Data-inventaris/Data-PLN/0. Inven Ident PLN" --company "PT PLN (Persero)" --only Bali --commit
+
+# 3. Import semuanya
+npx tsx scripts/import-folder.ts "Data-inventaris/Data-PLN/0. Inven Ident PLN" --company "PT PLN (Persero)" --commit --report hasil-import.json
+```
+
+- Memakai langkah yang sama dengan upload lewat web: pindai sheet → mapping otomatis per profil → transformasi & validasi → insert per 500 baris.
+- Setiap berkas disimpan ke Storage dengan sesi upload sendiri dan satu batch per sheet, sehingga tampil dan bisa difilter sama seperti upload lewat web.
+- **Aman dijalankan ulang**: berkas identik yang sudah diimpor dilewati, dan baris yang sudah ada di database dilewati sebagai duplikat. Kalau proses terhenti di tengah, cukup jalankan perintah yang sama lagi.
+- Perusahaan dibuat otomatis bila belum ada. Bila `SUPABASE_SERVICE_ROLE_KEY` ada di `.env.local`, kunci itu yang dipakai (diperlukan setelah autentikasi & RLS diperketat).
+- Membutuhkan migrasi sampai `20260928000001`.
+
+Hasil dry run seluruh data PLN (28 Sep 2026): 44 berkas, **370.868 baris** (331.141 trafo digunakan, 36.423 trafo tidak digunakan, 3.201 kapasitor, 103 minyak dielektrik) dari 28 unit induk. Semua baris mendapat unit, dan 1.086 baris duplikat antar-sheet dilewati.
+
+---
+
 ## 🧪 Pengujian
 
 ### Parser koordinat
@@ -202,6 +240,12 @@ Data riil perusahaan (mis. `Data-inventaris/Data-PLN/`) tidak disimpan di reposi
 npx tsx scripts/test-dms.ts
 ```
 Berisi kasus nyata dari laporan PLN beserta nilai yang diharapkan, termasuk pola yang **harus** ditolak (mis. `-615.894.271`, lintang saja dengan titik ribuan). Keluar dengan kode 1 bila ada yang gagal.
+
+### Normalisasi unit PLN
+```bash
+npx tsx scripts/test-units.ts
+```
+Berisi semua variasi penulisan Unit Induk yang ditemukan di data PLN beserta nama bakunya.
 
 ### Dry-run import atas data riil
 ```bash
@@ -220,7 +264,11 @@ Hasil atas 45 berkas PLN (27 Sep 2026): 129 sheet / 370.604 baris terbaca, koord
 - [x] Pindahkan berkas kerja upload dari disk lokal ke Supabase Storage/database
 - [x] Uji pipeline import dengan seluruh data PLN (dry-run) & perbaikan parser koordinat
 - [x] Filter lanjutan & pengurutan tabel inventaris
-- [ ] Simpan **Kode Trafo** sebagai identitas alat (dasar mode update)
+- [x] Simpan **Kode Trafo** sebagai identitas alat (dasar mode update)
+- [x] Struktur unit perusahaan (PLN: Unit Induk › Unit Pelaksana) & filter bertingkat
+- [x] Import massal satu folder (`scripts/import-folder.ts`)
+- [ ] Upload banyak berkas sekaligus lewat web
+- [ ] Rekap & perbandingan per unit di dashboard
 - [ ] Mode *update* data (upsert berdasarkan identitas alat) & riwayat perubahan
 - [ ] Ekspor laporan (Excel/PDF)
 - [ ] Autentikasi, peran admin/viewer, & Row Level Security
