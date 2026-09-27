@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { parseSheet, readWorkbook } from '@/lib/excel';
-import { buildSuggestedMapping, detectSheet, hasIdentity } from '@/lib/import-profiles';
-import { downloadWorkbook, isUploadId, readUploadSession, saveUploadScan, type UploadSheet } from '@/lib/upload-store';
+import { readWorkbook } from '@/lib/excel';
+import { scanWorkbook } from '@/lib/import-scan';
+import { downloadWorkbook, findImportedUpload, isUploadId, readUploadSession, saveUploadScan, sha256, type UploadSheet } from '@/lib/upload-store';
 
 // Parsing a large multi-sheet workbook can take a while.
 export const maxDuration = 60;
-
-// Rows kept per sheet so the mapping can be suggested again once the admin picks a category.
-const SAMPLE_ROWS = 30;
 
 /**
  * Step 1 of an import: scan every sheet of a workbook the browser already put
@@ -41,39 +38,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Berkas tidak dapat dibaca sebagai Excel: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}` }, { status: 400 });
     }
 
-    const sheets: UploadSheet[] = workbook.SheetNames.map((sheetName) => {
-      const parsed = parseSheet(workbook, sheetName);
-      const initial = detectSheet(sheetName, parsed.headers, parsed.totalRows, workbook.SheetNames.length);
-      let dataRows = parsed.allRows;
-      if (initial.category) {
-        const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers, parsed.allRows.slice(0, SAMPLE_ROWS));
-        dataRows = parsed.allRows.filter((row) => hasIdentity(row, mapping));
-      }
-      // Re-run with the real row count so sheets of empty form rows are skipped.
-      const detection = detectSheet(sheetName, parsed.headers, dataRows.length, workbook.SheetNames.length);
-      return {
-        sheetName,
-        headerRowIndex: parsed.headerRowIndex,
-        headers: parsed.headers,
-        totalRows: parsed.totalRows,
-        dataRows: dataRows.length,
-        previewRows: dataRows.slice(0, 5),
-        sampleRows: dataRows.slice(0, SAMPLE_ROWS),
-        ...detection,
-      };
-    });
+    const sheets: UploadSheet[] = scanWorkbook(workbook).map(({ sheet }) => sheet);
 
     if (sheets.every((sheet) => sheet.headers.length === 0)) {
       return NextResponse.json({ error: 'Tidak ada sheet dengan header tabel yang dapat dikenali.' }, { status: 400 });
     }
 
-    await saveUploadScan(supabase, uploadId, sheets);
+    const fileSha256 = await sha256(buffer);
+    await saveUploadScan(supabase, uploadId, sheets, fileSha256);
+    // Same file already imported for this company: the review step warns the admin.
+    const previousUpload = await findImportedUpload(supabase, session.company_id, fileSha256, uploadId);
 
     return NextResponse.json({
       success: true,
       uploadId,
       companyId: session.company_id,
       fileName: session.file_name,
+      previousUpload,
       // Sample rows stay server-side (only the mapping suggestion needs them).
       sheets: sheets.map(({ headers, ...sheet }) => ({ ...sheet, sampleRows: undefined, headerCount: headers.length, headers: headers.slice(0, 60) })),
     });

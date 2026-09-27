@@ -31,6 +31,8 @@ interface ScanResult {
   uploadId: string;
   fileName: string;
   sheets: ScannedSheet[];
+  /** The identical file was already imported for this company. */
+  previousUpload: { fileName: string; createdAt: string } | null;
 }
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
@@ -381,6 +383,18 @@ export default function UploadPage() {
               </div>
             </div>
           </div>
+
+          {scan.previousUpload && (
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <div className="font-bold">Berkas yang sama persis sudah pernah diimpor</div>
+                <p className="mt-0.5 font-medium">
+                  &ldquo;{scan.previousUpload.fileName}&rdquo; diunggah {new Date(scan.previousUpload.createdAt).toLocaleString('id-ID')}. Jika dilanjutkan, baris yang sudah ada akan terdeteksi sebagai duplikat dan dilewati.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
             <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-4 py-3 text-xs font-bold text-slate-700">

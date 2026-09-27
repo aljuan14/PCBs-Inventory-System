@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
 import {
   DEFAULT_FILTERS,
+  fetchCompanyUnits,
   fetchImportedBatches,
   fetchInventoryDetails,
   fetchInventoryPage,
@@ -13,6 +14,7 @@ import {
   type InventoryFilters,
   type InventoryRow,
   type InventorySort,
+  type UnitSummary,
 } from '@/lib/inventory-query';
 
 export interface InventoryItem {
@@ -21,6 +23,9 @@ export interface InventoryItem {
   type: 'transformator' | 'transformator_digunakan' | 'transformator_tidak_digunakan' | 'kapasitor' | 'minyak_dielektrik';
   name: string;
   companyName: string;
+  unit?: string | null;
+  subUnit?: string | null;
+  code?: string | null;
   serialNumber?: string;
   location?: string;
   latitude?: number | null;
@@ -66,6 +71,9 @@ export function toInventoryItem(row: InventoryRow, companyNames: Map<string, str
     type: row.category,
     name: row.name ?? '',
     companyName: companyNames.get(row.company_id) ?? 'Perusahaan',
+    unit: row.unit ?? null,
+    subUnit: row.sub_unit ?? null,
+    code: row.kode_alat ?? null,
     serialNumber: row.serial ?? '',
     location: row.location ?? '',
     latitude: toNumber(row.lat),
@@ -135,6 +143,7 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
   const [sort, setSort] = useState<InventorySort>('newest');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [batches, setBatches] = useState<Awaited<ReturnType<typeof fetchImportedBatches>>>([]);
+  const [units, setUnits] = useState<{ companyId: string; rows: UnitSummary[] } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
@@ -162,6 +171,36 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
     setFilters((prev) => ({ ...prev, [key]: value }));
     setCurrentPage(1);
   };
+
+  // Choosing a company or unit narrows the options below it, so their selections reset.
+  const selectCompany = (companyId: string | null) => {
+    setFilters((prev) => ({ ...prev, companyId, unit: null, subUnit: null, batchId: null }));
+    setCurrentPage(1);
+  };
+  const selectUnit = (unit: string | null) => {
+    setFilters((prev) => ({ ...prev, unit, subUnit: null }));
+    setCurrentPage(1);
+  };
+
+  // Units of the selected company for the cascading unit / sub-unit filter.
+  useEffect(() => {
+    const companyId = filters.companyId;
+    if (!companyId) return;
+    let cancelled = false;
+    fetchCompanyUnits(supabase, companyId)
+      .then((rows) => { if (!cancelled) setUnits({ companyId, rows }); })
+      .catch(() => { if (!cancelled) setUnits({ companyId, rows: [] }); });
+    return () => { cancelled = true; };
+  }, [supabase, filters.companyId]);
+
+  // Only the units of the currently selected company (a previous company's list may still be loaded).
+  const companyUnits = useMemo(() => (units && units.companyId === filters.companyId ? units.rows : []), [units, filters.companyId]);
+  const unitOptions = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const row of companyUnits) totals.set(row.unit, (totals.get(row.unit) ?? 0) + row.total);
+    return [...totals].map(([name, total]) => ({ name, total }));
+  }, [companyUnits]);
+  const subUnitOptions = companyUnits.filter((row) => row.unit === filters.unit && row.sub_unit);
 
   const resetFilters = () => {
     setFilters(DEFAULT_FILTERS);
@@ -204,7 +243,9 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
     : YEAR_LABELS[filters.yearRange];
   const activeChips: Array<{ key: string; label: string; clear: () => void }> = [
     !category && selectedType !== 'all' ? { key: 'type', label: CATEGORY_FILTER_LABELS[selectedType], clear: () => { setSelectedType('all'); setCurrentPage(1); } } : null,
-    filters.companyId ? { key: 'company', label: companyNames.get(filters.companyId) ?? 'Perusahaan', clear: () => updateFilter('companyId', null) } : null,
+    filters.companyId ? { key: 'company', label: companyNames.get(filters.companyId) ?? 'Perusahaan', clear: () => selectCompany(null) } : null,
+    filters.unit ? { key: 'unit', label: filters.unit, clear: () => selectUnit(null) } : null,
+    filters.subUnit ? { key: 'subUnit', label: filters.subUnit, clear: () => updateFilter('subUnit', null) } : null,
     filters.pcbRange !== 'all' ? { key: 'pcb', label: PCB_LABELS[filters.pcbRange], clear: () => updateFilter('pcbRange', 'all') } : null,
     filters.test !== 'all' ? { key: 'test', label: TEST_LABELS[filters.test], clear: () => updateFilter('test', 'all') } : null,
     filters.yearRange !== 'all' ? { key: 'year', label: yearChip, clear: () => setFilters((prev) => ({ ...prev, yearRange: 'all', yearMin: null, yearMax: null })) } : null,
@@ -214,7 +255,7 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
     filters.batchId ? { key: 'batch', label: `Batch: ${batchLabel(filters.batchId)}`, clear: () => updateFilter('batchId', null) } : null,
     filters.addedWithin !== 'all' ? { key: 'added', label: `Diinput ${ADDED_LABELS[filters.addedWithin].toLowerCase()}`, clear: () => updateFilter('addedWithin', 'all') } : null,
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
-  const advancedCount = activeChips.filter((chip) => !['type', 'company', 'pcb'].includes(chip.key)).length;
+  const advancedCount = activeChips.filter((chip) => !['type', 'company', 'unit', 'subUnit', 'pcb'].includes(chip.key)).length;
   const queryKey = `${JSON.stringify(query)}#${reloadKey}`;
   const loading = loadedKey !== queryKey;
 
@@ -273,7 +314,7 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Cari merek, no seri, lokasi..."
+            placeholder="Cari merek, no seri, kode, lokasi..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -306,10 +347,24 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
           </select>
         )}
 
-        <select aria-label="Perusahaan" value={filters.companyId ?? 'all'} onChange={(e) => updateFilter('companyId', e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
+        <select aria-label="Perusahaan" value={filters.companyId ?? 'all'} onChange={(e) => selectCompany(e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
           <option value="all">Semua perusahaan</option>
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+
+        {/* Unit dan sub-unit perusahaan terpilih (PLN: Unit Induk › Unit Pelaksana) */}
+        {unitOptions.length > 0 && (
+          <select aria-label="Unit" value={filters.unit ?? 'all'} onChange={(e) => selectUnit(e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
+            <option value="all">Semua unit ({unitOptions.length})</option>
+            {unitOptions.map((option) => <option key={option.name} value={option.name}>{option.name} · {option.total.toLocaleString('id-ID')}</option>)}
+          </select>
+        )}
+        {subUnitOptions.length > 0 && (
+          <select aria-label="Sub-unit" value={filters.subUnit ?? 'all'} onChange={(e) => updateFilter('subUnit', e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
+            <option value="all">Semua sub-unit ({subUnitOptions.length})</option>
+            {subUnitOptions.map((option) => <option key={option.sub_unit} value={option.sub_unit as string}>{option.sub_unit} · {option.total.toLocaleString('id-ID')}</option>)}
+          </select>
+        )}
 
         {hasTests && (
           <select aria-label="Kadar PCB" value={filters.pcbRange} onChange={(e) => updateFilter('pcbRange', e.target.value as InventoryFilters['pcbRange'])} className={SELECT_CLASS}>
@@ -496,9 +551,11 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
                           S/N: {item.serialNumber || <span className="font-sans italic text-slate-400">tidak tercatat</span>}
                         </div>
                       )}
+                      {item.code && <div className="text-[11px] text-slate-500 font-mono">Kode: {item.code}</div>}
                     </td>
                     <td className="py-3.5 px-4 font-medium text-slate-700">
                       {item.companyName}
+                      {item.unit && <div className="mt-0.5 text-[11px] font-normal text-slate-500">{item.unit}{item.subUnit ? ` › ${item.subUnit}` : ''}</div>}
                     </td>
                     <td className="py-3.5 px-4"><div className="text-slate-800 font-medium">{item.location || '-'}</div></td>
                     {showTrafoCapacity && <td className="py-3.5 px-4">{item.type.startsWith('transformator') ? item.capacity || '-' : '-'}</td>}

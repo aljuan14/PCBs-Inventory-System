@@ -10,8 +10,9 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { parseSheet, readWorkbook } from '@/lib/excel';
-import { buildSuggestedMapping, detectSheet, hasIdentity, IGNORE, isMeaningful } from '@/lib/import-profiles';
+import { readWorkbook } from '@/lib/excel';
+import { buildSuggestedMapping, IGNORE, isMeaningful } from '@/lib/import-profiles';
+import { scanWorkbook } from '@/lib/import-scan';
 import { transformRows } from '@/lib/import-transform';
 import type { InventoryCategory } from '@/lib/inventory';
 
@@ -55,28 +56,20 @@ for (const file of targets.flatMap(listWorkbooks)) {
   }
 
   console.log(`\n■ ${name}  (${(fs.statSync(file).size / 1024 / 1024).toFixed(1)} MB, ${workbook.SheetNames.length} sheet)`);
-  for (const sheetName of workbook.SheetNames) {
+  for (const { sheet, parsed } of scanWorkbook(workbook)) {
     totals.sheets++;
-    const parsed = parseSheet(workbook, sheetName);
-    const initial = detectSheet(sheetName, parsed.headers, parsed.totalRows, workbook.SheetNames.length);
-    let dataRows = parsed.allRows;
-    if (initial.category) {
-      const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers, parsed.allRows.slice(0, 30));
-      dataRows = parsed.allRows.filter((row) => hasIdentity(row, mapping));
-    }
-    const detection = detectSheet(sheetName, parsed.headers, dataRows.length, workbook.SheetNames.length);
-
-    if (!detection.include || !detection.category) {
+    const { sheetName } = sheet;
+    if (!sheet.include || !sheet.category) {
       totals.skipped++;
-      console.log(`  · ${sheetName}: dilewati — ${detection.reason}`);
+      console.log(`  · ${sheetName}: dilewati — ${sheet.reason}`);
       continue;
     }
     totals.included++;
-    if (!detection.profile) totals.unknownProfile++;
+    if (!sheet.profile) totals.unknownProfile++;
 
-    const category = detection.category as InventoryCategory;
-    const mapping = buildSuggestedMapping(detection.profile, category, parsed.headers, dataRows.slice(0, 30));
-    const { rows, issues } = transformRows(category, parsed, mapping);
+    const category = sheet.category as InventoryCategory;
+    const mapping = buildSuggestedMapping(sheet.profile, category, parsed.headers, sheet.sampleRows);
+    const { rows, issues } = transformRows(category, parsed, mapping, { profile: sheet.profile, fileName: path.relative(process.cwd(), file) });
 
     const withSerial = rows.filter((row) => isMeaningful(row.item.nomor_serial)).length;
     const withCoords = rows.filter((row) => typeof row.item.koordinat_lat === 'number').length;
@@ -93,7 +86,7 @@ for (const file of targets.flatMap(listWorkbooks)) {
     for (const issue of issueList) totals.issues[issue.label.replace(/"[^"]*"/, '"…"')] = (totals.issues[issue.label.replace(/"[^"]*"/, '"…"')] ?? 0) + issue.count;
 
     const mapped = Object.values(mapping).filter((target) => target !== IGNORE).length;
-    console.log(`  ✓ ${sheetName}: ${detection.profile ?? 'profil tidak dikenal'} → ${category}, ${fmt(rows.length)} baris, ${mapped}/${parsed.headers.length} kolom terpetakan`);
+    console.log(`  ✓ ${sheetName}: ${sheet.profile ?? 'profil tidak dikenal'} → ${category}, ${fmt(rows.length)} baris, ${mapped}/${parsed.headers.length} kolom terpetakan`);
     console.log(`      no. seri ${pct(withSerial, rows.length)} (kembar ${fmt(dupSerials)}), koordinat valid ${pct(withCoords, rows.length)}, baris kembar ${fmt(dupInFile)}`);
     for (const issue of issueList.filter((item) => item.level === 'warning').slice(0, 4)) {
       console.log(`      ! ${issue.label}: ${fmt(issue.count)} (mis. baris ${issue.rows.slice(0, 3).join(', ')}${issue.examples[0] ? `, "${issue.examples[0]}"` : ''})`);

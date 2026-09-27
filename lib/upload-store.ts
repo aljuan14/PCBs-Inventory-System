@@ -91,9 +91,28 @@ export async function readUploadSession(supabase: SupabaseClient, uploadId: stri
   return data as UploadSession | null;
 }
 
-export async function saveUploadScan(supabase: SupabaseClient, uploadId: string, sheets: UploadSheet[]) {
-  const { error } = await supabase.from('upload_sessions').update({ status: 'scanned', sheets }).eq('id', uploadId);
+export async function saveUploadScan(supabase: SupabaseClient, uploadId: string, sheets: UploadSheet[], fileSha256: string) {
+  const { error } = await supabase.from('upload_sessions').update({ status: 'scanned', sheets, file_sha256: fileSha256 }).eq('id', uploadId);
   if (error) throw new Error(`Gagal menyimpan hasil pemindaian: ${error.message}`);
+}
+
+export const sha256 = async (buffer: Uint8Array) =>
+  Buffer.from(await crypto.subtle.digest('SHA-256', buffer as Uint8Array<ArrayBuffer>)).toString('hex');
+
+/** An earlier upload of the identical file for this company that was imported, if any. */
+export async function findImportedUpload(supabase: SupabaseClient, companyId: string, fileSha256: string, excludeUploadId?: string) {
+  let request = supabase
+    .from('upload_sessions')
+    .select('id, file_name, created_at, import_batches!inner(id, sheet_name, status)')
+    .eq('company_id', companyId)
+    .eq('file_sha256', fileSha256)
+    .eq('import_batches.status', 'imported')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (excludeUploadId) request = request.neq('id', excludeUploadId);
+  const { data } = await request;
+  const row = data?.[0];
+  return row ? { uploadId: row.id as string, fileName: row.file_name as string, createdAt: row.created_at as string } : null;
 }
 
 export async function downloadWorkbook(supabase: SupabaseClient, storagePath: string) {

@@ -46,8 +46,15 @@ const PLN_TEST_RULES: Rule[] = [
   ['@uji_lab_ppm', ['hasilanalisa', 'gc', 'ppm']],
 ];
 
+const PLN_UNIT_RULES: Rule[] = [
+  ['unit', ['=unitinduk']],
+  ['sub_unit', ['=unitpelaksana']],
+];
+
 const PLN_RULES: Record<InventoryCategory, Rule[]> = {
   transformator_digunakan: [
+    ...PLN_UNIT_RULES,
+    ['kode_alat', ['=kodetrafo']],
     ['no', ['=no']],
     ['nama_merek', ['merk', 'pabrikan']],
     ['nomor_serial', ['nomorseri']],
@@ -64,6 +71,8 @@ const PLN_RULES: Record<InventoryCategory, Rule[]> = {
   ],
   transformator_tidak_digunakan: [],
   kapasitor: [
+    ...PLN_UNIT_RULES,
+    ['kode_alat', ['=kodekapasitor']],
     ['no', ['=no']],
     ['nama_merek', ['merk', 'pabrikan']],
     ['nomor_serial', ['nomorseri']],
@@ -74,6 +83,8 @@ const PLN_RULES: Record<InventoryCategory, Rule[]> = {
     ['status_alat', ['masihdigunakan']],
   ],
   minyak_dielektrik: [
+    ...PLN_UNIT_RULES,
+    ['kode_alat', ['=kodeolitrafo']],
     ['no', ['=no']],
     ['merek_minyak_dielektrik', ['namadagang']],
     ['volume_l', ['volume']],
@@ -258,7 +269,7 @@ export function isMeaningful(value: unknown) {
 }
 
 /** Fields whose presence marks a row as a real record rather than an empty pre-filled form row. */
-const IDENTITY_FIELDS = ['nama_merek', 'nomor_serial', 'merek_minyak_dielektrik', 'koordinat_raw', 'tahun_pembuatan', 'volume_l', 'daya_kva'];
+const IDENTITY_FIELDS = ['kode_alat', 'nama_merek', 'nomor_serial', 'merek_minyak_dielektrik', 'koordinat_raw', 'tahun_pembuatan', 'volume_l', 'daya_kva'];
 
 export function hasIdentity(row: Record<string, unknown>, mapping: Record<string, string>) {
   const columns = Object.entries(mapping).filter(([, target]) => IDENTITY_FIELDS.includes(target)).map(([header]) => header);

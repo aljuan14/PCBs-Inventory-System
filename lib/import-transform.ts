@@ -4,6 +4,7 @@ import { parseDMSCoordinate, repairIndonesianCoordinate } from '@/lib/dms';
 import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
 import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isMeaningful } from '@/lib/import-profiles';
 import { downloadWorkbook } from '@/lib/upload-store';
+import { resolveUnit, tidyUnitName, type UnitContext } from '@/lib/units';
 
 /**
  * Row transformation shared by the pre-import check (dry run) and the import
@@ -86,7 +87,7 @@ export function missingImportantFields(category: InventoryCategory, mappings: Re
 
 // Fields whose values together identify a record, used to spot rows that are
 // repeated in the file or were already imported (e.g. a re-uploaded sheet).
-const FINGERPRINT_FIELDS = ['no', 'nama_merek', 'merek_minyak_dielektrik', 'nomor_serial', 'tahun_pembuatan', 'daya_kva', 'volume_l', 'koordinat_raw', 'lokasi_peralatan', 'lokasi_penyimpanan'];
+const FINGERPRINT_FIELDS = ['kode_alat', 'no', 'nama_merek', 'merek_minyak_dielektrik', 'nomor_serial', 'tahun_pembuatan', 'daya_kva', 'volume_l', 'koordinat_raw', 'lokasi_peralatan', 'lokasi_penyimpanan'];
 
 const fingerprintFields = (category: InventoryCategory) => {
   const own = new Set(INVENTORY_FIELDS[category].map((field) => field.field_key));
@@ -159,13 +160,42 @@ const COMPLETENESS_FIELDS: Record<InventoryCategory, string[]> = {
   minyak_dielektrik: ['merek_minyak_dielektrik', 'volume_l', 'koordinat_raw'],
 };
 
+const INSERT_CHUNK_SIZE = 500;
+
+export interface InsertFailure {
+  message: string;
+  detail: string | null;
+  code: string | null;
+  /** Excel row number of the first row of the failed chunk. */
+  rowNumber: number;
+}
+
+/**
+ * Stores transformed rows for a batch in chunks. On failure the rows already
+ * stored for this batch are removed, so a retry starts clean.
+ */
+export async function insertBatchRows(supabase: SupabaseClient, category: InventoryCategory, rows: TransformedRow[], batch: { id: string; company_id: string }): Promise<InsertFailure | null> {
+  const records = rows.map((row) => ({ ...row.item, company_id: batch.company_id, import_batch_id: batch.id }));
+  for (let start = 0; start < records.length; start += INSERT_CHUNK_SIZE) {
+    const chunk = records.slice(start, start + INSERT_CHUNK_SIZE);
+    const { error } = await supabase.from(category).insert(chunk);
+    if (error) {
+      console.error(`Insert error on table ${category}`, JSON.stringify(error, null, 2));
+      console.error('Sample row attempted:', JSON.stringify(chunk[0], null, 2));
+      if (start > 0) await supabase.from(category).delete().eq('import_batch_id', batch.id);
+      return { message: error.message, detail: error.details ?? error.hint ?? null, code: error.code ?? null, rowNumber: rows[start].rowNumber };
+    }
+  }
+  return null;
+}
+
 export interface TransformedRow {
   rowNumber: number;
   item: Record<string, unknown>;
   fingerprint: string;
 }
 
-export function transformRows(category: InventoryCategory, sheet: LoadedSheet, mappings: Record<string, string>) {
+export function transformRows(category: InventoryCategory, sheet: LoadedSheet, mappings: Record<string, string>, context: UnitContext = {}) {
   const types = fieldTypes(category);
   const labels = fieldLabels(category);
   const active = Object.entries(mappings).filter(([header, fieldKey]) => fieldKey && fieldKey !== IGNORE && sheet.headers.includes(header));
@@ -198,6 +228,12 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
       else item[fieldKey] = value;
     }
     applyDerivedFields(item, derived);
+
+    // Units are normalised (PLN: canonical Unit Induk, file name as fallback).
+    // Left out entirely when the sheet has no unit data at all.
+    const unit = resolveUnit(item.unit, context);
+    if (unit !== null || 'unit' in item) item.unit = unit;
+    if ('sub_unit' in item) item.sub_unit = tidyUnitName(item.sub_unit);
 
     // Row numbers are required in the database; number rows sequentially when absent.
     if (item.no === null || item.no === undefined) item.no = rows.length + 1;

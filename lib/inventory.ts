@@ -11,7 +11,7 @@ export type InventoryField = {
   label: string;
   tipe_data: InventoryFieldType;
   wajib: boolean;
-  group: 'Data umum' | 'Perawatan rutin' | 'Kondisi' | 'Uji lanjutan';
+  group: 'Data umum' | 'Unit & identitas' | 'Perawatan rutin' | 'Kondisi' | 'Uji lanjutan';
 };
 
 export const INVENTORY_CATEGORIES: Array<{
@@ -45,9 +45,18 @@ const trafoCommon = (): InventoryField[] => [
   field('ketersediaan_keran_buang', 'Ketersediaan Keran Buang', 'text', false),
 ];
 
+// Where the equipment belongs within the company and its own equipment code
+// (PLN: Unit Induk, Unit Pelaksana, Kode Trafo). See lib/units.ts.
+const unitFields = (): InventoryField[] => [
+  field('unit', 'Unit (mis. Unit Induk PLN, pabrik, cabang)', 'text', false, 'Unit & identitas'),
+  field('sub_unit', 'Sub-unit (mis. Unit Pelaksana / UP3)', 'text', false, 'Unit & identitas'),
+  field('kode_alat', 'Kode Alat (mis. Kode Trafo)', 'text', false, 'Unit & identitas'),
+];
+
 export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
   transformator_digunakan: [
     ...trafoCommon(),
+    ...unitFields(),
     field('perawatan_jenis', 'Jenis Perawatan', 'text', false, 'Perawatan rutin'),
     field('perawatan_waktu', 'Waktu Perawatan', 'date', false, 'Perawatan rutin'),
     field('perawatan_merek_oli_pengganti', 'Merek Oli Pengganti', 'text', false, 'Perawatan rutin'),
@@ -62,6 +71,7 @@ export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
   ],
   transformator_tidak_digunakan: [
     ...trafoCommon(),
+    ...unitFields(),
     field('perawatan_jenis', 'Jenis Perawatan', 'text', false, 'Perawatan rutin'),
     field('perawatan_waktu', 'Waktu Perawatan', 'date', false, 'Perawatan rutin'),
     field('perawatan_merek_oli_pengganti', 'Merek Oli Pengganti', 'text', false, 'Perawatan rutin'),
@@ -86,6 +96,7 @@ export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
     field('lokasi_peralatan', 'Lokasi Peralatan dan/atau Penyimpanan', 'text', false),
     field('koordinat_raw', 'Koordinat', 'text', false),
     field('status_alat', 'Status Alat', 'text', false),
+    ...unitFields(),
   ],
   minyak_dielektrik: [
     field('no', 'Nomor', 'integer', false),
@@ -101,6 +112,7 @@ export const INVENTORY_FIELDS: Record<InventoryCategory, InventoryField[]> = {
     field('uji_metode', 'Metode Uji', 'text', false, 'Uji lanjutan'),
     field('uji_konsentrasi_ppm', 'Konsentrasi Uji (ppm)', 'numeric', false, 'Uji lanjutan'),
     field('wadah_penyimpanan', 'Wadah Penyimpanan', 'text', false),
+    ...unitFields(),
   ],
 };
 

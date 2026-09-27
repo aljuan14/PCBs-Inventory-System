@@ -30,7 +30,7 @@ export async function POST(
 
     const { data: batch, error } = await supabase
       .from('import_batches')
-      .select('id, company_id, jenis_data, file_storage_path, sheet_name, status')
+      .select('id, company_id, jenis_data, nama_file_asli, file_storage_path, sheet_name, profile, status')
       .eq('id', batchId)
       .single();
     if (error || !batch) {
@@ -42,7 +42,7 @@ export async function POST(
     if (mappingError) return NextResponse.json({ error: mappingError }, { status: 400 });
 
     const sheet = await loadBatchSheet(supabase, batch);
-    const { rows, skippedEmpty, issues } = transformRows(category, sheet, mappings);
+    const { rows, skippedEmpty, issues } = transformRows(category, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
 
     const existing = await fetchExistingFingerprints(supabase, category, batch.company_id);
     const inDatabase = rows.filter((row) => existing.has(row.fingerprint));

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import type { InventoryCategory } from '@/lib/inventory';
-import { BatchFileError, checkMappings, fetchExistingFingerprints, forgetBatchSheet, loadBatchSheet, transformRows } from '@/lib/import-transform';
-
-const INSERT_CHUNK_SIZE = 500;
+import { BatchFileError, checkMappings, fetchExistingFingerprints, forgetBatchSheet, insertBatchRows, loadBatchSheet, transformRows } from '@/lib/import-transform';
 
 // Large sheets (tens of thousands of rows) are parsed and inserted in one request.
 export const maxDuration = 300;
@@ -27,7 +25,7 @@ export async function POST(req: NextRequest) {
     // 1. Ambil batch info
     const { data: batch, error: batchErr } = await supabase
       .from('import_batches')
-      .select('id, company_id, jenis_data, file_storage_path, sheet_name, status')
+      .select('id, company_id, jenis_data, nama_file_asli, file_storage_path, sheet_name, profile, status')
       .eq('id', batchId)
       .single();
 
@@ -44,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Baca sheet & transformasi (logika yang sama dengan pemeriksaan data)
     const sheet = await loadBatchSheet(supabase, batch);
-    const { rows, skippedEmpty } = transformRows(jenisData, sheet, mappings);
+    const { rows, skippedEmpty } = transformRows(jenisData, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
 
     let skippedDuplicates = 0;
     let toInsert = rows;
@@ -63,22 +61,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Insert bertahap ke tabel sesuai jenis_data
-    const tableName = jenisData;
-    const records = toInsert.map((row) => ({ ...row.item, company_id: batch.company_id, import_batch_id: batchId }));
-    for (let start = 0; start < records.length; start += INSERT_CHUNK_SIZE) {
-      const chunk = records.slice(start, start + INSERT_CHUNK_SIZE);
-      const { error: insertErr } = await supabase.from(tableName).insert(chunk);
-      if (insertErr) {
-        console.error('Insert error on table ' + tableName, JSON.stringify(insertErr, null, 2));
-        console.error('Sample row attempted:', JSON.stringify(chunk[0], null, 2));
-        // Earlier chunks are already stored; remove them so a retry starts clean.
-        if (start > 0) await supabase.from(tableName).delete().eq('import_batch_id', batchId);
-        return NextResponse.json({
-          error: `Gagal menyimpan data ke database (Excel baris ${toInsert[start].rowNumber} dst.): ${insertErr.message}`,
-          detail: insertErr.details ?? insertErr.hint ?? null,
-          code: insertErr.code ?? null,
-        }, { status: 500 });
-      }
+    const failure = await insertBatchRows(supabase, jenisData, toInsert, batch);
+    if (failure) {
+      return NextResponse.json({
+        error: `Gagal menyimpan data ke database (Excel baris ${failure.rowNumber} dst.): ${failure.message}`,
+        detail: failure.detail,
+        code: failure.code,
+      }, { status: 500 });
     }
 
     // 4. Update status import_batches
@@ -90,10 +79,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      importedCount: records.length,
+      importedCount: toInsert.length,
       skippedEmpty,
       skippedDuplicates,
-      tableName,
+      tableName: jenisData,
     });
   } catch (err) {
     if (err instanceof BatchFileError) return NextResponse.json({ error: err.message }, { status: err.status });

@@ -61,8 +61,10 @@ export interface InventoryRow {
   daya_kva: number | null;
   volume_l: number | null;
   created_at: string;
-  /** Present once migration 20260927000002 is applied. */
   import_batch_id?: string | null;
+  unit?: string | null;
+  sub_unit?: string | null;
+  kode_alat?: string | null;
 }
 
 export type CategoryFilter = InventoryCategory | 'transformator' | 'all';
@@ -77,6 +79,9 @@ export type InventorySort = 'newest' | 'oldest' | 'ppm_desc' | 'year_asc' | 'yea
 /** Table filters besides category and free-text search. */
 export interface InventoryFilters {
   companyId: string | null;
+  /** Unit and sub-unit within the company (PLN: Unit Induk / Unit Pelaksana). */
+  unit: string | null;
+  subUnit: string | null;
   pcbRange: PcbRange;
   test: TestFilter;
   yearRange: YearRange;
@@ -93,6 +98,8 @@ export interface InventoryFilters {
 
 export const DEFAULT_FILTERS: InventoryFilters = {
   companyId: null,
+  unit: null,
+  subUnit: null,
   pcbRange: 'all',
   test: 'all',
   yearRange: 'all',
@@ -140,6 +147,8 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   if (query.category === 'transformator') request = request.in('category', TRAFO_CATEGORIES);
   else if (query.category !== 'all') request = request.eq('category', query.category);
   if (filters.companyId) request = request.eq('company_id', filters.companyId);
+  if (filters.unit) request = request.eq('unit', filters.unit);
+  if (filters.subUnit) request = request.eq('sub_unit', filters.subUnit);
   if (filters.batchId) request = request.eq('import_batch_id', filters.batchId);
 
   if (filters.pcbRange === 'safe') request = request.lt('ppm', 50);
@@ -177,7 +186,7 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   }
 
   const term = cleanSearch(query.search);
-  if (term) request = request.or(`name.ilike.*${term}*,serial.ilike.*${term}*,location.ilike.*${term}*`);
+  if (term) request = request.or(`name.ilike.*${term}*,serial.ilike.*${term}*,location.ilike.*${term}*,kode_alat.ilike.*${term}*`);
 
   for (const [column, ascending] of SORTS[query.sort]) {
     request = request.order(column, { ascending, nullsFirst: false });
@@ -186,6 +195,21 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   const { data, error, count } = await request.range(from, from + query.pageSize - 1);
   if (error) throw new Error(`Gagal memuat data: ${error.message}`);
   return { rows: (data ?? []) as InventoryRow[], total: count ?? 0 };
+}
+
+export interface UnitSummary {
+  unit: string;
+  sub_unit: string | null;
+  total: number;
+  tested: number;
+  at_least_50: number;
+}
+
+/** Units and sub-units of a company with their figures (see inventory_units in migration 20260928000001). */
+export async function fetchCompanyUnits(supabase: SupabaseClient, companyId: string) {
+  const { data, error } = await supabase.rpc('inventory_units', { p_company_id: companyId });
+  if (error) throw new Error(`Gagal memuat daftar unit: ${error.message}`);
+  return ((data ?? []) as UnitSummary[]).map((row) => ({ ...row, total: Number(row.total), tested: Number(row.tested), at_least_50: Number(row.at_least_50) }));
 }
 
 /** Imported batches, newest first, for the table's "import batch" filter. */
