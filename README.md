@@ -22,6 +22,7 @@ Tantangan utamanya adalah **format pelaporan tiap perusahaan tidak seragam**: ur
 ## Fitur Utama
 
 ### 1. Upload Workbook Multi-Sheet (`/upload`)
+- **Upload langsung ke Supabase Storage**: browser mengunggah berkas (maks. 50 MB) langsung ke bucket privat `pcbs-files` memakai token sekali pakai (`/api/upload/init`), sehingga berkas besar tidak terkena batas ukuran request server (4,5 MB di Vercel).
 - **Pemindaian seluruh sheet**: setiap sheet dalam workbook dipindai; `lib/excel.ts` menemukan baris header sebenarnya (melewati judul bertingkat & header yang diulang), serta berhenti sebelum bagian penutup (checklist dokumen, tanda tangan).
 - **Deteksi profil format** (`lib/import-profiles.ts`): sheet dikenali sebagai **Template KLHK** atau **Format PLN** dari sidik jari header-nya, sekaligus kategori inventarisnya.
 - **Review sebelum lanjut**: admin memilih sheet mana yang diimpor dan kategorinya; setiap sheet yang dikonfirmasi menjadi satu *import batch* (`/api/upload/confirm`).
@@ -35,7 +36,8 @@ Tantangan utamanya adalah **format pelaporan tiap perusahaan tidak seragam**: ur
   - angka/tanggal tidak valid, kelengkapan field penting,
   - **duplikat** di dalam file maupun terhadap data perusahaan yang sudah ada di database,
   - setiap temuan menunjukkan nomor baris Excel dan contoh nilainya.
-- **Parser koordinat DMS** (`lib/dms.ts`): format `LS/LU/BT/BB`, desimal koma, dan typo umum seperti `35',973"`.
+- **Parser koordinat** (`lib/dms.ts`): DMS dengan arah di depan/belakang (`LS/LU/BT/BB`, `S/N/E/W`), desimal koma, label `lat/long`, urutan bujur-lintang (dibalik otomatis), dan koordinat yang terpecah di dua kolom (`Titik Koordinat` + kolom tanpa nama).
+- **Perbaikan koordinat rusak khas Indonesia**: titik desimal hilang (`5196385, 97142441`), lintang & bujur tergabung (`-5.22015105.17231`), dll. Hasil perbaikan hanya diterima bila jatuh di wilayah Indonesia dan dicatat di laporan validasi agar bisa diperiksa; pola yang ambigu dibiarkan tidak terbaca.
 - **Impor bertahap** (`/api/import`): insert per 500 baris; bila gagal di tengah, baris batch tersebut di-*rollback*. Baris duplikat dilewati secara default (bisa dimatikan).
 
 ### 3. Dashboard (`/dashboard` & `/dashboard/<kategori>`)
@@ -44,7 +46,11 @@ Tantangan utamanya adalah **format pelaporan tiap perusahaan tidak seragam**: ur
 - **Peta Leaflet** sebaran titik koordinat dengan popup detail (jenis, no. seri, perusahaan, kadar PCB).
 - **Grafik Recharts**: distribusi klasifikasi PCB per jenis alat dan proporsi risiko:
   **Bebas PCB** (`< 50 ppm`), **Terkontaminasi** (`50 – 500 ppm`), **Bahaya Tinggi** (`> 500 ppm`), **Belum Diuji**.
-- **Tabel inventaris** dengan paginasi server, filter kategori/perusahaan/kadar PCB, pencarian, serta edit & hapus per baris.
+- **Tabel inventaris** dengan paginasi server, pencarian, edit & hapus per baris, serta:
+  - filter utama: jenis alat (termasuk trafo digunakan / tidak digunakan), perusahaan, kadar PCB;
+  - **filter lanjutan**: jenis uji (lab/cepat/belum), tahun pembuatan (sebelum 1985, 1985–1996, ≥ 1997, rentang bebas), daya trafo (kVA), ada/tanpa koordinat, kelengkapan data (tanpa no. seri/merek/tahun/lokasi), batch import, dan waktu input;
+  - pengurutan (terbaru, kadar PCB tertinggi, tahun tertua/terbaru, daya terbesar, merek A–Z);
+  - chip filter aktif yang bisa dihapus satu per satu atau di-reset sekaligus.
 
 ### 4. Manajemen Perusahaan (`/companies`)
 Daftar dan penambahan perusahaan pemilik data.
@@ -56,13 +62,15 @@ Daftar dan penambahan perusahaan pemilik data.
 | Objek | Fungsi |
 |---|---|
 | `companies` | Profil perusahaan pemilik peralatan. |
-| `import_batches` | Satu baris per sheet yang diimpor, beserta status (`pending_mapping`, `mapped`, `imported`, `error`). |
+| `upload_sessions` | Satu baris per workbook yang diunggah: lokasi berkas di Storage dan hasil pemindaian sheet. |
+| `import_batches` | Satu baris per sheet yang diimpor, beserta status (`pending_mapping`, `mapped`, `imported`, `error`) dan konteks mapping (header, profil, saran mapping). |
 | `transformator_digunakan` | Inventaris trafo yang masih beroperasi. |
 | `transformator_tidak_digunakan` | Inventaris trafo yang sudah tidak digunakan / rusak. |
 | `kapasitor` | Inventaris kapasitor. |
 | `minyak_dielektrik` | Wadah / sampel minyak dielektrik. |
 | `field_definitions` | Kamus field baku (dipakai saat mapping). |
-| `inventory_items` (view) | Gabungan keempat tabel inventaris untuk tabel & peta dashboard. |
+| `inventory_items` (view) | Gabungan keempat tabel inventaris untuk tabel & peta dashboard (termasuk `import_batch_id` untuk filter batch). |
+| Storage `pcbs-files` | Bucket privat berisi workbook yang diunggah (`uploads/<upload_id>/source.xlsx`). |
 | `inventory_stats()` (function) | Agregasi statistik dashboard di sisi server. |
 
 Tabel lama `transformator` dari prototipe awal dibiarkan untuk migrasi data historis.
@@ -103,10 +111,10 @@ Jalankan **semua** berkas di `supabase/migrations/` **secara berurutan** (nama f
 4. `20260923000002_official_field_constraints.sql`
 5. `20260926000001_relax_required_fields.sql` — melonggarkan field wajib untuk data riil (PLN)
 6. `20260926000002_inventory_stats.sql` — view `inventory_items` & fungsi `inventory_stats`
+7. `20260927000001_upload_storage.sql` — bucket `pcbs-files`, tabel `upload_sessions`, konteks batch di `import_batches` (**wajib** untuk fitur upload)
+8. `20260927000002_inventory_filters.sql` — kolom `import_batch_id` di view & indeks untuk filter tabel
 
 Lalu jalankan `supabase/seed.sql` untuk mengisi kamus field dan contoh perusahaan.
-
-*(Opsional)* Buat bucket Storage bernama `pcbs-files` agar salinan berkas upload juga tersimpan di Supabase.
 
 ### 5. Menjalankan Aplikasi
 ```bash
@@ -127,9 +135,9 @@ Dashboard ◄── Insert per 500 baris ◄── Periksa data ◄── Mappin
                (/api/import)           (validate)       (/upload/[batchId]/mapping)
 ```
 
-Berkas kerja upload (workbook & metadata sesi/batch) disimpan sementara di folder lokal `tmp_uploads/` (`lib/upload-store.ts`). Folder ini diabaikan Git.
+Tidak ada berkas yang disimpan di disk server (`lib/upload-store.ts`): workbook ada di Supabase Storage, hasil pemindaian di `upload_sessions`, dan konteks mapping di `import_batches`, sehingga alur ini berjalan di platform serverless. Unggahan yang tidak pernah dijadikan batch dihapus otomatis setelah 7 hari.
 
-> ⚠️ **Catatan deploy**: penyimpanan di disk lokal belum cocok untuk platform serverless (mis. Vercel) yang filesystem-nya sementara. Pemindahan ke Supabase Storage/database sedang direncanakan.
+> ⚠️ **Catatan deploy**: memproses workbook PLN terbesar (±12 MB, puluhan ribu baris) memakan ratusan MB memori dan beberapa detik. Route `upload`, `validate`, dan `import` sudah menyetel `maxDuration`; di Vercel pastikan paket/konfigurasi fungsi mengizinkan durasi (hingga 300 dtk untuk import) dan memori yang cukup.
 
 ---
 
@@ -138,7 +146,8 @@ Berkas kerja upload (workbook & metadata sesi/batch) disimpan sementara di folde
 ```text
 ├── app/
 │   ├── api/
-│   │   ├── upload/route.ts                    # Upload workbook & pindai seluruh sheet
+│   │   ├── upload/init/route.ts               # Siapkan unggahan: perusahaan + token upload ke Storage
+│   │   ├── upload/route.ts                    # Pindai seluruh sheet workbook dari Storage
 │   │   ├── upload/confirm/route.ts            # Buat import batch per sheet terpilih
 │   │   ├── mapping/[batchId]/route.ts         # Info batch, header, & saran mapping
 │   │   ├── mapping/[batchId]/validate/route.ts# Pemeriksaan data sebelum impor
@@ -165,7 +174,7 @@ Berkas kerja upload (workbook & metadata sesi/batch) disimpan sementara di folde
 │   ├── excel.ts                               # Parser Excel & header sniffer
 │   ├── import-profiles.ts                     # Profil format (Template KLHK, PLN) & mapping otomatis
 │   ├── import-transform.ts                    # Transformasi baris, validasi, deteksi duplikat
-│   ├── upload-store.ts                        # Penyimpanan berkas kerja upload (tmp_uploads/)
+│   ├── upload-store.ts                        # Sesi upload (Storage + upload_sessions)
 │   ├── inventory.ts                           # Kategori & definisi field resmi
 │   ├── inventory-query.ts                     # Query dashboard (stats, halaman tabel, titik peta)
 │   ├── dms.ts                                 # Konversi koordinat DMS → desimal
@@ -173,7 +182,8 @@ Berkas kerja upload (workbook & metadata sesi/batch) disimpan sementara di folde
 │   └── supabase/{client,server}.ts            # Supabase client (@supabase/ssr)
 ├── Data-inventaris/data-template/             # Template formulir resmi KLHK (1.1 – 1.4)
 ├── scripts/
-│   ├── test-dms.ts                            # Uji parser koordinat DMS
+│   ├── check-import.ts                        # Dry-run pipeline import atas berkas Excel (tanpa database)
+│   ├── test-dms.ts                            # Uji regresi parser koordinat
 │   └── test-supabase.ts                       # Uji koneksi Supabase
 ├── supabase/
 │   ├── migrations/                            # Migrasi SQL (jalankan berurutan)
@@ -185,16 +195,21 @@ Data riil perusahaan (mis. `Data-inventaris/Data-PLN/`) tidak disimpan di reposi
 
 ---
 
-## 🧪 Pengujian Parser DMS
+## 🧪 Pengujian
 
+### Parser koordinat
 ```bash
 npx tsx scripts/test-dms.ts
 ```
+Berisi kasus nyata dari laporan PLN beserta nilai yang diharapkan, termasuk pola yang **harus** ditolak (mis. `-615.894.271`, lintang saja dengan titik ribuan). Keluar dengan kode 1 bila ada yang gagal.
 
-Contoh hasil konversi:
-- `"S 7 2' 17,151\" E 107 35',973\""` ➔ `Lat: -7.0380975, Lon: 107.5836036`
-- `"LS 07° 02' 17.151\" BT 107° 35' 00.973\""` ➔ `Lat: -7.0380975, Lon: 107.5836036`
-- `"-7.038097, 107.583604"` ➔ `Lat: -7.038097, Lon: 107.583604`
+### Dry-run import atas data riil
+```bash
+npx tsx scripts/check-import.ts "Data-inventaris/Data-PLN"
+```
+Menjalankan pipeline yang sama dengan aplikasi (pindai sheet → deteksi profil → mapping otomatis → transformasi & validasi) tanpa menyentuh database, lalu mencetak laporan per sheet dan ringkasan: jumlah baris per kategori, cakupan nomor seri & koordinat, temuan validasi, dan kandidat kolom ID alat.
+
+Hasil atas 45 berkas PLN (27 Sep 2026): 129 sheet / 370.604 baris terbaca, koordinat valid 65,5% (sebelumnya 30,2%), nomor seri terisi 58,3%, kolom **Kode Trafo** terisi 86% dan unik 89%.
 
 ---
 
@@ -202,8 +217,10 @@ Contoh hasil konversi:
 
 - [x] Upload multi-sheet, profil Template KLHK & PLN, validasi & deteksi duplikat
 - [x] Statistik dashboard di sisi server untuk data besar
-- [ ] Pindahkan berkas kerja upload dari disk lokal ke Supabase Storage/database
-- [ ] Uji end-to-end alur import dengan data PLN
+- [x] Pindahkan berkas kerja upload dari disk lokal ke Supabase Storage/database
+- [x] Uji pipeline import dengan seluruh data PLN (dry-run) & perbaikan parser koordinat
+- [x] Filter lanjutan & pengurutan tabel inventaris
+- [ ] Simpan **Kode Trafo** sebagai identitas alat (dasar mode update)
 - [ ] Mode *update* data (upsert berdasarkan identitas alat) & riwayat perubahan
 - [ ] Ekspor laporan (Excel/PDF)
 - [ ] Autentikasi, peran admin/viewer, & Row Level Security
