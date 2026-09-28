@@ -39,6 +39,13 @@ export interface InventoryItem {
   details?: Record<string, unknown>;
 }
 
+/** Filters set from outside the table; `type` picks the equipment type on tables that show all of them. */
+export interface TablePreset {
+  key: number;
+  filters: Partial<InventoryFilters>;
+  type?: CategoryFilter;
+}
+
 export interface CompanyOption {
   id: string;
   name: string;
@@ -53,7 +60,7 @@ interface DataTableProps {
   /** Company and unit chosen by the dashboard's own filter; replaces the table's company and unit selectors. */
   scope?: DashboardScope;
   /** Filters set from outside (e.g. the data quality panel), applied whenever `key` changes. */
-  preset?: { key: number; filters: Partial<InventoryFilters> };
+  preset?: TablePreset;
   onEdit?: (item: InventoryItem, changes: EditableInventoryFields) => Promise<void> | void;
   onDelete?: (item: InventoryItem) => Promise<void> | void;
 }
@@ -230,7 +237,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   if (preset && seenPresetKey !== preset.key) {
     setSeenPresetKey(preset.key);
     setFilters({ ...DEFAULT_FILTERS, ...preset.filters });
-    if (!category) setSelectedType('all');
+    if (!category) setSelectedType(preset.type ?? 'all');
     setSearchTerm('');
     setDebouncedSearch('');
     setCurrentPage(1);
@@ -330,10 +337,11 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
     filters.dayaMin !== null || filters.dayaMax !== null ? { key: 'daya', label: `Daya ${filters.dayaMin ?? '…'} – ${filters.dayaMax ?? '…'} kVA`, clear: () => setFilters((prev) => ({ ...prev, dayaMin: null, dayaMax: null })) } : null,
     filters.coordinates !== 'all' ? { key: 'coords', label: COORDINATE_LABELS[filters.coordinates], clear: () => updateFilter('coordinates', 'all') } : null,
     filters.missing !== 'all' ? { key: 'missing', label: MISSING_LABELS[filters.missing], clear: () => updateFilter('missing', 'all') } : null,
-    filters.batchId ? { key: 'batch', label: `Batch: ${batchLabel(filters.batchId)}`, clear: () => updateFilter('batchId', null) } : null,
+filters.mapPoint ? { key: 'mapPoint', label: filters.mapPoint.label, clear: () => updateFilter('mapPoint', null) } : null,
+        filters.batchId ? { key: 'batch', label: `Batch: ${batchLabel(filters.batchId)}`, clear: () => updateFilter('batchId', null) } : null,
     filters.addedWithin !== 'all' ? { key: 'added', label: `Diinput ${ADDED_LABELS[filters.addedWithin].toLowerCase()}`, clear: () => updateFilter('addedWithin', 'all') } : null,
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
-  const advancedCount = activeChips.filter((chip) => !['type', 'company', 'unit', 'subUnit', 'pcb'].includes(chip.key)).length;
+  const advancedCount = activeChips.filter((chip) => !['type', 'company', 'unit', 'subUnit', 'pcb', 'mapPoint'].includes(chip.key)).length;
   const queryKey = `${JSON.stringify(query)}#${reloadKey}`;
   const loading = loadedKey !== queryKey;
 

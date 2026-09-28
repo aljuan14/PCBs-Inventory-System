@@ -120,6 +120,8 @@ export interface InventoryFilters {
   missing: MissingFilter;
   batchId: string | null;
   addedWithin: AddedWithin;
+  /** Rows under one map marker (all rows sharing its coordinates), with a label for the filter chip. */
+  mapPoint: { ids: string[]; label: string } | null;
 }
 
 export const DEFAULT_FILTERS: InventoryFilters = {
@@ -137,7 +139,16 @@ export const DEFAULT_FILTERS: InventoryFilters = {
   missing: 'all',
   batchId: null,
   addedWithin: 'all',
+  mapPoint: null,
 };
+
+/** Table filter for the rows under one map marker. */
+export function mapPointFilter(points: Array<{ id: string; name: string; latitude: number; longitude: number }>): NonNullable<InventoryFilters['mapPoint']> {
+  const [first] = points;
+  const where = `${first.latitude.toFixed(5)}, ${first.longitude.toFixed(5)}`;
+  const label = points.length === 1 ? `Titik peta: ${first.name || 'Tanpa nama'} (${where})` : `Titik peta: ${points.length} data di ${where}`;
+  return { ids: points.map((point) => point.id), label };
+}
 
 export interface InventoryPageQuery {
   category: CategoryFilter;
@@ -176,6 +187,7 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   if (filters.unit) request = request.eq('unit', filters.unit);
   if (filters.subUnit) request = request.eq('sub_unit', filters.subUnit);
   if (filters.batchId) request = request.eq('import_batch_id', filters.batchId);
+  if (filters.mapPoint) request = request.in('id', filters.mapPoint.ids);
 
   if (filters.pcbRange === 'safe') request = request.lt('ppm', 50);
   else if (filters.pcbRange === 'moderate') request = request.gte('ppm', 50).lte('ppm', 500);

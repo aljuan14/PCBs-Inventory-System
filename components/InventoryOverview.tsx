@@ -3,10 +3,10 @@
 import { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
-import { INVENTORY_CATEGORIES } from '@/lib/inventory';
-import { ALL_SCOPE, sumStats, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
-import DataTable from '@/components/DataTable';
-import DashboardCharts from '@/components/DashboardCharts';
+import { INVENTORY_CATEGORIES, hasPcbConcentration } from '@/lib/inventory';
+import { ALL_SCOPE, mapPointFilter, sumStats, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
+import DataTable, { type TablePreset } from '@/components/DataTable';
+import DashboardCharts, { type CategoryRisk } from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
 import InventorySummary from '@/components/InventorySummary';
@@ -15,7 +15,7 @@ import { useDashboardData } from '@/components/useDashboardData';
 
 const MapLeaflet = dynamic(() => import('@/components/MapLeaflet'), { ssr: false });
 
-const ALL_CATEGORIES = INVENTORY_CATEGORIES.map((category) => category.key);
+const MEASURED_CATEGORIES = INVENTORY_CATEGORIES.map((category) => category.key).filter(hasPcbConcentration);
 
 export default function InventoryOverview() {
   const [scope, setScope] = useState<DashboardScope>(ALL_SCOPE);
@@ -24,23 +24,30 @@ export default function InventoryOverview() {
   const scopeLabel = [companyName, scope.unit, scope.subUnit].filter(Boolean).join(' › ');
 
   // Clicking a data quality indicator filters the table and brings it into view.
-  const [tablePreset, setTablePreset] = useState<{ key: number; filters: Partial<InventoryFilters> } | undefined>();
+  const [tablePreset, setTablePreset] = useState<TablePreset | undefined>();
   const tableRef = useRef<HTMLDivElement>(null);
-  const showRows = (filters: Partial<InventoryFilters>) => {
-    setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters }));
+  const showRows = (filters: Partial<InventoryFilters>, type?: TablePreset['type']) => {
+    setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters, type }));
     tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const byCategory = INVENTORY_CATEGORIES.map((category) => {
-    const total = stats?.[category.key].total ?? 0;
-    return { category: category.shortLabel, transformator: category.key.startsWith('transformator') ? total : 0, kapasitor: category.key === 'kapasitor' ? total : 0, minyak: category.key === 'minyak_dielektrik' ? total : 0 };
+  const categoryRisk: CategoryRisk[] = INVENTORY_CATEGORIES.map((category) => {
+    const summary = stats?.[category.key];
+    return {
+      category: category.key,
+      label: category.label,
+      counts: { safe: summary?.risk_safe ?? 0, moderate: summary?.risk_moderate ?? 0, high: summary?.risk_high ?? 0, untested: (summary?.total ?? 0) - (summary?.tested ?? 0) },
+      volumeL: category.key === 'minyak_dielektrik' ? summary?.volume_l ?? 0 : undefined,
+      measured: hasPcbConcentration(category.key),
+    };
   });
-  const total = stats ? sumStats(stats, ALL_CATEGORIES, 'total') : 0;
-  const tested = stats ? sumStats(stats, ALL_CATEGORIES, 'tested') : 0;
+  // The donut leaves out kapasitor, whose rows can never be tested for PCBs.
+  const total = stats ? sumStats(stats, MEASURED_CATEGORIES, 'total') : 0;
+  const tested = stats ? sumStats(stats, MEASURED_CATEGORIES, 'tested') : 0;
   const riskCounts = {
-    safe: stats ? sumStats(stats, ALL_CATEGORIES, 'risk_safe') : 0,
-    moderate: stats ? sumStats(stats, ALL_CATEGORIES, 'risk_moderate') : 0,
-    high: stats ? sumStats(stats, ALL_CATEGORIES, 'risk_high') : 0,
+    safe: stats ? sumStats(stats, MEASURED_CATEGORIES, 'risk_safe') : 0,
+    moderate: stats ? sumStats(stats, MEASURED_CATEGORIES, 'risk_moderate') : 0,
+    high: stats ? sumStats(stats, MEASURED_CATEGORIES, 'risk_high') : 0,
     untested: total - tested,
   };
 
@@ -49,9 +56,9 @@ export default function InventoryOverview() {
     {error && <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" /> {error}</div>}
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} />
     <InventorySummary stats={stats} loading={loading} />
-    <DashboardCharts distributionData={byCategory} riskCounts={riskCounts} loading={loading} onSelectRisk={(pcbRange) => showRows({ pcbRange })} />
+    <DashboardCharts categoryRisk={categoryRisk} riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} />
     <DataQualityPanel scope={scope} scopeLabel={scopeLabel} companies={companies} reloadKey={reloadKey} onDrill={setScope} onShowRows={showRows} />
     <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} /></div>
-    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" /></div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
 }
