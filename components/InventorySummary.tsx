@@ -1,3 +1,4 @@
+import { getCategoryColor } from '@/lib/inventory';
 import type { CategoryStats, InventoryStats } from '@/lib/inventory-query';
 
 const YEAR_LIMIT = 1997;
@@ -29,15 +30,15 @@ export default function InventorySummary({ stats, loading }: { stats: InventoryS
   ];
 
   return <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-    <SummaryCard title="Transformator Masih Digunakan" accent="#0f766e" total={value(used, 'total')} totalLabel="Jumlah trafo" loading={loading} rows={[
+    <SummaryCard title="Transformator Masih Digunakan" accent={getCategoryColor('transformator_digunakan')} total={value(used, 'total')} totalLabel="Jumlah trafo" loading={loading} rows={[
       ...yearRows(used),
       { label: 'Sudah uji laboratorium', value: value(used, 'lab_tested') },
       { label: 'Belum uji laboratorium', value: formatNumber((used?.total ?? 0) - (used?.lab_tested ?? 0)) },
       { label: `Hasil lab < ${PPM_LIMIT} ppm`, value: value(used, 'lab_below_50'), tone: 'text-emerald-700' },
       { label: `Hasil lab ≥ ${PPM_LIMIT} ppm`, value: value(used, 'lab_at_least_50'), tone: 'text-rose-700' },
     ]} />
-    <SummaryCard title="Transformator Tidak Digunakan" accent="#b45309" total={value(unused, 'total')} totalLabel="Jumlah trafo" loading={loading} rows={yearRows(unused)} />
-    <SummaryCard title="Kapasitor" accent="#2563eb" total={value(stats?.kapasitor, 'total')} totalLabel="Jumlah kapasitor" loading={loading} rows={[]} />
-    <SummaryCard title="Minyak Dielektrik" accent="#7c3aed" total={`${value(stats?.minyak_dielektrik, 'volume_l')} L`} totalLabel="Jumlah minyak dielektrik (liter)" loading={loading} rows={[]} />
+    <SummaryCard title="Transformator Tidak Digunakan" accent={getCategoryColor('transformator_tidak_digunakan')} total={value(unused, 'total')} totalLabel="Jumlah trafo" loading={loading} rows={yearRows(unused)} />
+    <SummaryCard title="Kapasitor" accent={getCategoryColor('kapasitor')} total={value(stats?.kapasitor, 'total')} totalLabel="Jumlah kapasitor" loading={loading} rows={[]} />
+    <SummaryCard title="Minyak Dielektrik" accent={getCategoryColor('minyak_dielektrik')} total={`${value(stats?.minyak_dielektrik, 'volume_l')} L`} totalLabel="Jumlah minyak dielektrik (liter)" loading={loading} rows={[]} />
   </section>;
 }

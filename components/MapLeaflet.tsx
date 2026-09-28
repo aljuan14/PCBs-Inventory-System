@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getCategoryColor, getCategoryLabel, INVENTORY_CATEGORIES } from '@/lib/inventory';
 
 export interface MapPoint {
   id: string;
@@ -25,11 +26,23 @@ const escapeHtml = (value: unknown) =>
 interface MapProps {
   points: MapPoint[];
   height?: string;
+  /** Clicking a marker passes every point at its coordinates; details then show on hover instead of in a popup. */
+  onSelectPoint?: (points: MapPoint[]) => void;
 }
 
-export default function MapLeaflet({ points, height = '480px' }: MapProps) {
+// Points closer than ~0.1 m share a marker, so a click must cover all of them.
+const coordinateKey = (point: MapPoint) => `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`;
+
+export default function MapLeaflet({ points, height = '480px', onSelectPoint }: MapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
+  // Kept in a ref so a new callback identity does not rebuild the markers and reset the view.
+  const onSelectRef = useRef(onSelectPoint);
+  useEffect(() => {
+    onSelectRef.current = onSelectPoint;
+  });
+  const selectable = Boolean(onSelectPoint);
+  const shownTypes = new Set(points.map((point) => (point.type === 'transformator' ? 'transformator_digunakan' : point.type)));
 
   useEffect(() => {
     if (typeof window === 'undefined' || !mapContainerRef.current) return;
@@ -81,37 +94,30 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
       }
 
       const bounds = L.latLngBounds([]);
+      const pointsAt = new Map<string, MapPoint[]>();
+      for (const point of validPoints) {
+        const key = coordinateKey(point);
+        pointsAt.set(key, [...(pointsAt.get(key) ?? []), point]);
+      }
 
       validPoints.forEach((point) => {
         const latLng: [number, number] = [point.latitude, point.longitude];
         bounds.extend(latLng);
 
-        // Tentukan warna berdasarkan jenis alat
-        let color = '#0f766e'; // Teal untuk trafo digunakan
-        let typeBadge = 'Transformator';
-
-        if (point.type === 'kapasitor') {
-          color = '#f59e0b'; // Amber untuk kapasitor
-          typeBadge = 'Kapasitor';
-        } else if (point.type === 'minyak_dielektrik') {
-          color = '#10b981'; // Emerald untuk minyak
-          typeBadge = 'Minyak Dielektrik';
-        } else if (point.type === 'transformator_tidak_digunakan') {
-          color = '#b45309';
-          typeBadge = 'Trafo Tidak Digunakan';
-        } else if (point.type === 'transformator_digunakan') {
-          typeBadge = 'Trafo Masih Digunakan';
-        }
+        // Legacy 'transformator' points are drawn as transformers in use.
+        const category = point.type === 'transformator' ? 'transformator_digunakan' : point.type;
+        const color = getCategoryColor(category);
+        const typeBadge = getCategoryLabel(category);
 
         // Tentukan status bahaya PCB
-        let pcbClass = 'Aman (< 50 ppm)';
+        let pcbClass = 'Bebas PCBs (< 50 ppm)';
         let pcbColor = 'bg-emerald-100 text-emerald-800';
         if (point.pcbConcentration !== undefined && point.pcbConcentration !== null) {
           if (point.pcbConcentration > 500) {
-            pcbClass = 'Bahaya Tinggi (> 500 ppm)';
+            pcbClass = 'Bahaya tinggi (> 500 ppm)';
             pcbColor = 'bg-rose-100 text-rose-800';
           } else if (point.pcbConcentration >= 50) {
-            pcbClass = 'Terkontaminasi (50-500 ppm)';
+            pcbClass = 'Terkontaminasi PCBs (50–500 ppm)';
             pcbColor = 'bg-amber-100 text-amber-800';
           }
         } else {
@@ -119,6 +125,7 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
           pcbColor = 'bg-slate-100 text-slate-700';
         }
 
+        const sameSpot = pointsAt.get(coordinateKey(point)) ?? [point];
         const marker = L.circleMarker(latLng, {
           radius: 8,
           fillColor: color,
@@ -141,10 +148,17 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
             <div style="margin-top: 6px; font-size: 10px; color: #94a3b8;">
               Koordinat: ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}
             </div>
+            ${sameSpot.length > 1 ? `<div style="margin-top: 4px; font-size: 11px; font-weight: 600; color: #b45309;">+${sameSpot.length - 1} data lain di koordinat yang sama</div>` : ''}
+            ${selectable ? '<div style="margin-top: 6px; font-size: 11px; color: #047857;">Klik untuk melihat datanya di tabel</div>' : ''}
           </div>
         `;
 
-        marker.bindPopup(popupContent);
+        if (selectable) {
+          marker.bindTooltip(popupContent, { direction: 'top', offset: [0, -8], opacity: 1 });
+          marker.on('click', () => onSelectRef.current?.(sameSpot));
+        } else {
+          marker.bindPopup(popupContent);
+        }
       });
 
       // Fit peta ke seluruh marker jika ada marker valid
@@ -156,30 +170,24 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
     return () => {
       isMounted = false;
     };
-  }, [points]);
+  }, [points, selectable]);
 
   return (
     <div className="relative w-full rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-xs">
       <div ref={mapContainerRef} style={{ height, width: '100%' }} className="z-10" />
       
       {/* Legend Overlay */}
-      <div className="absolute bottom-4 right-4 z-20 rounded-xl bg-white/95 p-3 shadow-md backdrop-blur-sm border border-slate-200/80 text-xs text-slate-800">
-        <div className="font-semibold mb-2">Legenda Jenis Alat:</div>
+      {shownTypes.size > 0 && <div className="absolute bottom-4 right-4 z-20 rounded-xl bg-white/95 p-3 shadow-md backdrop-blur-sm border border-slate-200/80 text-xs text-slate-800">
+        <div className="font-semibold mb-2">Jenis alat</div>
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-blue-500 shadow-sm" />
-            <span>Transformator</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-amber-500 shadow-sm" />
-            <span>Kapasitor</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-emerald-500 shadow-sm" />
-            <span>Minyak Dielektrik</span>
-          </div>
+          {INVENTORY_CATEGORIES.filter((category) => shownTypes.has(category.key)).map((category) => (
+            <div key={category.key} className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full ring-2 ring-white shadow-sm" style={{ backgroundColor: category.color }} />
+              <span>{category.label}</span>
+            </div>
+          ))}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

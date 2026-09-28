@@ -1,6 +1,6 @@
 import type { WorkBook } from 'xlsx';
 import { parseSheet } from '@/lib/excel';
-import { buildSuggestedMapping, detectSheet, hasIdentity } from '@/lib/import-profiles';
+import { buildSuggestedMapping, detectSheet, recordMask } from '@/lib/import-profiles';
 import type { UploadSheet } from '@/lib/upload-store';
 
 // Rows kept per sheet so the mapping can be suggested again once the admin picks a category.
@@ -24,7 +24,8 @@ export function scanWorkbook(workbook: WorkBook): ScannedSheet[] {
     let dataRows = parsed.allRows;
     if (initial.category) {
       const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers, parsed.allRows.slice(0, SAMPLE_ROWS));
-      dataRows = parsed.allRows.filter((row) => hasIdentity(row, mapping));
+      const records = recordMask(parsed.allRows, parsed.rowNumbers, mapping);
+      dataRows = parsed.allRows.filter((_, index) => records[index]);
     }
     // Re-run with the real row count so sheets of empty form rows are skipped.
     const detection = detectSheet(sheetName, parsed.headers, dataRows.length, workbook.SheetNames.length);

@@ -13,6 +13,7 @@
  */
 import { loadEnvConfig } from '@next/env';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { countCompanyData, purgeCompanyData } from '@/lib/company-purge';
 import { getCategoryLabel, INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { STORAGE_BUCKET } from '@/lib/upload-store';
 
@@ -45,51 +46,6 @@ if (!supabaseUrl || !supabaseKey) fail('Variabel Supabase tidak ditemukan di .en
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
 const fmt = (n: number) => n.toLocaleString('id-ID');
-// Ids per delete request; `id=in.(…)` travels in the URL, so keep it short.
-const DELETE_CHUNK = 200;
-const PAGE_SIZE = 1000;
-
-async function countRows(table: string, companyId: string) {
-  const { count, error } = await supabase.from(table).select('id', { count: 'exact', head: true }).eq('company_id', companyId);
-  if (error) fail(`Gagal menghitung ${table}: ${error.message}`);
-  return count ?? 0;
-}
-
-/** Every value of `column` in this company's rows of `table`, paged. */
-async function selectAll(table: string, column: string, companyId: string) {
-  const values: string[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await supabase.from(table).select(column).eq('company_id', companyId).order('id').range(from, from + PAGE_SIZE - 1);
-    if (error) fail(`Gagal membaca ${table}: ${error.message}`);
-    const rows = (data ?? []) as unknown as Record<string, string | null>[];
-    for (const row of rows) if (row[column]) values.push(row[column] as string);
-    if (rows.length < PAGE_SIZE) break;
-  }
-  return values;
-}
-
-/**
- * Deletes this company's rows of `table` a page at a time. One large DELETE
- * could hit the statement timeout on hundreds of thousands of rows.
- */
-async function deleteAll(table: string, companyId: string, total: number) {
-  let deleted = 0;
-  for (;;) {
-    const { data, error } = await supabase.from(table).select('id').eq('company_id', companyId).limit(PAGE_SIZE);
-    if (error) fail(`Gagal membaca ${table}: ${error.message}`);
-    const ids = (data ?? []).map((row) => row.id as string);
-    if (ids.length === 0) break;
-    const chunks: string[][] = [];
-    for (let i = 0; i < ids.length; i += DELETE_CHUNK) chunks.push(ids.slice(i, i + DELETE_CHUNK));
-    const results = await Promise.all(chunks.map((chunk) => supabase.from(table).delete().in('id', chunk)));
-    const failed = results.find((result) => result.error);
-    if (failed?.error) fail(`Gagal menghapus ${table}: ${failed.error.message}`);
-    deleted += ids.length;
-    process.stdout.write(`\r  … ${table}: ${fmt(deleted)} / ${fmt(total)}`);
-  }
-  if (deleted > 0) process.stdout.write('\n');
-  return deleted;
-}
 
 // ---------------------------------------------------------------------------
 // Purge
@@ -104,15 +60,9 @@ async function main() {
   console.log(commit ? 'HAPUS' : 'DRY RUN (tidak ada yang dihapus; tambahkan --commit untuk menghapus)');
   console.log(`Perusahaan: ${company.nama_perusahaan} (${company.id})\n`);
 
-  const inventory = await Promise.all(INVENTORY_CATEGORIES.map(async ({ key }) => ({ table: key, total: await countRows(key, company.id) })));
-  const batchCount = await countRows('import_batches', company.id);
-  const sessionCount = await countRows('upload_sessions', company.id);
-  const storagePaths = [...new Set([
-    ...(await selectAll('upload_sessions', 'storage_path', company.id)),
-    ...(await selectAll('import_batches', 'file_storage_path', company.id)),
-  ])];
+  const data = await countCompanyData(supabase, company.id);
+  const { inventory, inventoryTotal, batches: batchCount, sessions: sessionCount, storagePaths } = data;
 
-  const inventoryTotal = inventory.reduce((sum, { total }) => sum + total, 0);
   console.log(`Baris inventaris: ${fmt(inventoryTotal)}`);
   for (const { table, total } of inventory) console.log(`  - ${getCategoryLabel(table)}: ${fmt(total)}`);
   console.log(`Batch impor: ${fmt(batchCount)}`);
@@ -126,26 +76,20 @@ async function main() {
   }
 
   console.log('');
-  // Rows first: their import_batch_id is ON DELETE SET NULL, so removing the
-  // batches alone would leave the rows behind.
-  for (const { table, total } of inventory) if (total > 0) await deleteAll(table, company.id, total);
-  if (batchCount > 0) await deleteAll('import_batches', company.id, batchCount);
+  let lastTable = '';
+  const storageFailures = await purgeCompanyData(supabase, company.id, data, (table, deleted, total) => {
+    if (lastTable && table !== lastTable) process.stdout.write('\n');
+    lastTable = table;
+    process.stdout.write(`\r  … ${table === 'storage' ? 'Storage' : table}: ${fmt(deleted)} / ${fmt(total)}`);
+  });
+  if (lastTable) process.stdout.write('\n');
+  if (storageFailures > 0) console.warn(`  ! ${fmt(storageFailures)} berkas Storage gagal dihapus.`);
 
-  let storageFailures = 0;
-  for (let i = 0; i < storagePaths.length; i += 100) {
-    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).remove(storagePaths.slice(i, i + 100));
-    if (storageError) {
-      storageFailures += Math.min(100, storagePaths.length - i);
-      console.warn(`  ! Gagal menghapus sebagian berkas Storage: ${storageError.message}`);
-    }
-  }
-  if (storagePaths.length > 0) console.log(`  … Storage: ${fmt(storagePaths.length - storageFailures)} / ${fmt(storagePaths.length)} berkas`);
-
-  // Sessions last: they hold the file hashes, so a failure above can be
-  // retried without import-folder.ts treating the files as already imported.
-  if (sessionCount > 0) await deleteAll('upload_sessions', company.id, sessionCount);
-
-  const remaining = (await Promise.all(INVENTORY_CATEGORIES.map(({ key }) => countRows(key, company.id)))).reduce((a, b) => a + b, 0);
+  const remaining = (await Promise.all(INVENTORY_CATEGORIES.map(async ({ key }) => {
+    const { count, error: countError } = await supabase.from(key).select('id', { count: 'exact', head: true }).eq('company_id', company.id);
+    if (countError) fail(`Gagal menghitung ${key}: ${countError.message}`);
+    return count ?? 0;
+  }))).reduce((a, b) => a + b, 0);
   console.log(`\nSelesai. Sisa baris inventaris ${company.nama_perusahaan}: ${fmt(remaining)}`);
   if (remaining > 0 || storageFailures > 0) process.exitCode = 1;
 }

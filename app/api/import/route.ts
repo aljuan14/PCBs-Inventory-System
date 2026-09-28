@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     // 2. Baca sheet & transformasi (logika yang sama dengan pemeriksaan data)
     const sheet = await loadBatchSheet(supabase, batch);
     const transformed = transformRows(jenisData, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
-    const { rows, skippedEmpty } = transformed;
+    const { rows, skippedEmpty, skippedCopies } = transformed;
 
     let skippedDuplicates = 0;
     let toInsert = rows;
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       success: true,
       importedCount: toInsert.length,
       skippedEmpty,
-      skippedDuplicates,
+      skippedDuplicates: skippedCopies + skippedDuplicates,
       tableName: jenisData,
     });
   } catch (err) {

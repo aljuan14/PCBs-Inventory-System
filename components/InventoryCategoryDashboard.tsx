@@ -1,8 +1,10 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertCircle, RefreshCw, UploadCloud } from 'lucide-react';
-import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
+import { INVENTORY_CATEGORIES, hasPcbConcentration, type InventoryCategory } from '@/lib/inventory';
+import { mapPointFilter, type InventoryFilters } from '@/lib/inventory-query';
 import DataTable, { type EditableInventoryFields, type InventoryItem } from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
 import MapNotice from '@/components/MapNotice';
@@ -19,6 +21,14 @@ const formatNumber = (value: number) => value.toLocaleString('id-ID');
 export default function InventoryCategoryDashboard({ category }: { category: InventoryCategory }) {
   const config = getCategory(category);
   const { supabase, stats, companies, points, pointTotal, loading, refreshing, error, reloadKey, reload } = useDashboardData(category);
+
+  // Clicking a risk class filters the table and brings it into view.
+  const [tablePreset, setTablePreset] = useState<{ key: number; filters: Partial<InventoryFilters> } | undefined>();
+  const tableRef = useRef<HTMLDivElement>(null);
+  const showRows = (filters: Partial<InventoryFilters>) => {
+    setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters }));
+    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
     const payload: Record<string, string | number | null> = {};
@@ -55,8 +65,7 @@ export default function InventoryCategoryDashboard({ category }: { category: Inv
   const tested = summary?.tested ?? 0;
   const moderate = summary?.risk_moderate ?? 0;
   const high = summary?.risk_high ?? 0;
-  const distributionData = [{ category: 'Risiko PCB', transformator: category.startsWith('transformator') ? total : 0, kapasitor: category === 'kapasitor' ? total : 0, minyak: category === 'minyak_dielektrik' ? total : 0 }];
-  const riskData = [{ name: 'Bebas PCB (<50)', value: summary?.risk_safe ?? 0, color: '#10b981' }, { name: 'Terkontaminasi', value: moderate, color: '#f59e0b' }, { name: 'Bahaya Tinggi', value: high, color: '#ef4444' }, { name: 'Belum diuji', value: total - tested, color: '#94a3b8' }];
+  const riskCounts = hasPcbConcentration(category) ? { safe: summary?.risk_safe ?? 0, moderate, high, untested: total - tested } : null;
 
   return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8">
     <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -65,8 +74,8 @@ export default function InventoryCategoryDashboard({ category }: { category: Inv
     </header>
     {error && <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800"><AlertCircle className="h-4 w-4" /> {error}</div>}
     <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Total data</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(total)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Sudah diuji</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(tested)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Terkontaminasi</div><div className="mt-2 text-3xl font-semibold text-amber-700">{loading ? '...' : formatNumber(moderate)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Bahaya tinggi</div><div className="mt-2 text-3xl font-semibold text-rose-700">{loading ? '...' : formatNumber(high)}</div></div></section>
-    <DashboardCharts distributionData={distributionData} riskCategoryData={riskData} />
-    <DataTable category={category} companies={companies} reloadKey={reloadKey} onEdit={handleEdit} onDelete={handleDelete} />
-    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta sebaran {config.shortLabel}</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="360px" /></div>
+    <DashboardCharts categoryRisk={[]} riskCounts={riskCounts} loading={loading} onSelectRisk={(pcbRange) => showRows({ pcbRange })} />
+    <div ref={tableRef} className="scroll-mt-6"><DataTable category={category} companies={companies} reloadKey={reloadKey} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta sebaran {config.shortLabel}</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="360px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
 }

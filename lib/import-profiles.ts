@@ -277,6 +277,26 @@ export function hasIdentity(row: Record<string, unknown>, mapping: Record<string
   return columns.some((header) => isMeaningful(row[header]));
 }
 
+/**
+ * Which rows are real records. Besides an identity value, a record needs its
+ * unit, sub-unit or running number when the sheet fills those in: blocks
+ * pasted below the form (UID Lampung: 3,000 leftover rows under 7 capacitors)
+ * have equipment codes and years but none of them, or an equipment code
+ * shifted into the No column. A row directly below a complete record is still
+ * kept, as a record whose unit and number were left out.
+ */
+export function recordMask(rows: Record<string, unknown>[], rowNumbers: number[], mapping: Record<string, string>) {
+  const identity = rows.map((row) => hasIdentity(row, mapping));
+  const columns = (target: string) => Object.entries(mapping).filter(([, fieldKey]) => fieldKey === target).map(([header]) => header);
+  const unitColumns = [...columns('unit'), ...columns('sub_unit')];
+  const noColumns = columns('no');
+  const isRunningNumber = (value: unknown) => typeof value === 'number' || (typeof value === 'string' && /^\s*\d+\s*[.)]?\s*$/.test(value));
+  const context = rows.map((row) => unitColumns.some((header) => isMeaningful(row[header])) || noColumns.some((header) => isRunningNumber(row[header])));
+  if (!identity.some((hasId, index) => hasId && context[index])) return identity;
+  return identity.map((hasId, index) => hasId && (context[index]
+    || (index > 0 && identity[index - 1] && context[index - 1] && rowNumbers[index - 1] === rowNumbers[index] - 1)));
+}
+
 /** Parse numbers as written in Indonesian spreadsheets: "96,5", "1.679,64", "36000/60000" (first value), "<0,5". */
 export function parseNumber(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;

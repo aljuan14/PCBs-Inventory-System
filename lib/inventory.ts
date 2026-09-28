@@ -14,6 +14,7 @@ export type InventoryField = {
   group: 'Data umum' | 'Unit & identitas' | 'Perawatan rutin' | 'Kondisi' | 'Uji lanjutan';
 };
 
+// Category colours for markers and accents; checked for colour-blind separation across every pair, and kept clear of the green/amber/red of the PCBs risk classes.
 export const INVENTORY_CATEGORIES: Array<{
   key: InventoryCategory;
   label: string;
@@ -21,11 +22,14 @@ export const INVENTORY_CATEGORIES: Array<{
   description: string;
   color: string;
 }> = [
-  { key: 'transformator_digunakan', label: 'Transformator Masih Digunakan', shortLabel: 'Trafo digunakan', description: 'Peralatan yang masih beroperasi dan digunakan.', color: '#0f766e' },
+  { key: 'transformator_digunakan', label: 'Transformator Masih Digunakan', shortLabel: 'Trafo digunakan', description: 'Peralatan yang masih beroperasi dan digunakan.', color: '#2a78d6' },
   { key: 'transformator_tidak_digunakan', label: 'Transformator Tidak Digunakan', shortLabel: 'Trafo tidak digunakan', description: 'Peralatan yang sudah tidak beroperasi atau rusak.', color: '#b45309' },
-  { key: 'kapasitor', label: 'Kapasitor', shortLabel: 'Kapasitor', description: 'Inventaris kapasitor beserta status penggunaannya.', color: '#2563eb' },
-  { key: 'minyak_dielektrik', label: 'Minyak Dielektrik', shortLabel: 'Minyak dielektrik', description: 'Wadah dan sampel minyak dielektrik yang tersimpan.', color: '#7c3aed' },
+  { key: 'kapasitor', label: 'Kapasitor', shortLabel: 'Kapasitor', description: 'Inventaris kapasitor beserta status penggunaannya.', color: '#4a3aa7' },
+  { key: 'minyak_dielektrik', label: 'Minyak Dielektrik', shortLabel: 'Minyak dielektrik', description: 'Wadah dan sampel minyak dielektrik yang tersimpan.', color: '#e87ba4' },
 ];
+
+/** Whether a category's KLHK template has a PCBs concentration column; kapasitor (1.3) does not, so its risk cannot be classified. */
+export const hasPcbConcentration = (category: InventoryCategory) => category !== 'kapasitor';
 
 const field = (field_key: string, label: string, tipe_data: InventoryFieldType, wajib: boolean, group: InventoryField['group'] = 'Data umum'): InventoryField => ({ field_key, label, tipe_data, wajib, group });
 // No field is mandatory: real-world reports (e.g. PLN) often lack serials or
@@ -162,3 +166,5 @@ export function suggestInventoryField(category: InventoryCategory, header: strin
 export function getCategoryLabel(category: InventoryCategory) {
   return INVENTORY_CATEGORIES.find((item) => item.key === category)?.label ?? category;
 }
+
+export const getCategoryColor = (category: InventoryCategory) => INVENTORY_CATEGORIES.find((item) => item.key === category)?.color ?? INVENTORY_CATEGORIES[0].color;

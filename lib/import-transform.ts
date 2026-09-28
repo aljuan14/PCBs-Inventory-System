@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseExcelWithSmartHeader } from '@/lib/excel';
 import { parseDMSCoordinate, repairIndonesianCoordinate } from '@/lib/dms';
 import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
-import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isMeaningful } from '@/lib/import-profiles';
+import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isMeaningful, recordMask } from '@/lib/import-profiles';
 import { downloadWorkbook } from '@/lib/upload-store';
 import { resolveUnit, tidyUnitName, type UnitContext } from '@/lib/units';
 
@@ -94,14 +94,21 @@ const fingerprintFields = (category: InventoryCategory) => {
   return FINGERPRINT_FIELDS.filter((fieldKey) => own.has(fieldKey));
 };
 
-function fingerprint(category: InventoryCategory, record: Record<string, unknown>) {
+function fingerprintParts(category: InventoryCategory, record: Record<string, unknown>) {
   return fingerprintFields(category).map((fieldKey) => {
     const value = record[fieldKey];
     if (value === null || value === undefined || value === '') return '';
     const number = typeof value === 'number' ? value : typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : null;
     return number !== null ? String(number) : String(value).trim().toLowerCase();
-  }).join('|');
+  });
 }
+
+function fingerprint(category: InventoryCategory, record: Record<string, unknown>) {
+  return fingerprintParts(category, record).join('|');
+}
+
+/** Same values wherever both rows are filled in: one is a copy of the other with fields left out. */
+const compatible = (a: string[], b: string[]) => a.every((value, index) => value === b[index] || value === '' || b[index] === '');
 
 /** Fingerprints of this company's rows already stored in the category table. */
 export async function fetchExistingFingerprints(supabase: SupabaseClient, category: InventoryCategory, companyId: string) {
@@ -220,13 +227,22 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
   const currentYear = new Date().getFullYear();
   const issues = new IssueCollector();
   const rows: TransformedRow[] = [];
+  // Fingerprint values of rows whose No comes from the sheet, to spot partial copies.
+  const numberedParts = new Map<TransformedRow, string[]>();
   let skippedEmpty = 0;
+  const records = recordMask(sheet.allRows, sheet.rowNumbers, mappings);
 
   sheet.allRows.forEach((rawRow, index) => {
     const rowNumber = sheet.rowNumbers[index] ?? index + 1;
     // Empty pre-filled form rows (running number / default values only) are not data.
     if (!hasIdentity(rawRow, mappings)) {
       skippedEmpty++;
+      return;
+    }
+    // Leftovers pasted below the form (see recordMask) are not data either, but worth a look.
+    if (!records[index]) {
+      skippedEmpty++;
+      issues.add('skipped:no_context', 'warning', 'Baris tanpa Unit Induk, Unit Pelaksana dan No (sisa tempelan di luar formulir), dilewati', rowNumber);
       return;
     }
 
@@ -264,7 +280,8 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
     if ('sub_unit' in item) item.sub_unit = tidyUnitName(item.sub_unit);
 
     // Row numbers are required in the database; number rows sequentially when absent.
-    if (item.no === null || item.no === undefined) item.no = rows.length + 1;
+    const numbered = item.no !== null && item.no !== undefined;
+    if (!numbered) item.no = rows.length + 1;
 
     // A year column formatted as a date holds an Excel serial (40460 = 2010).
     if (typeof item.tahun_pembuatan === 'number' && item.tahun_pembuatan > 20000 && item.tahun_pembuatan < 80000) {
@@ -316,18 +333,33 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
 
     item.catatan_impor = notes.length > 0 ? notes : null;
     item.baris_excel = rowNumber;
-    rows.push({ rowNumber, item, fingerprint: fingerprint(category, item) });
+    const row = { rowNumber, item, fingerprint: fingerprint(category, item) };
+    rows.push(row);
+    if (numbered) numberedParts.set(row, fingerprintParts(category, item));
   });
 
-  // Identical records inside the file (copy-pasted rows).
-  const seen = new Map<string, number>();
-  for (const row of rows) {
-    const first = seen.get(row.fingerprint);
-    if (first === undefined) seen.set(row.fingerprint, row.rowNumber);
-    else issues.add('duplicate:file', 'warning', 'Baris kembar di dalam file (isi identik dengan baris lain)', row.rowNumber, `sama dengan baris ${first}`);
-  }
+  // Records repeated inside the file are imported once: identical rows, and
+  // rows with the same unit and No that only leave fields out (UID Lampung
+  // pasted its offline transformers twice, the second time without serial
+  // numbers). Unit and sub-unit count here: two units may both report "No 1".
+  const identical = new Map<string, number>();
+  const byNumber = new Map<string, Array<{ rowNumber: number; parts: string[] }>>();
+  const unique = rows.filter((row) => {
+    const place = `${row.item.unit ?? ''}|${row.item.sub_unit ?? ''}`;
+    const key = `${place}|${row.fingerprint}`;
+    const parts = numberedParts.get(row);
+    const earlier = parts ? byNumber.get(`${place}|${row.item.no}`) ?? [] : [];
+    const first = identical.get(key) ?? earlier.find((other) => compatible(other.parts, parts as string[]))?.rowNumber;
+    if (first === undefined) {
+      identical.set(key, row.rowNumber);
+      if (parts) byNumber.set(`${place}|${row.item.no}`, [...earlier, { rowNumber: row.rowNumber, parts }]);
+      return true;
+    }
+    issues.add('duplicate:file', 'warning', 'Baris kembar di dalam file (salinan baris lain), dilewati', row.rowNumber, `sama dengan baris ${first}`);
+    return false;
+  });
 
-  return { rows, skippedEmpty, issues };
+  return { rows: unique, skippedEmpty, skippedCopies: rows.length - unique.length, issues };
 }
 
 /**
@@ -343,12 +375,12 @@ export interface CheckReport {
   issues: ValidationIssue[];
 }
 
-export function buildCheckReport(result: { rows: TransformedRow[]; skippedEmpty: number; issues: IssueCollector }, importedRows: number): CheckReport {
+export function buildCheckReport(result: { rows: TransformedRow[]; skippedEmpty: number; skippedCopies: number; issues: IssueCollector }, importedRows: number): CheckReport {
   return {
     checkedAt: new Date().toISOString(),
     dataRows: result.rows.length,
     skippedEmpty: result.skippedEmpty,
-    skippedDuplicates: result.rows.length - importedRows,
+    skippedDuplicates: result.skippedCopies + result.rows.length - importedRows,
     importedRows,
     issues: result.issues.list(),
   };
