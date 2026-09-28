@@ -46,3 +46,6 @@ next-env.d.ts
 
 # real company inventory data — keep out of the repo
 /Data-inventaris/Data-PLN/
+
+# LibreOffice / OnlyOffice lock files
+.~lock.*#
