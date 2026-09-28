@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { ImportBatch } from '@/lib/types';
 import type { ValidationIssue } from '@/lib/import-transform';
-import CheckIssueList from '@/components/CheckIssueList';
+import CheckIssueList, { type LoadIssueRows } from '@/components/CheckIssueList';
 import { getCategoryLabel, suggestInventoryField, type InventoryCategory, type InventoryField } from '@/lib/inventory';
 import {
   ArrowRight,
@@ -105,6 +105,18 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
       setChecking(false);
     }
   }, [batchId]);
+
+  // Baris di balik satu temuan, dengan mapping yang dipakai pada pemeriksaan terakhir.
+  const loadIssueRows = useCallback<LoadIssueRows>(async (key, offset, limit) => {
+    const res = await fetch(`/api/mapping/${batchId}/issues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mappings: JSON.parse(checkedKey ?? '{}'), key, offset, limit }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Gagal memuat baris temuan.');
+    return json;
+  }, [batchId, checkedKey]);
 
   // Ambil data batch, field definitions, dan headers, lalu langsung periksa.
   useEffect(() => {
@@ -480,7 +492,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
                   </div>
                 )}
 
-                <CheckIssueList issues={report.issues} dataRows={report.dataRows} />
+                <CheckIssueList key={checkedKey} issues={report.issues} dataRows={report.dataRows} loadRows={loadIssueRows} />
 
                 {report.dashboard && (
                   <div className="rounded-xl border border-slate-200 bg-white p-3">

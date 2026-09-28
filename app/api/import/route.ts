@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     // 4. Update status import_batches, dengan laporan pemeriksaan untuk riwayat upload
     await supabase
       .from('import_batches')
-      .update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(transformed, toInsert.length) })
+      .update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(transformed, toInsert.length, mappings) })
       .eq('id', batchId);
     forgetBatchSheet(batchId);
 

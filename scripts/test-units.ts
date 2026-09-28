@@ -38,6 +38,12 @@ const extra: Array<[string | null, string | null]> = [
   [tidyUnitName('UP3 PONTIANAK'), 'UP3 Pontianak'],
   [tidyUnitName('  up3  Bali   Timur '), 'UP3 Bali Timur'],
   [tidyUnitName('N/A'), null],
+  [tidyUnitName('UP4 Banten Selatan'), 'UP3 Banten Selatan'],
+  [tidyUnitName('UP1270 Banten Selatan'), 'UP3 Banten Selatan'],
+  [tidyUnitName('UP2D Banten'), 'UP2D Banten'],
+  [tidyUnitName('UP3B Sumatera'), 'UP3B Sumatera'],
+  [tidyUnitName('UP3 Berau - 01 - Gudang ULP Nunukan'), 'UP3 Berau'],
+  [tidyUnitName('UP3 Berau - 15 - Gudang ULP Tanjung Selor'), 'UP3 Berau'],
 ];
 for (const [actual, expected] of extra) {
   if (actual !== expected) {

@@ -1,5 +1,6 @@
 import InventoryCategoryDashboard from '@/components/InventoryCategoryDashboard';
+import { issueLinkFromParams } from '@/lib/inventory-query';
 
-export default function TransformatorTidakDigunakanPage() {
-  return <InventoryCategoryDashboard category="transformator_tidak_digunakan" />;
+export default async function TransformatorTidakDigunakanPage({ searchParams }: PageProps<'/dashboard/transformator-tidak-digunakan'>) {
+  return <InventoryCategoryDashboard category="transformator_tidak_digunakan" issue={issueLinkFromParams(await searchParams)} />;
 }

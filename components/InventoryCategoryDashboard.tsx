@@ -1,10 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertCircle, RefreshCw, UploadCloud } from 'lucide-react';
 import { INVENTORY_CATEGORIES, hasPcbConcentration, type InventoryCategory } from '@/lib/inventory';
-import { mapPointFilter, type InventoryFilters } from '@/lib/inventory-query';
+import { issueTableFilter, mapPointFilter, type InventoryFilters, type IssueLink } from '@/lib/inventory-query';
 import DataTable, { type EditableInventoryFields, type InventoryItem } from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
 import MapNotice from '@/components/MapNotice';
@@ -18,13 +18,18 @@ function getCategory(category: InventoryCategory) {
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
 
-export default function InventoryCategoryDashboard({ category }: { category: InventoryCategory }) {
+export default function InventoryCategoryDashboard({ category, issue }: { category: InventoryCategory; issue?: IssueLink }) {
   const config = getCategory(category);
   const { supabase, stats, companies, points, pointTotal, loading, refreshing, error, reloadKey, reload } = useDashboardData(category);
 
-  // Clicking a risk class filters the table and brings it into view.
-  const [tablePreset, setTablePreset] = useState<{ key: number; filters: Partial<InventoryFilters> } | undefined>();
+  // Clicking a risk class filters the table and brings it into view; a link
+  // from the upload history opens with the rows of one finding.
+  const [tablePreset, setTablePreset] = useState<{ key: number; filters: Partial<InventoryFilters> } | undefined>(() =>
+    issue ? { key: 1, filters: { batchId: issue.batchId, ...issueTableFilter(issue.key, issue.label) } } : undefined);
   const tableRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (issue) tableRef.current?.scrollIntoView({ block: 'start' });
+  }, [issue]);
   const showRows = (filters: Partial<InventoryFilters>) => {
     setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters }));
     tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

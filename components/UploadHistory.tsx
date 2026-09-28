@@ -1,12 +1,13 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ChevronDown, ChevronRight, FileSpreadsheet, History, Info, Search, UploadCloud } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
 import type { CheckReport } from '@/lib/import-transform';
-import CheckIssueList from '@/components/CheckIssueList';
+import { fetchIssueRows, issueLinkHref, issueTableFilter } from '@/lib/inventory-query';
+import CheckIssueList, { type LoadIssueRows } from '@/components/CheckIssueList';
 
 const PAGE_SIZE = 50;
 const SELECT_CLASS = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none';
@@ -40,6 +41,39 @@ function IssueCounts({ report }: { report: CheckReport | null }) {
 }
 
 /** Imported sheets, newest first, each with the check report kept at upload. */
+/**
+ * Findings of one sheet. Each opens to its rows: imported rows come from the
+ * database (with a link to them in the inventory table), rows the import
+ * skipped from the workbook, read with the mapping stored in the report.
+ */
+function BatchIssues({ batch, report, supabase }: { batch: HistoryBatch; report: CheckReport; supabase: ReturnType<typeof createClient> }) {
+  const imported = batch.status === 'imported';
+  const loadRows = useCallback<LoadIssueRows>(async (key, offset, limit) => {
+    const label = report.issues.find((issue) => issue.key === key)?.label ?? key;
+    if (issueTableFilter(key, label)) return fetchIssueRows(supabase, batch, { key, label }, offset, limit);
+    const res = await fetch(`/api/mapping/${batch.id}/issues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, offset, limit }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Gagal memuat baris temuan.');
+    return json;
+  }, [batch, report, supabase]);
+
+  return (
+    <CheckIssueList
+      issues={report.issues}
+      dataRows={report.dataRows}
+      loadRows={loadRows}
+      canLoad={(issue) => (issueTableFilter(issue.key, issue.label) ? imported : Boolean(report.mappings))}
+      tableHref={(issue) => (imported && issueTableFilter(issue.key, issue.label)
+        ? issueLinkHref(batch.jenis_data, { batchId: batch.id, key: issue.key, label: issue.label })
+        : null)}
+    />
+  );
+}
+
 export default function UploadHistory({ initialCompanyId }: { initialCompanyId: string | null }) {
   const supabase = useMemo(() => createClient(), []);
   const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([]);
@@ -164,7 +198,7 @@ export default function UploadHistory({ initialCompanyId }: { initialCompanyId: 
                               {report.skippedDuplicates > 0 && <span>{formatNumber(report.skippedDuplicates)} duplikat dilewati</span>}
                               {report.skippedEmpty > 0 && <span>{formatNumber(report.skippedEmpty)} baris kosong dilewati</span>}
                             </div>
-                            <CheckIssueList issues={report.issues} dataRows={report.dataRows} />
+                            <BatchIssues batch={batch} report={report} supabase={supabase} />
                           </div>
                         ) : (
                           <p className="text-xs text-slate-500">Laporan pemeriksaan tidak tersimpan untuk sheet ini (diunggah sebelum fitur riwayat pemeriksaan tersedia).</p>

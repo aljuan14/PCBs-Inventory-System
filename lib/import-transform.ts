@@ -134,8 +134,20 @@ export interface ValidationIssue {
   examples: string[];
 }
 
+/** One affected row of a finding, with the value it was reported for. */
+export interface IssueRowRef {
+  rowNumber: number;
+  value: string | null;
+}
+
 class IssueCollector {
   private issues = new Map<string, ValidationIssue>();
+  /** Every affected row per finding, kept only when asked for (the report itself lists the first few). */
+  readonly rowsByKey: Map<string, IssueRowRef[]> | null;
+
+  constructor(keepRows = false) {
+    this.rowsByKey = keepRows ? new Map() : null;
+  }
 
   add(key: string, level: ValidationIssue['level'], label: string, rowNumber: number, example?: unknown) {
     let issue = this.issues.get(key);
@@ -147,6 +159,11 @@ class IssueCollector {
     if (issue.rows.length < 8) issue.rows.push(rowNumber);
     const text = example === undefined || example === null ? '' : String(example).slice(0, 90);
     if (text && issue.examples.length < 4 && !issue.examples.includes(text)) issue.examples.push(text);
+    if (this.rowsByKey) {
+      const refs = this.rowsByKey.get(key) ?? [];
+      if (refs.length === 0) this.rowsByKey.set(key, refs);
+      refs.push({ rowNumber, value: example === undefined || example === null ? null : String(example).slice(0, 200) });
+    }
   }
 
   list() {
@@ -218,17 +235,25 @@ export interface TransformedRow {
   fingerprint: string;
 }
 
-export function transformRows(category: InventoryCategory, sheet: LoadedSheet, mappings: Record<string, string>, context: UnitContext = {}) {
+export function transformRows(
+  category: InventoryCategory,
+  sheet: LoadedSheet,
+  mappings: Record<string, string>,
+  context: UnitContext = {},
+  options: { keepIssueRows?: boolean } = {},
+) {
   const types = fieldTypes(category);
   const labels = fieldLabels(category);
   const active = Object.entries(mappings).filter(([header, fieldKey]) => fieldKey && fieldKey !== IGNORE && sheet.headers.includes(header));
   const mappedTargets = new Set(active.map(([, fieldKey]) => fieldKey));
   const completeness = COMPLETENESS_FIELDS[category].filter((fieldKey) => mappedTargets.has(fieldKey));
   const currentYear = new Date().getFullYear();
-  const issues = new IssueCollector();
+  const issues = new IssueCollector(options.keepIssueRows);
   const rows: TransformedRow[] = [];
   // Fingerprint values of rows whose No comes from the sheet, to spot partial copies.
   const numberedParts = new Map<TransformedRow, string[]>();
+  // A row's findings are reported once it is known to be imported, not for copies that are skipped.
+  const findings = new Map<TransformedRow, Array<Parameters<IssueCollector['add']>>>();
   let skippedEmpty = 0;
   const records = recordMask(sheet.allRows, sheet.rowNumbers, mappings);
 
@@ -250,8 +275,9 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
     const derived: Record<string, string | number | null> = {};
     const notes: ImportNote[] = [];
     // Reports a finding for the check report and keeps it with the row.
+    const found: Array<Parameters<IssueCollector['add']>> = [];
     const note = (level: ValidationIssue['level'], entry: ImportNote, example?: unknown) => {
-      issues.add(entry.kode, level, entry.pesan, rowNumber, example);
+      found.push([entry.kode, level, entry.pesan, rowNumber, example]);
       notes.push(entry);
     };
     for (const [header, fieldKey] of active) {
@@ -327,7 +353,7 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
 
     for (const fieldKey of completeness) {
       if (item[fieldKey] === null || item[fieldKey] === undefined) {
-        issues.add(`missing:${fieldKey}`, 'info', `Tanpa ${labels.get(fieldKey)?.toLowerCase()}`, rowNumber);
+        found.push([`missing:${fieldKey}`, 'info', `Tanpa ${labels.get(fieldKey)?.toLowerCase()}`, rowNumber]);
       }
     }
 
@@ -335,6 +361,7 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
     item.baris_excel = rowNumber;
     const row = { rowNumber, item, fingerprint: fingerprint(category, item) };
     rows.push(row);
+    findings.set(row, found);
     if (numbered) numberedParts.set(row, fingerprintParts(category, item));
   });
 
@@ -353,6 +380,7 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
     if (first === undefined) {
       identical.set(key, row.rowNumber);
       if (parts) byNumber.set(`${place}|${row.item.no}`, [...earlier, { rowNumber: row.rowNumber, parts }]);
+      for (const finding of findings.get(row) ?? []) issues.add(...finding);
       return true;
     }
     issues.add('duplicate:file', 'warning', 'Baris kembar di dalam file (salinan baris lain), dilewati', row.rowNumber, `sama dengan baris ${first}`);
@@ -373,9 +401,15 @@ export interface CheckReport {
   skippedDuplicates: number;
   importedRows: number;
   issues: ValidationIssue[];
+  /** Column mapping used for the import, so the rows it skipped can be read from the workbook later. */
+  mappings?: Record<string, string>;
 }
 
-export function buildCheckReport(result: { rows: TransformedRow[]; skippedEmpty: number; skippedCopies: number; issues: IssueCollector }, importedRows: number): CheckReport {
+export function buildCheckReport(
+  result: { rows: TransformedRow[]; skippedEmpty: number; skippedCopies: number; issues: IssueCollector },
+  importedRows: number,
+  mappings: Record<string, string>,
+): CheckReport {
   return {
     checkedAt: new Date().toISOString(),
     dataRows: result.rows.length,
@@ -383,7 +417,72 @@ export function buildCheckReport(result: { rows: TransformedRow[]; skippedEmpty:
     skippedDuplicates: result.skippedCopies + result.rows.length - importedRows,
     importedRows,
     issues: result.issues.list(),
+    mappings,
   };
+}
+
+/** A row behind a finding, with what the admin needs to find the equipment in the workbook. */
+export interface IssueRowDetail {
+  /** Excel row number; null for rows imported before it was stored. */
+  rowNumber: number | null;
+  unit: string | null;
+  subUnit: string | null;
+  no: string | null;
+  code: string | null;
+  name: string | null;
+  serial: string | null;
+  location: string | null;
+  /** The value the finding is about ("Kmp. Baru", "'-6.79 , '106.09 → -6.79, 106.09", "sama dengan baris 10"). */
+  value: string | null;
+}
+
+// Where to read each identifying detail; the first mapped field wins.
+const DETAIL_FIELDS = {
+  unit: ['unit'],
+  subUnit: ['sub_unit'],
+  no: ['no'],
+  code: ['kode_alat'],
+  name: ['nama_merek', 'merek_minyak_dielektrik'],
+  serial: ['nomor_serial'],
+  location: ['lokasi_peralatan', 'lokasi_penyimpanan'],
+} as const;
+
+/**
+ * Identifying details of the given rows, read from the workbook (unit names
+ * canonical, as stored on import).
+ * Rows that were skipped (copies, leftovers) are covered too, since they are
+ * never transformed.
+ */
+export function describeIssueRows(sheet: LoadedSheet, mappings: Record<string, string>, refs: IssueRowRef[], context: UnitContext = {}): IssueRowDetail[] {
+  const headerFor = new Map<string, string>();
+  for (const [header, fieldKey] of Object.entries(mappings)) if (fieldKey && fieldKey !== IGNORE && !headerFor.has(fieldKey)) headerFor.set(fieldKey, header);
+  const indexOf = new Map(sheet.rowNumbers.map((rowNumber, index) => [rowNumber, index]));
+  const read = (row: Record<string, unknown> | undefined, fieldKeys: readonly string[]) => {
+    for (const fieldKey of fieldKeys) {
+      const header = headerFor.get(fieldKey);
+      const value = header && row ? row[header] : undefined;
+      if (isMeaningful(value)) return noteText(value).replace(/\s+/g, ' ').trim().slice(0, 80);
+    }
+    return null;
+  };
+  return refs.map(({ rowNumber, value }) => {
+    const index = indexOf.get(rowNumber);
+    const row = index === undefined ? undefined : sheet.allRows[index];
+    // Canonical names as stored on import; a row without a unit (a leftover) stays without one.
+    const unit = read(row, DETAIL_FIELDS.unit);
+    const subUnit = read(row, DETAIL_FIELDS.subUnit);
+    return {
+      rowNumber,
+      unit: unit && resolveUnit(unit, context),
+      subUnit: subUnit && tidyUnitName(subUnit),
+      no: read(row, DETAIL_FIELDS.no),
+      code: read(row, DETAIL_FIELDS.code),
+      name: read(row, DETAIL_FIELDS.name),
+      serial: read(row, DETAIL_FIELDS.serial),
+      location: read(row, DETAIL_FIELDS.location),
+      value,
+    };
+  });
 }
 
 /** Example values per column, to help the admin judge a mapping at a glance. */

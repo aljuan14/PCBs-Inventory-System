@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
+import type { IssueRowDetail } from '@/lib/import-transform';
 
 /**
  * Dashboard data access. Figures come from the `inventory_stats` function and
@@ -122,6 +123,8 @@ export interface InventoryFilters {
   addedWithin: AddedWithin;
   /** Rows under one map marker (all rows sharing its coordinates), with a label for the filter chip. */
   mapPoint: { ids: string[]; label: string } | null;
+  /** Rows with one import note (catatan_impor kode, e.g. coordinate:unreadable), with a label for the filter chip. */
+  note: { kode: string; label: string } | null;
 }
 
 export const DEFAULT_FILTERS: InventoryFilters = {
@@ -140,6 +143,7 @@ export const DEFAULT_FILTERS: InventoryFilters = {
   batchId: null,
   addedWithin: 'all',
   mapPoint: null,
+  note: null,
 };
 
 /** Table filter for the rows under one map marker. */
@@ -177,17 +181,23 @@ const SORTS: Record<InventorySort, Array<[column: string, ascending: boolean]>> 
   name_asc: [['name', true], ['id', true]],
 };
 
-export async function fetchInventoryPage(supabase: SupabaseClient, query: InventoryPageQuery) {
-  const { filters } = query;
-  let request = supabase.from('inventory_items').select('*', { count: 'exact' });
+// jsonb containment on catatan_impor. supabase-js sends a JS array as a
+// Postgres array literal ({…}), which jsonb rejects, so pass JSON text.
+const noteMatch = (entry: Partial<ImportNoteRow>) => JSON.stringify([entry]);
 
-  if (query.category === 'transformator') request = request.in('category', TRAFO_CATEGORIES);
-  else if (query.category !== 'all') request = request.eq('category', query.category);
+// The builder returned by select() on inventory_items, which every filter below keeps.
+type InventoryRequest = ReturnType<ReturnType<SupabaseClient['from']>['select']>;
+
+/** Category and table filters, shared by the table and the rows behind a check finding. */
+function applyFilters(request: InventoryRequest, category: CategoryFilter, filters: InventoryFilters) {
+  if (category === 'transformator') request = request.in('category', TRAFO_CATEGORIES);
+  else if (category !== 'all') request = request.eq('category', category);
   if (filters.companyId) request = request.eq('company_id', filters.companyId);
   if (filters.unit) request = request.eq('unit', filters.unit);
   if (filters.subUnit) request = request.eq('sub_unit', filters.subUnit);
   if (filters.batchId) request = request.eq('import_batch_id', filters.batchId);
   if (filters.mapPoint) request = request.in('id', filters.mapPoint.ids);
+  if (filters.note) request = request.contains('catatan_impor', noteMatch({ kode: filters.note.kode }));
 
   if (filters.pcbRange === 'safe') request = request.lt('ppm', 50);
   else if (filters.pcbRange === 'moderate') request = request.gte('ppm', 50).lte('ppm', 500);
@@ -215,7 +225,7 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   else if (filters.coordinates === 'without') request = request.is('lat', null);
   else if (filters.coordinates === 'empty') request = request.is('lat', null).is('koordinat_raw', null);
   else if (filters.coordinates === 'unreadable') request = request.is('lat', null).not('koordinat_raw', 'is', null);
-  else if (filters.coordinates === 'fixed') request = request.contains('catatan_impor', [{ jenis: 'diperbaiki', kolom: 'koordinat' }]);
+  else if (filters.coordinates === 'fixed') request = request.contains('catatan_impor', noteMatch({ jenis: 'diperbaiki', kolom: 'koordinat' }));
 
   // Serial number and year apply to equipment, power to transformers and
   // volume to oil, as in inventory_quality (migration 20260928000003).
@@ -226,11 +236,16 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   else if (filters.missing === 'daya') request = request.is('daya_kva', null).in('category', TRAFO_CATEGORIES);
   else if (filters.missing === 'volume') request = request.is('volume_l', null).eq('category', 'minyak_dielektrik');
   else if (filters.missing === 'code') request = request.is('kode_alat', null);
-  else if (filters.missing === 'cleared') request = request.contains('catatan_impor', [{ jenis: 'dikosongkan' }]);
+  else if (filters.missing === 'cleared') request = request.contains('catatan_impor', noteMatch({ jenis: 'dikosongkan' }));
 
   if (filters.addedWithin !== 'all') {
     request = request.gte('created_at', new Date(Date.now() - ADDED_WITHIN_DAYS[filters.addedWithin] * DAY_MS).toISOString());
   }
+  return request;
+}
+
+export async function fetchInventoryPage(supabase: SupabaseClient, query: InventoryPageQuery) {
+  let request = applyFilters(supabase.from('inventory_items').select('*', { count: 'exact' }), query.category, query.filters);
 
   const term = cleanSearch(query.search);
   if (term) request = request.or(`name.ilike.*${term}*,serial.ilike.*${term}*,location.ilike.*${term}*,kode_alat.ilike.*${term}*`);
@@ -242,6 +257,86 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   const { data, error, count } = await request.range(from, from + query.pageSize - 1);
   if (error) throw new Error(`Gagal memuat data: ${error.message}`);
   return { rows: (data ?? []) as InventoryRow[], total: count ?? 0 };
+}
+
+// Completeness findings of the pre-import check (missing:<field>) and the table filter showing them.
+const MISSING_FINDINGS: Record<string, Partial<InventoryFilters>> = {
+  'missing:nomor_serial': { missing: 'serial' },
+  'missing:nama_merek': { missing: 'name' },
+  'missing:merek_minyak_dielektrik': { missing: 'name' },
+  'missing:tahun_pembuatan': { missing: 'year' },
+  'missing:daya_kva': { missing: 'daya' },
+  'missing:volume_l': { missing: 'volume' },
+  'missing:koordinat_raw': { coordinates: 'empty' },
+};
+
+/**
+ * Table filter for the imported rows of one check finding, or null when the
+ * rows cannot be found in the database: copies and leftovers were never
+ * imported. Other findings are stored per row as a note with the same key.
+ */
+export function issueTableFilter(key: string, label: string): Partial<InventoryFilters> | null {
+  if (key.startsWith('missing:')) return MISSING_FINDINGS[key] ?? null;
+  if (key.startsWith('duplicate:') || key.startsWith('skipped:')) return null;
+  return { note: { kode: key, label } };
+}
+
+/** Rows of one check finding of an import batch, opened from the upload history. */
+export interface IssueLink {
+  batchId: string;
+  key: string;
+  label: string;
+}
+
+/** Link to a category dashboard showing the imported rows of one finding. */
+export function issueLinkHref(category: InventoryCategory, link: IssueLink) {
+  const query = new URLSearchParams({ batch: link.batchId, temuan: link.key, label: link.label });
+  return `/dashboard/${category.replace(/_/g, '-')}?${query}`;
+}
+
+/** Reads an IssueLink from a category dashboard's query string (see issueLinkHref). */
+export function issueLinkFromParams(params: Record<string, string | string[] | undefined>): IssueLink | undefined {
+  const value = (name: string) => (typeof params[name] === 'string' ? params[name] : undefined);
+  const batchId = value('batch');
+  const key = value('temuan');
+  return batchId && key ? { batchId, key, label: value('label') ?? key } : undefined;
+}
+
+/** Imported rows of one check finding of a batch, in workbook order. */
+export async function fetchIssueRows(
+  supabase: SupabaseClient,
+  batch: { id: string; jenis_data: InventoryCategory },
+  issue: { key: string; label: string },
+  offset: number,
+  limit: number,
+): Promise<{ total: number; rows: IssueRowDetail[] }> {
+  const filter = issueTableFilter(issue.key, issue.label);
+  if (!filter) return { total: 0, rows: [] };
+  const request = applyFilters(
+    supabase.from('inventory_items').select('id, baris_excel, unit, sub_unit, no, kode_alat, name, serial, location, catatan_impor', { count: 'exact' }),
+    batch.jenis_data,
+    { ...DEFAULT_FILTERS, ...filter, batchId: batch.id },
+  );
+  const { data, error, count } = await request
+    .order('baris_excel', { ascending: true, nullsFirst: false })
+    .order('id', { ascending: true })
+    .range(offset, offset + limit - 1);
+  if (error) throw new Error(`Gagal memuat baris: ${error.message}`);
+  const rows = ((data ?? []) as unknown as InventoryRow[]).map((row) => {
+    const note = row.catatan_impor?.find((entry) => entry.kode === issue.key);
+    return {
+      rowNumber: row.baris_excel ?? null,
+      unit: row.unit ?? null,
+      subUnit: row.sub_unit ?? null,
+      no: row.no === null ? null : String(row.no),
+      code: row.kode_alat ?? null,
+      name: row.name,
+      serial: row.serial,
+      location: row.location,
+      value: note ? [note.nilai_asli, note.nilai_baru].filter(Boolean).join(' → ') || null : null,
+    };
+  });
+  return { total: count ?? 0, rows };
 }
 
 /** Completeness figures of inventory_quality (migration 20260928000003). */
@@ -305,11 +400,22 @@ export interface UnitSummary {
   at_least_50: number;
 }
 
-/** Units and sub-units of a company with their figures (see inventory_units in migration 20260928000001). */
+const UNIT_PAGE_SIZE = 1000;
+
+/**
+ * Units and sub-units of a company with their figures (see inventory_units in
+ * migration 20260928000001). One row per unit and sub-unit, read in pages:
+ * a response holds at most 1000 rows, and PLN alone has hundreds.
+ */
 export async function fetchCompanyUnits(supabase: SupabaseClient, companyId: string) {
-  const { data, error } = await supabase.rpc('inventory_units', { p_company_id: companyId });
-  if (error) throw new Error(`Gagal memuat daftar unit: ${error.message}`);
-  return ((data ?? []) as UnitSummary[]).map((row) => ({ ...row, total: Number(row.total), tested: Number(row.tested), at_least_50: Number(row.at_least_50) }));
+  const rows: UnitSummary[] = [];
+  for (let from = 0; ; from += UNIT_PAGE_SIZE) {
+    const { data, error } = await supabase.rpc('inventory_units', { p_company_id: companyId }).range(from, from + UNIT_PAGE_SIZE - 1);
+    if (error) throw new Error(`Gagal memuat daftar unit: ${error.message}`);
+    rows.push(...((data ?? []) as UnitSummary[]));
+    if ((data ?? []).length < UNIT_PAGE_SIZE) break;
+  }
+  return rows.map((row) => ({ ...row, total: Number(row.total), tested: Number(row.tested), at_least_50: Number(row.at_least_50) }));
 }
 
 /** Imported batches, newest first, for the table's "import batch" filter. */

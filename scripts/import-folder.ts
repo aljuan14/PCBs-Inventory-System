@@ -225,7 +225,7 @@ async function main() {
             console.log(`  ✗ ${sheet.sheetName}: ${entry.error}`);
             continue;
           }
-          await supabase.from('import_batches').update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(transformed, fresh.length) }).eq('id', batchId);
+          await supabase.from('import_batches').update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(transformed, fresh.length, mapping) }).eq('id', batchId);
         }
 
         entry.inserted = commit ? fresh.length : 0;

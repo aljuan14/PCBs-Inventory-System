@@ -195,8 +195,9 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   const supabase = useMemo(() => createClient(), []);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedType, setSelectedType] = useState<CategoryFilter>('all');
-  const [filters, setFilters] = useState<InventoryFilters>(DEFAULT_FILTERS);
+  // A preset given at mount (e.g. from a link in the upload history) applies right away.
+  const [selectedType, setSelectedType] = useState<CategoryFilter>(() => (!category && preset?.type) || 'all');
+  const [filters, setFilters] = useState<InventoryFilters>(() => ({ ...DEFAULT_FILTERS, ...preset?.filters }));
   const [sort, setSort] = useState<InventorySort>('newest');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [batches, setBatches] = useState<Awaited<ReturnType<typeof fetchImportedBatches>>>([]);
@@ -337,11 +338,12 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
     filters.dayaMin !== null || filters.dayaMax !== null ? { key: 'daya', label: `Daya ${filters.dayaMin ?? '…'} – ${filters.dayaMax ?? '…'} kVA`, clear: () => setFilters((prev) => ({ ...prev, dayaMin: null, dayaMax: null })) } : null,
     filters.coordinates !== 'all' ? { key: 'coords', label: COORDINATE_LABELS[filters.coordinates], clear: () => updateFilter('coordinates', 'all') } : null,
     filters.missing !== 'all' ? { key: 'missing', label: MISSING_LABELS[filters.missing], clear: () => updateFilter('missing', 'all') } : null,
-filters.mapPoint ? { key: 'mapPoint', label: filters.mapPoint.label, clear: () => updateFilter('mapPoint', null) } : null,
-        filters.batchId ? { key: 'batch', label: `Batch: ${batchLabel(filters.batchId)}`, clear: () => updateFilter('batchId', null) } : null,
+    filters.mapPoint ? { key: 'mapPoint', label: filters.mapPoint.label, clear: () => updateFilter('mapPoint', null) } : null,
+    filters.note ? { key: 'note', label: `Temuan impor: ${filters.note.label}`, clear: () => updateFilter('note', null) } : null,
+    filters.batchId ? { key: 'batch', label: `Batch: ${batchLabel(filters.batchId)}`, clear: () => updateFilter('batchId', null) } : null,
     filters.addedWithin !== 'all' ? { key: 'added', label: `Diinput ${ADDED_LABELS[filters.addedWithin].toLowerCase()}`, clear: () => updateFilter('addedWithin', 'all') } : null,
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
-  const advancedCount = activeChips.filter((chip) => !['type', 'company', 'unit', 'subUnit', 'pcb', 'mapPoint'].includes(chip.key)).length;
+  const advancedCount = activeChips.filter((chip) => !['type', 'company', 'unit', 'subUnit', 'pcb', 'mapPoint', 'note'].includes(chip.key)).length;
   const queryKey = `${JSON.stringify(query)}#${reloadKey}`;
   const loading = loadedKey !== queryKey;
 
