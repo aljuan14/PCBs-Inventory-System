@@ -78,14 +78,27 @@ export interface InventoryRow {
   unit?: string | null;
   sub_unit?: string | null;
   kode_alat?: string | null;
+  koordinat_raw?: string | null;
+  catatan_impor?: ImportNoteRow[] | null;
+  baris_excel?: number | null;
+}
+
+/** One entry of a row's catatan_impor (see ImportNote in lib/import-transform.ts). */
+export interface ImportNoteRow {
+  kode: string;
+  jenis: 'diperbaiki' | 'dikosongkan' | 'tidak_terbaca' | 'di_luar_wilayah';
+  kolom: string;
+  pesan: string;
+  nilai_asli?: string;
+  nilai_baru?: string;
 }
 
 export type CategoryFilter = InventoryCategory | 'transformator' | 'all';
 export type PcbRange = 'all' | 'safe' | 'moderate' | 'high' | 'untested';
 export type TestFilter = 'all' | 'lab' | 'cepat' | 'none';
 export type YearRange = 'all' | 'pre1985' | '1985_1996' | 'from1997' | 'unknown' | 'custom';
-export type CoordinateFilter = 'all' | 'with' | 'without';
-export type MissingFilter = 'all' | 'serial' | 'name' | 'year' | 'location';
+export type CoordinateFilter = 'all' | 'with' | 'without' | 'empty' | 'unreadable' | 'fixed';
+export type MissingFilter = 'all' | 'serial' | 'name' | 'year' | 'location' | 'daya' | 'volume' | 'code' | 'cleared';
 export type AddedWithin = 'all' | '1d' | '7d' | '30d';
 export type InventorySort = 'newest' | 'oldest' | 'ppm_desc' | 'year_asc' | 'year_desc' | 'daya_desc' | 'name_asc';
 
@@ -188,11 +201,20 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
 
   if (filters.coordinates === 'with') request = request.not('lat', 'is', null);
   else if (filters.coordinates === 'without') request = request.is('lat', null);
+  else if (filters.coordinates === 'empty') request = request.is('lat', null).is('koordinat_raw', null);
+  else if (filters.coordinates === 'unreadable') request = request.is('lat', null).not('koordinat_raw', 'is', null);
+  else if (filters.coordinates === 'fixed') request = request.contains('catatan_impor', [{ jenis: 'diperbaiki', kolom: 'koordinat' }]);
 
-  if (filters.missing === 'serial') request = request.is('serial', null);
+  // Serial number and year apply to equipment, power to transformers and
+  // volume to oil, as in inventory_quality (migration 20260928000003).
+  if (filters.missing === 'serial') request = request.is('serial', null).neq('category', 'minyak_dielektrik');
   else if (filters.missing === 'name') request = request.is('name', null);
-  else if (filters.missing === 'year') request = request.is('tahun_pembuatan', null);
+  else if (filters.missing === 'year') request = request.is('tahun_pembuatan', null).neq('category', 'minyak_dielektrik');
   else if (filters.missing === 'location') request = request.is('location', null);
+  else if (filters.missing === 'daya') request = request.is('daya_kva', null).in('category', TRAFO_CATEGORIES);
+  else if (filters.missing === 'volume') request = request.is('volume_l', null).eq('category', 'minyak_dielektrik');
+  else if (filters.missing === 'code') request = request.is('kode_alat', null);
+  else if (filters.missing === 'cleared') request = request.contains('catatan_impor', [{ jenis: 'dikosongkan' }]);
 
   if (filters.addedWithin !== 'all') {
     request = request.gte('created_at', new Date(Date.now() - ADDED_WITHIN_DAYS[filters.addedWithin] * DAY_MS).toISOString());
@@ -208,6 +230,59 @@ export async function fetchInventoryPage(supabase: SupabaseClient, query: Invent
   const { data, error, count } = await request.range(from, from + query.pageSize - 1);
   if (error) throw new Error(`Gagal memuat data: ${error.message}`);
   return { rows: (data ?? []) as InventoryRow[], total: count ?? 0 };
+}
+
+/** Completeness figures of inventory_quality (migration 20260928000003). */
+export interface QualityFigures {
+  total: number;
+  complete: number;
+  no_coordinates: number;
+  unreadable_coordinates: number;
+  fixed_coordinates: number;
+  cleared_values: number;
+  no_name: number;
+  no_serial: number;
+  no_year: number;
+  no_daya: number;
+  no_volume: number;
+  no_code: number;
+  with_code: number;
+  /** Rows the serial number and year apply to (all but oil). */
+  equipment: number;
+  transformers: number;
+  oil: number;
+}
+
+export interface QualityGroup extends QualityFigures {
+  /** Company id, unit or sub-unit name; null for rows without a unit. */
+  key: string | null;
+  label: string | null;
+}
+
+export interface InventoryQuality {
+  /** What the groups are: companies, units of a company or sub-units of a unit. */
+  level: 'company' | 'unit' | 'sub_unit';
+  summary: QualityFigures;
+  groups: QualityGroup[];
+}
+
+const EMPTY_QUALITY: QualityFigures = {
+  total: 0, complete: 0, no_coordinates: 0, unreadable_coordinates: 0, fixed_coordinates: 0, cleared_values: 0, no_name: 0,
+  no_serial: 0, no_year: 0, no_daya: 0, no_volume: 0, no_code: 0, with_code: 0, equipment: 0, transformers: 0, oil: 0,
+};
+
+const toFigures = (raw: Record<string, unknown> | undefined): QualityFigures =>
+  Object.fromEntries(Object.keys(EMPTY_QUALITY).map((key) => [key, Number(raw?.[key]) || 0])) as unknown as QualityFigures;
+
+export async function fetchInventoryQuality(supabase: SupabaseClient, scope: DashboardScope = ALL_SCOPE): Promise<InventoryQuality> {
+  const { data, error } = await supabase.rpc('inventory_quality', { p_company_id: scope.companyId, p_unit: scope.unit, p_sub_unit: scope.subUnit });
+  if (error) throw new Error(`Gagal memuat kualitas data: ${error.message}`);
+  const raw = (data ?? {}) as { level?: InventoryQuality['level']; summary?: Record<string, unknown>; groups?: Array<Record<string, unknown>> };
+  return {
+    level: raw.level ?? 'company',
+    summary: toFigures(raw.summary),
+    groups: (raw.groups ?? []).map((group) => ({ ...toFigures(group), key: (group.key as string | null) ?? null, label: (group.label as string | null) ?? null })),
+  };
 }
 
 export interface UnitSummary {

@@ -65,6 +65,8 @@ function parseSingleComponent(componentStr: string, defaultHemisphere?: 'N' | 'S
 
   // Buang huruf arah untuk mengekstrak angka
   const cleanStr = str.replace(/[NSEW]/gi, '').trim();
+  // Tanda minus di depan berarti selatan/barat bila tidak ada huruf arah.
+  const negative = cleanStr.startsWith('-');
 
   // Cek jika murni angka desimal biasa (misal: "-7.038097" atau "-7,038097")
   const simpleDecimal = cleanStr.replace(',', '.');
@@ -80,11 +82,16 @@ function parseSingleComponent(componentStr: string, defaultHemisphere?: 'N' | 'S
 
   // Ekstraksi angka derajat, menit, detik
   // Ubah koma desimal antara dua digit menjadi titik desimal (17,151 -> 17.151)
-  const numTokens = cleanStr
+  const textTokens = cleanStr
     .replace(/(\d+),(\d+)/g, '$1.$2')
     .replace(/[^0-9.]+/g, ' ')
     .trim()
-    .split(/\s+/)
+    .split(/\s+/);
+  // "8.34345116.02921" is two values glued together, not one number:
+  // parseFloat would silently drop the digits after the second point. A short
+  // tail ("98.6698.94", "-5.17043.1") is a stray point and is dropped as before.
+  if (textTokens.some((token) => /\d\.\d+\.\d{3,}/.test(token))) return null;
+  const numTokens = textTokens
     .map((s) => parseFloat(s))
     .filter((n) => !isNaN(n));
 
@@ -114,9 +121,13 @@ function parseSingleComponent(componentStr: string, defaultHemisphere?: 'N' | 'S
     }
   }
 
+  // Menit >= 60 berarti angkanya bukan DMS, mis. "-6.524 106.797" yang
+  // salah dibaca sebagai derajat + menit.
+  if (min >= 60) return null;
+
   let decimal = deg + min / 60 + sec / 3600;
 
-  if (hemisphere === 'S' || hemisphere === 'W') {
+  if (hemisphere === 'S' || hemisphere === 'W' || (negative && !hemisphere)) {
     decimal = -Math.abs(decimal);
   }
 
@@ -153,14 +164,19 @@ export function parseDMSCoordinate(rawInput: string | null | undefined): ParsedC
     return result;
   }
 
+  // Buang kurung pembungkus "(-6.86, 107.90)" dan rapatkan minus yang diberi
+  // spasi "( - 7.06 , 108.08)". Hanya minus di awal atau setelah koma/titik
+  // koma: " - " di antara dua angka ("95.33 - 5.53") adalah pemisah.
+  const input = rawInput.replace(/[()[\]{}]/g, ' ').replace(/(^\s*|[,;]\s*)-\s+(?=\d)/g, '$1-');
+
   // Pasangan desimal biasa, termasuk koma desimal gaya Indonesia:
   // "-6,858005 107,578106", "-6,1711789, 106,7265942", "6.35 ; 106.85",
   // dan titik sebagai pemisah "-6.150885.106.659203".
   const decimalPair =
-    /^\s*(-?\d{1,3}(?:[.,]\d+)?)\s*(?:[;/|]\s*|,\s+|\s+|,(?=-?\d{1,3}\.))(-?\d{1,3}(?:[.,]\d+)?)\s*$/.exec(rawInput) ??
-    /^\s*(-?\d{1,2}\.\d+)\.(\d{2,3}\.\d+)\s*$/.exec(rawInput);
+    /^\s*(-?\d{1,3}(?:[.,]\d+)?)\s*(?:[;/|]\s*|,\s+|\s+|,(?=-?\d{1,3}\.))(-?\d{1,3}(?:[.,]\d+)?)\s*$/.exec(input) ??
+    /^\s*(-?\d{1,2}\.\d+)\.(\d{2,3}\.\d+)\s*$/.exec(input);
   // Desimal dengan huruf arah di belakang: "7.1000S 107.1263E".
-  const hemiPair = /^\s*(\d{1,2}(?:[.,]\d+)?)\s*([NS])[\s,;:]+(\d{1,3}(?:[.,]\d+)?)\s*([EW])\s*$/i.exec(rawInput);
+  const hemiPair = /^\s*(\d{1,2}(?:[.,]\d+)?)\s*([NS])[\s,;:]+(\d{1,3}(?:[.,]\d+)?)\s*([EW])\s*$/i.exec(input);
   if (hemiPair) {
     const latitude = parseFloat(hemiPair[1].replace(',', '.')) * (/s/i.test(hemiPair[2]) ? -1 : 1);
     const longitude = parseFloat(hemiPair[3].replace(',', '.')) * (/w/i.test(hemiPair[4]) ? -1 : 1);
@@ -176,7 +192,7 @@ export function parseDMSCoordinate(rawInput: string | null | undefined): ParsedC
     }
   }
 
-  const normalized = normalizeCoordinateString(rawInput);
+  const normalized = normalizeCoordinateString(input);
   if (!normalized) return result;
 
   // Kasus 1: Mengandung tanda arah eksplisit (N/S dan E/W)
@@ -353,10 +369,12 @@ export function repairIndonesianCoordinate(rawInput: string | null | undefined):
     const token = tokens[0];
     const glued = splitGlued(token);
     if (glued) return glued;
-    // Dua angka dipisah koma tanpa spasi: "-6.326832,1063923065".
+    // Dua angka dipisah koma tanpa spasi, salah satunya kehilangan titik
+    // desimal: "-6.326832,1063923065", ".-7045020,107.736247".
     const comma = token.indexOf(',');
     const [left, right] = [token.slice(0, comma), token.slice(comma + 1)];
     if (comma > 0 && /^-?\d+\.\d+$/.test(left) && /^\d+$/.test(right)) return assignPair(left, right);
+    if (comma > 0 && /^-?\d+$/.test(left) && /^\d+\.\d+$/.test(right)) return assignPair(left, right);
   }
   return null;
 }

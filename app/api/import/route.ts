@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import type { InventoryCategory } from '@/lib/inventory';
-import { BatchFileError, checkMappings, fetchExistingFingerprints, forgetBatchSheet, insertBatchRows, loadBatchSheet, transformRows } from '@/lib/import-transform';
+import { BatchFileError, buildCheckReport, checkMappings, fetchExistingFingerprints, forgetBatchSheet, insertBatchRows, loadBatchSheet, transformRows } from '@/lib/import-transform';
 
 // Large sheets (tens of thousands of rows) are parsed and inserted in one request.
 export const maxDuration = 300;
@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
 
     // 2. Baca sheet & transformasi (logika yang sama dengan pemeriksaan data)
     const sheet = await loadBatchSheet(supabase, batch);
-    const { rows, skippedEmpty } = transformRows(jenisData, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
+    const transformed = transformRows(jenisData, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
+    const { rows, skippedEmpty } = transformed;
 
     let skippedDuplicates = 0;
     let toInsert = rows;
@@ -70,10 +71,10 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
-    // 4. Update status import_batches
+    // 4. Update status import_batches, dengan laporan pemeriksaan untuk riwayat upload
     await supabase
       .from('import_batches')
-      .update({ status: 'imported' })
+      .update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(transformed, toInsert.length) })
       .eq('id', batchId);
     forgetBatchSheet(batchId);
 

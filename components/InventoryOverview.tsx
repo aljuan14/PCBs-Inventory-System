@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
-import { ALL_SCOPE, sumStats, type DashboardScope } from '@/lib/inventory-query';
+import { ALL_SCOPE, sumStats, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
 import DataTable from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
+import DataQualityPanel from '@/components/DataQualityPanel';
 import InventorySummary from '@/components/InventorySummary';
 import MapNotice from '@/components/MapNotice';
 import { useDashboardData } from '@/components/useDashboardData';
@@ -21,6 +22,14 @@ export default function InventoryOverview() {
   const { stats, companies, points, pointTotal, loading, refreshing, error, reloadKey, reload } = useDashboardData(undefined, scope);
   const companyName = companies.find((company) => company.id === scope.companyId)?.name;
   const scopeLabel = [companyName, scope.unit, scope.subUnit].filter(Boolean).join(' › ');
+
+  // Clicking a data quality indicator filters the table and brings it into view.
+  const [tablePreset, setTablePreset] = useState<{ key: number; filters: Partial<InventoryFilters> } | undefined>();
+  const tableRef = useRef<HTMLDivElement>(null);
+  const showRows = (filters: Partial<InventoryFilters>) => {
+    setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters }));
+    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const byCategory = INVENTORY_CATEGORIES.map((category) => {
     const total = stats?.[category.key].total ?? 0;
@@ -41,7 +50,8 @@ export default function InventoryOverview() {
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} />
     <InventorySummary stats={stats} loading={loading} />
     <DashboardCharts distributionData={byCategory} riskCategoryData={riskData} />
-    <DataTable companies={companies} reloadKey={reloadKey} scope={scope} />
+    <DataQualityPanel scope={scope} scopeLabel={scopeLabel} companies={companies} reloadKey={reloadKey} onDrill={setScope} onShowRows={showRows} />
+    <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" /></div>
   </div>;
 }

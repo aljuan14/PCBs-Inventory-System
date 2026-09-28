@@ -14,7 +14,7 @@
  *
  * Safe to re-run: a file whose identical content was already imported for the
  * company is skipped, and rows already in the database are skipped as duplicates.
- * Needs migrations up to 20260928000001. Uses SUPABASE_SERVICE_ROLE_KEY from
+  * Needs migrations up to 20260928000003. Uses SUPABASE_SERVICE_ROLE_KEY from
  * .env.local when present (required once row level security is tightened),
  * otherwise the anon key.
  */
@@ -26,7 +26,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { readWorkbook } from '@/lib/excel';
 import { buildSuggestedMapping } from '@/lib/import-profiles';
 import { scanWorkbook } from '@/lib/import-scan';
-import { checkMappings, fetchExistingFingerprints, insertBatchRows, transformRows } from '@/lib/import-transform';
+import { buildCheckReport, checkMappings, fetchExistingFingerprints, insertBatchRows, transformRows } from '@/lib/import-transform';
 import { getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
 import { findImportedUpload, sha256, STORAGE_BUCKET } from '@/lib/upload-store';
 
@@ -82,6 +82,8 @@ async function checkSchema() {
     ['20260927000001_upload_storage', supabase.from('import_batches').select('upload_id, sheet_name').limit(1)],
     ['20260928000001_units_and_asset_code', supabase.from('inventory_items').select('unit, sub_unit, kode_alat').limit(1)],
     ['20260928000001_units_and_asset_code', supabase.from('upload_sessions').select('file_sha256').limit(1)],
+    ['20260928000003_data_quality', supabase.from('inventory_items').select('catatan_impor, baris_excel').limit(1)],
+    ['20260928000003_data_quality', supabase.from('import_batches').select('laporan_pemeriksaan').limit(1)],
   ];
   for (const [migration, check] of checks) {
     const { error } = await check;
@@ -188,7 +190,8 @@ async function main() {
           continue;
         }
 
-        const { rows } = transformRows(category, parsed, mapping, { profile: sheet.profile, fileName: relative });
+        const transformed = transformRows(category, parsed, mapping, { profile: sheet.profile, fileName: relative });
+        const { rows } = transformed;
         const known = await existingFor(category);
         const fresh = rows.filter((row) => !known.has(row.fingerprint));
         const entry: FileResult['sheets'][number] = { sheet: sheet.sheetName, category, rows: rows.length, inserted: 0, duplicates: rows.length - fresh.length };
@@ -221,7 +224,7 @@ async function main() {
             console.log(`  ✗ ${sheet.sheetName}: ${entry.error}`);
             continue;
           }
-          await supabase.from('import_batches').update({ status: 'imported' }).eq('id', batchId);
+          await supabase.from('import_batches').update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(transformed, fresh.length) }).eq('id', batchId);
         }
 
         entry.inserted = commit ? fresh.length : 0;

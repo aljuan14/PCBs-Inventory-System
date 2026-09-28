@@ -12,6 +12,7 @@ import {
   fetchInventoryPage,
   type CategoryFilter,
   type DashboardScope,
+  type ImportNoteRow,
   type InventoryFilters,
   type InventoryRow,
   type InventorySort,
@@ -51,6 +52,8 @@ interface DataTableProps {
   reloadKey?: number;
   /** Company and unit chosen by the dashboard's own filter; replaces the table's company and unit selectors. */
   scope?: DashboardScope;
+  /** Filters set from outside (e.g. the data quality panel), applied whenever `key` changes. */
+  preset?: { key: number; filters: Partial<InventoryFilters> };
   onEdit?: (item: InventoryItem, changes: EditableInventoryFields) => Promise<void> | void;
   onDelete?: (item: InventoryItem) => Promise<void> | void;
 }
@@ -96,8 +99,52 @@ const FIELD_LABEL_CLASS = 'flex flex-col gap-1 text-[11px] font-semibold upperca
 const PCB_LABELS: Record<InventoryFilters['pcbRange'], string> = { all: 'Semua kadar PCB', safe: 'Bebas PCB (< 50 ppm)', moderate: 'Terkontaminasi (50–500 ppm)', high: 'Bahaya tinggi (> 500 ppm)', untested: 'Belum diuji' };
 const TEST_LABELS: Record<InventoryFilters['test'], string> = { all: 'Semua jenis uji', lab: 'Uji lab (GC)', cepat: 'Uji cepat (Dexil)', none: 'Belum diuji' };
 const YEAR_LABELS: Record<InventoryFilters['yearRange'], string> = { all: 'Semua tahun', pre1985: 'Sebelum 1985', '1985_1996': '1985 – 1996', from1997: '1997 ke atas', unknown: 'Tahun tidak diketahui', custom: 'Rentang tertentu' };
-const COORDINATE_LABELS: Record<InventoryFilters['coordinates'], string> = { all: 'Semua', with: 'Ada koordinat (tampil di peta)', without: 'Tanpa koordinat' };
-const MISSING_LABELS: Record<InventoryFilters['missing'], string> = { all: 'Semua', serial: 'Tanpa nomor seri', name: 'Tanpa merek', year: 'Tanpa tahun pembuatan', location: 'Tanpa lokasi' };
+const COORDINATE_LABELS: Record<InventoryFilters['coordinates'], string> = {
+  all: 'Semua',
+  with: 'Ada koordinat (tampil di peta)',
+  without: 'Tidak tampil di peta',
+  empty: 'Koordinat tidak diisi',
+  unreadable: 'Koordinat tidak terbaca / di luar wilayah',
+  fixed: 'Koordinat diperbaiki otomatis',
+};
+const MISSING_LABELS: Record<InventoryFilters['missing'], string> = {
+  all: 'Semua',
+  serial: 'Tanpa nomor seri',
+  name: 'Tanpa merek',
+  year: 'Tanpa tahun pembuatan',
+  location: 'Tanpa lokasi',
+  daya: 'Tanpa daya (kVA)',
+  volume: 'Tanpa volume minyak',
+  code: 'Tanpa kode alat',
+  cleared: 'Ada nilai dikosongkan saat impor',
+};
+const NOTE_TONES: Record<ImportNoteRow['jenis'], string> = {
+  diperbaiki: 'border-sky-200 bg-sky-50 text-sky-800',
+  dikosongkan: 'border-amber-200 bg-amber-50 text-amber-800',
+  tidak_terbaca: 'border-rose-200 bg-rose-50 text-rose-800',
+  di_luar_wilayah: 'border-rose-200 bg-rose-50 text-rose-800',
+};
+const NOTE_LABELS: Record<ImportNoteRow['jenis'], string> = { diperbaiki: 'Diperbaiki', dikosongkan: 'Dikosongkan', tidak_terbaca: 'Tidak terbaca', di_luar_wilayah: 'Di luar wilayah' };
+
+/** What the import changed or could not read in this row (catatan_impor). */
+function ImportNotes({ notes, excelRow }: { notes: ImportNoteRow[]; excelRow: unknown }) {
+  return (
+    <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Catatan impor{typeof excelRow === 'number' ? ` · baris Excel ${excelRow}` : ''}</div>
+      <ul className="space-y-1.5">
+        {notes.map((note, index) => (
+          <li key={`${note.kode}-${index}`} className="flex flex-wrap items-start gap-2 text-xs text-slate-700">
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${NOTE_TONES[note.jenis]}`}>{NOTE_LABELS[note.jenis]}</span>
+            <span className="min-w-0 flex-1">
+              {note.pesan}
+              {note.nilai_asli && <span className="ml-1 font-mono text-[11px] text-slate-500">“{note.nilai_asli}”{note.nilai_baru ? ` → ${note.nilai_baru}` : ''}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 const ADDED_LABELS: Record<InventoryFilters['addedWithin'], string> = { all: 'Kapan saja', '1d': '24 jam terakhir', '7d': '7 hari terakhir', '30d': '30 hari terakhir' };
 const SORT_LABELS: Record<InventorySort, string> = { newest: 'Terbaru diinput', oldest: 'Terlama diinput', ppm_desc: 'Kadar PCB tertinggi', year_asc: 'Tahun pembuatan tertua', year_desc: 'Tahun pembuatan terbaru', daya_desc: 'Daya terbesar', name_asc: 'Merek A–Z' };
 const CATEGORY_FILTER_LABELS: Record<CategoryFilter, string> = {
@@ -137,7 +184,7 @@ function NumberFilter({ value, onCommit, placeholder, label }: { value: number |
   );
 }
 
-export default function DataTable({ category, companies, reloadKey = 0, scope, onEdit, onDelete }: DataTableProps) {
+export default function DataTable({ category, companies, reloadKey = 0, scope, preset, onEdit, onDelete }: DataTableProps) {
   const supabase = useMemo(() => createClient(), []);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -177,6 +224,16 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
     setSeenScopeKey(scopeKey);
     setCurrentPage(1);
     setFilters((prev) => ({ ...prev, batchId: null }));
+  }
+  // A preset replaces the current filters so the table shows exactly the rows it describes.
+  const [seenPresetKey, setSeenPresetKey] = useState(preset?.key);
+  if (preset && seenPresetKey !== preset.key) {
+    setSeenPresetKey(preset.key);
+    setFilters({ ...DEFAULT_FILTERS, ...preset.filters });
+    if (!category) setSelectedType('all');
+    setSearchTerm('');
+    setDebouncedSearch('');
+    setCurrentPage(1);
   }
 
   // Tunggu sebentar setelah mengetik agar tidak mengirim query per huruf.
@@ -562,7 +619,8 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                 }
 
                 const isExpanded = expandedItemId === item.id;
-                const detailEntries = Object.entries(details[item.id] || {}).filter(([key]) => !['id', 'company_id', 'import_batch_id'].includes(key)).filter(([, value]) => value !== null && value !== undefined && value !== '');
+                const detailEntries = Object.entries(details[item.id] || {}).filter(([key]) => !['id', 'company_id', 'import_batch_id', 'catatan_impor', 'baris_excel'].includes(key)).filter(([, value]) => value !== null && value !== undefined && value !== '');
+                const importNotes = (details[item.id]?.catatan_impor ?? []) as ImportNoteRow[];
                 return (
                   <Fragment key={item.id}>
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
@@ -630,7 +688,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                       </div>
                     </td>
                   </tr>
-                  {isExpanded && <tr key={`${item.id}-details`} className="bg-slate-50/70"><td colSpan={tableColumnCount} className="px-6 py-4"><div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">{detailEntries.length > 0 ? detailEntries.map(([key, value]) => <div key={key}><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{key.replaceAll('_', ' ')}</div><div className="text-xs font-medium text-slate-700">{String(value)}</div></div>) : <span className="text-xs text-slate-500">{details[item.id] ? 'Tidak ada detail tambahan.' : 'Memuat detail...'}</span>}</div></td></tr>}
+                  {isExpanded && <tr key={`${item.id}-details`} className="bg-slate-50/70"><td colSpan={tableColumnCount} className="px-6 py-4">{importNotes.length > 0 && <ImportNotes notes={importNotes} excelRow={details[item.id]?.baris_excel} />}<div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">{detailEntries.length > 0 ? detailEntries.map(([key, value]) => <div key={key}><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{key.replaceAll('_', ' ')}</div><div className="text-xs font-medium text-slate-700">{String(value)}</div></div>) : <span className="text-xs text-slate-500">{details[item.id] ? 'Tidak ada detail tambahan.' : 'Memuat detail...'}</span>}</div></td></tr>}
                   </Fragment>
                 );
               })

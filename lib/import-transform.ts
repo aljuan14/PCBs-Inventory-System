@@ -189,6 +189,22 @@ export async function insertBatchRows(supabase: SupabaseClient, category: Invent
   return null;
 }
 
+/**
+ * What the import changed or could not read in one row, stored with the row
+ * (catatan_impor, migration 20260928000003) for the data quality report.
+ */
+export interface ImportNote {
+  kode: string;
+  jenis: 'diperbaiki' | 'dikosongkan' | 'tidak_terbaca' | 'di_luar_wilayah';
+  /** Field the note is about; "koordinat" for the coordinate. */
+  kolom: string;
+  pesan: string;
+  nilai_asli?: string;
+  nilai_baru?: string;
+}
+
+const noteText = (value: unknown) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 200));
+
 export interface TransformedRow {
   rowNumber: number;
   item: Record<string, unknown>;
@@ -216,13 +232,25 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
 
     const item: Record<string, unknown> = {};
     const derived: Record<string, string | number | null> = {};
+    const notes: ImportNote[] = [];
+    // Reports a finding for the check report and keeps it with the row.
+    const note = (level: ValidationIssue['level'], entry: ImportNote, example?: unknown) => {
+      issues.add(entry.kode, level, entry.pesan, rowNumber, example);
+      notes.push(entry);
+    };
     for (const [header, fieldKey] of active) {
       const raw = rawRow[header];
       const value = convertValue(fieldKey, types.get(fieldKey), raw);
       // A date column answered in words ("Tidak", "Tidak Pernah") just means no date.
       const wordsOnly = types.get(fieldKey) === 'date' && typeof raw === 'string' && !/\d/.test(raw);
       if (value === null && isMeaningful(raw) && !wordsOnly) {
-        issues.add(`invalid:${fieldKey}`, 'warning', `Nilai tidak terbaca di kolom "${header}" (${labels.get(fieldKey)}), dikosongkan`, rowNumber, raw instanceof Date ? raw.toISOString().slice(0, 10) : raw);
+        note('warning', {
+          kode: `invalid:${fieldKey}`,
+          jenis: 'dikosongkan',
+          kolom: fieldKey,
+          pesan: `Nilai tidak terbaca di kolom "${header}" (${labels.get(fieldKey)}), dikosongkan`,
+          nilai_asli: noteText(raw),
+        }, noteText(raw));
       }
       if (fieldKey.startsWith('@')) derived[fieldKey] = value;
       else item[fieldKey] = value;
@@ -244,16 +272,17 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
     }
     if (item.tahun_pembuatan === 0) item.tahun_pembuatan = null;
     if (typeof item.tahun_pembuatan === 'number' && (item.tahun_pembuatan < 1900 || item.tahun_pembuatan > currentYear)) {
-      issues.add('invalid:tahun_range', 'warning', `Tahun pembuatan di luar 1900–${currentYear}, dikosongkan`, rowNumber, item.tahun_pembuatan);
+      note('warning', { kode: 'invalid:tahun_range', jenis: 'dikosongkan', kolom: 'tahun_pembuatan', pesan: `Tahun pembuatan di luar 1900–${currentYear}, dikosongkan`, nilai_asli: String(item.tahun_pembuatan) }, item.tahun_pembuatan);
       item.tahun_pembuatan = null;
     }
     if (typeof item.uji_konsentrasi_ppm === 'number' && item.uji_konsentrasi_ppm < 0) {
-      issues.add('invalid:ppm_negative', 'warning', 'Konsentrasi PCBs negatif, dikosongkan', rowNumber, item.uji_konsentrasi_ppm);
+      note('warning', { kode: 'invalid:ppm_negative', jenis: 'dikosongkan', kolom: 'uji_konsentrasi_ppm', pesan: 'Konsentrasi PCBs negatif, dikosongkan', nilai_asli: String(item.uji_konsentrasi_ppm) }, item.uji_konsentrasi_ppm);
       item.uji_konsentrasi_ppm = null;
     }
 
     if (typeof item.koordinat_raw === 'string') {
-      const parsed = parseDMSCoordinate(item.koordinat_raw);
+      const raw = item.koordinat_raw;
+      const parsed = parseDMSCoordinate(raw);
       const lat = parsed.latitude as number;
       const lng = parsed.longitude as number;
       if (parsed.isValid && inIndonesia(lat, lng)) {
@@ -263,17 +292,18 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
         // Indonesia's latitude and longitude ranges do not overlap, so a swap is unambiguous.
         item.koordinat_lat = lng;
         item.koordinat_lng = lat;
-        issues.add('coordinate:swapped', 'info', 'Koordinat tertukar lintang/bujur, dibalik otomatis', rowNumber, item.koordinat_raw);
+        note('info', { kode: 'coordinate:swapped', jenis: 'diperbaiki', kolom: 'koordinat', pesan: 'Koordinat tertukar lintang/bujur, dibalik otomatis', nilai_asli: raw, nilai_baru: `${lng}, ${lat}` }, raw);
       } else {
-        const repaired = repairIndonesianCoordinate(item.koordinat_raw);
+        const repaired = repairIndonesianCoordinate(raw);
         if (repaired) {
           item.koordinat_lat = repaired.latitude;
           item.koordinat_lng = repaired.longitude;
-          issues.add('coordinate:repaired', 'info', 'Koordinat berformat tidak baku, diperbaiki otomatis (periksa contoh)', rowNumber, `${item.koordinat_raw} → ${repaired.latitude}, ${repaired.longitude}`);
+          const fixed = `${repaired.latitude}, ${repaired.longitude}`;
+          note('info', { kode: 'coordinate:repaired', jenis: 'diperbaiki', kolom: 'koordinat', pesan: 'Koordinat berformat tidak baku, diperbaiki otomatis (periksa contoh)', nilai_asli: raw, nilai_baru: fixed }, `${raw} → ${fixed}`);
         } else if (!parsed.isValid) {
-          issues.add('coordinate:unreadable', 'warning', 'Koordinat tidak terbaca (tidak tampil di peta)', rowNumber, item.koordinat_raw);
+          note('warning', { kode: 'coordinate:unreadable', jenis: 'tidak_terbaca', kolom: 'koordinat', pesan: 'Koordinat tidak terbaca (tidak tampil di peta)', nilai_asli: raw }, raw);
         } else {
-          issues.add('coordinate:outside', 'warning', 'Koordinat di luar wilayah Indonesia (tidak tampil di peta)', rowNumber, item.koordinat_raw);
+          note('warning', { kode: 'coordinate:outside', jenis: 'di_luar_wilayah', kolom: 'koordinat', pesan: 'Koordinat di luar wilayah Indonesia (tidak tampil di peta)', nilai_asli: raw, nilai_baru: `${lat}, ${lng}` }, raw);
         }
       }
     }
@@ -284,6 +314,8 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
       }
     }
 
+    item.catatan_impor = notes.length > 0 ? notes : null;
+    item.baris_excel = rowNumber;
     rows.push({ rowNumber, item, fingerprint: fingerprint(category, item) });
   });
 
@@ -296,6 +328,30 @@ export function transformRows(category: InventoryCategory, sheet: LoadedSheet, m
   }
 
   return { rows, skippedEmpty, issues };
+}
+
+/**
+ * The check report kept with an import batch (laporan_pemeriksaan), so what
+ * was found at upload can be reviewed later in the upload history.
+ */
+export interface CheckReport {
+  checkedAt: string;
+  dataRows: number;
+  skippedEmpty: number;
+  skippedDuplicates: number;
+  importedRows: number;
+  issues: ValidationIssue[];
+}
+
+export function buildCheckReport(result: { rows: TransformedRow[]; skippedEmpty: number; issues: IssueCollector }, importedRows: number): CheckReport {
+  return {
+    checkedAt: new Date().toISOString(),
+    dataRows: result.rows.length,
+    skippedEmpty: result.skippedEmpty,
+    skippedDuplicates: result.rows.length - importedRows,
+    importedRows,
+    issues: result.issues.list(),
+  };
 }
 
 /** Example values per column, to help the admin judge a mapping at a glance. */

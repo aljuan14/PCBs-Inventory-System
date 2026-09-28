@@ -123,6 +123,7 @@ Jalankan **semua** berkas di `supabase/migrations/` **secara berurutan** (nama f
 8. `20260927000002_inventory_filters.sql` — kolom `import_batch_id` di view & indeks untuk filter tabel
 9. `20260928000001_units_and_asset_code.sql` — kolom `unit`, `sub_unit`, `kode_alat`, fungsi `inventory_units`, sidik berkas upload
 10. `20260928000002_stats_by_unit.sql` — `inventory_stats` per unit & sub-unit (filter unit di dashboard nasional)
+11. `20260928000003_data_quality.sql` — catatan impor per baris, laporan pemeriksaan per batch, fungsi `inventory_quality` (**wajib** sebelum impor berikutnya)
 
 Lalu jalankan `supabase/seed.sql` untuk mengisi kamus field dan contoh perusahaan.
 
@@ -229,7 +230,7 @@ npx tsx scripts/import-folder.ts "Data-inventaris/Data-PLN/0. Inven Ident PLN" -
 - Setiap berkas disimpan ke Storage dengan sesi upload sendiri dan satu batch per sheet, sehingga tampil dan bisa difilter sama seperti upload lewat web.
 - **Aman dijalankan ulang**: berkas identik yang sudah diimpor dilewati, dan baris yang sudah ada di database dilewati sebagai duplikat. Kalau proses terhenti di tengah, cukup jalankan perintah yang sama lagi.
 - Perusahaan dibuat otomatis bila belum ada. Bila `SUPABASE_SERVICE_ROLE_KEY` ada di `.env.local`, kunci itu yang dipakai (diperlukan setelah autentikasi & RLS diperketat).
-- Membutuhkan migrasi sampai `20260928000001`.
+- Membutuhkan migrasi sampai `20260928000003`.
 
 Hasil dry run seluruh data PLN (28 Sep 2026): 44 berkas, **370.868 baris** (331.141 trafo digunakan, 36.423 trafo tidak digunakan, 3.201 kapasitor, 103 minyak dielektrik) dari 28 unit induk. Semua baris mendapat unit, dan 1.086 baris duplikat antar-sheet dilewati.
 
@@ -284,8 +285,9 @@ Hasil atas 45 berkas PLN (27 Sep 2026): 129 sheet / 370.604 baris terbaca, koord
 - [x] Struktur unit perusahaan (PLN: Unit Induk › Unit Pelaksana) & filter bertingkat
 - [x] Import massal satu folder (`scripts/import-folder.ts`)
 - [x] Filter perusahaan › unit › sub-unit di dashboard nasional (ringkasan, grafik, tabel & peta)
+- [x] Kualitas data: skor kelengkapan & indikator di dashboard, laporan Excel (daftar temuan) & PDF, riwayat upload dengan laporan pemeriksaan
 - [ ] Upload banyak berkas sekaligus lewat web
-- [ ] Rekap & perbandingan per unit di dashboard
+- [x] Rekap & perbandingan per unit di dashboard (tabel perbandingan di panel kualitas data)
 - [ ] Mode *update* data (upsert berdasarkan identitas alat) & riwayat perubahan
 - [ ] Ekspor laporan (Excel/PDF)
 - [ ] Autentikasi, peran admin/viewer, & Row Level Security
