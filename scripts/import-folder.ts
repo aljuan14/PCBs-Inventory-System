@@ -13,7 +13,8 @@
  *   --report <file> also write the summary as JSON
  *
  * Safe to re-run: a file whose identical content was already imported for the
- * company is skipped, and rows already in the database are skipped as duplicates.
+ * company is skipped, and rows already in the database or repeated in the file
+ * are skipped as duplicates.
   * Needs migrations up to 20260928000003. Uses SUPABASE_SERVICE_ROLE_KEY from
  * .env.local when present (required once row level security is tightened),
  * otherwise the anon key.
@@ -191,10 +192,10 @@ async function main() {
         }
 
         const transformed = transformRows(category, parsed, mapping, { profile: sheet.profile, fileName: relative });
-        const { rows } = transformed;
+        const { rows, skippedCopies } = transformed;
         const known = await existingFor(category);
         const fresh = rows.filter((row) => !known.has(row.fingerprint));
-        const entry: FileResult['sheets'][number] = { sheet: sheet.sheetName, category, rows: rows.length, inserted: 0, duplicates: rows.length - fresh.length };
+        const entry: FileResult['sheets'][number] = { sheet: sheet.sheetName, category, rows: rows.length + skippedCopies, inserted: 0, duplicates: skippedCopies + rows.length - fresh.length };
         result.sheets.push(entry);
 
         if (commit && fresh.length > 0) {

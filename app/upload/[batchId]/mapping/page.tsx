@@ -362,7 +362,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
           </p>
           {(importSuccess.skippedEmpty > 0 || importSuccess.skippedDuplicates > 0) && (
             <p className="mt-2 text-xs text-slate-500 font-medium">
-              Dilewati: {formatNumber(importSuccess.skippedEmpty)} baris formulir kosong &bull; {formatNumber(importSuccess.skippedDuplicates)} baris yang sudah ada di database.
+              Dilewati: {formatNumber(importSuccess.skippedEmpty)} baris kosong atau di luar formulir &bull; {formatNumber(importSuccess.skippedDuplicates)} baris duplikat.
             </p>
           )}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -457,7 +457,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <Stat label="Akan diimpor" value={formatNumber(importCount)} tone="text-emerald-700" />
                   <Stat label="Baris data di sheet" value={formatNumber(report.dataRows)} />
-                  <Stat label="Formulir kosong (dilewati)" value={formatNumber(report.skippedEmpty)} tone="text-slate-500" />
+                  <Stat label="Kosong / di luar formulir (dilewati)" value={formatNumber(report.skippedEmpty)} tone="text-slate-500" />
                   <Stat label="Sudah ada di database" value={formatNumber(duplicates)} tone={duplicates > 0 ? 'text-amber-700' : 'text-slate-500'} />
                 </div>
 
