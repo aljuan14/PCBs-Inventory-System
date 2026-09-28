@@ -11,6 +11,7 @@ import {
   fetchInventoryDetails,
   fetchInventoryPage,
   type CategoryFilter,
+  type DashboardScope,
   type InventoryFilters,
   type InventoryRow,
   type InventorySort,
@@ -48,6 +49,8 @@ interface DataTableProps {
   companies: CompanyOption[];
   /** Change to refetch the current page, e.g. after an edit elsewhere. */
   reloadKey?: number;
+  /** Company and unit chosen by the dashboard's own filter; replaces the table's company and unit selectors. */
+  scope?: DashboardScope;
   onEdit?: (item: InventoryItem, changes: EditableInventoryFields) => Promise<void> | void;
   onDelete?: (item: InventoryItem) => Promise<void> | void;
 }
@@ -134,7 +137,7 @@ function NumberFilter({ value, onCommit, placeholder, label }: { value: number |
   );
 }
 
-export default function DataTable({ category, companies, reloadKey = 0, onEdit, onDelete }: DataTableProps) {
+export default function DataTable({ category, companies, reloadKey = 0, scope, onEdit, onDelete }: DataTableProps) {
   const supabase = useMemo(() => createClient(), []);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -157,6 +160,24 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const companyNames = useMemo(() => new Map(companies.map((company) => [company.id, company.name])), [companies]);
+
+  // A dashboard scope overrides the table's own company and unit filters.
+  const scoped = scope !== undefined;
+  const scopeCompanyId = scope?.companyId ?? null;
+  const scopeUnit = scope?.unit ?? null;
+  const scopeSubUnit = scope?.subUnit ?? null;
+  const appliedFilters = useMemo(
+    () => (scoped ? { ...filters, companyId: scopeCompanyId, unit: scopeUnit, subUnit: scopeSubUnit } : filters),
+    [filters, scoped, scopeCompanyId, scopeUnit, scopeSubUnit],
+  );
+  // A new scope starts from the first page, and a batch of another company no longer applies.
+  const scopeKey = `${scopeCompanyId}|${scopeUnit}|${scopeSubUnit}`;
+  const [seenScopeKey, setSeenScopeKey] = useState(scopeKey);
+  if (seenScopeKey !== scopeKey) {
+    setSeenScopeKey(scopeKey);
+    setCurrentPage(1);
+    setFilters((prev) => ({ ...prev, batchId: null }));
+  }
 
   // Tunggu sebentar setelah mengetik agar tidak mengirim query per huruf.
   useEffect(() => {
@@ -213,11 +234,11 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
   useEffect(() => {
     if (!showAdvanced) return;
     let cancelled = false;
-    fetchImportedBatches(supabase, filters.companyId)
+    fetchImportedBatches(supabase, appliedFilters.companyId)
       .then((rows) => { if (!cancelled) setBatches(category ? rows.filter((row) => row.jenis_data === category) : rows); })
       .catch(() => { if (!cancelled) setBatches([]); });
     return () => { cancelled = true; };
-  }, [supabase, showAdvanced, filters.companyId, category]);
+  }, [supabase, showAdvanced, appliedFilters.companyId, category]);
 
   const effectiveCategory = category ?? selectedType;
   const hasTransformers = effectiveCategory === 'all' || effectiveCategory.startsWith('transformator');
@@ -227,11 +248,11 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
   const query = useMemo(() => ({
     category: effectiveCategory,
     search: debouncedSearch,
-    filters,
+    filters: appliedFilters,
     sort,
     page: currentPage,
     pageSize: PAGE_SIZE,
-  }), [effectiveCategory, debouncedSearch, filters, sort, currentPage]);
+  }), [effectiveCategory, debouncedSearch, appliedFilters, sort, currentPage]);
 
   // Active filters as removable chips.
   const batchLabel = (id: string) => {
@@ -347,10 +368,12 @@ export default function DataTable({ category, companies, reloadKey = 0, onEdit, 
           </select>
         )}
 
-        <select aria-label="Perusahaan" value={filters.companyId ?? 'all'} onChange={(e) => selectCompany(e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
-          <option value="all">Semua perusahaan</option>
-          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        {!scoped && (
+          <select aria-label="Perusahaan" value={filters.companyId ?? 'all'} onChange={(e) => selectCompany(e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
+            <option value="all">Semua perusahaan</option>
+            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
 
         {/* Unit dan sub-unit perusahaan terpilih (PLN: Unit Induk › Unit Pelaksana) */}
         {unitOptions.length > 0 && (

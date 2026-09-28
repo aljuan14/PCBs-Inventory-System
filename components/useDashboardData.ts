@@ -1,17 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { InventoryCategory } from '@/lib/inventory';
-import { fetchInventoryStats, fetchMapPoints, type InventoryStats } from '@/lib/inventory-query';
+import { ALL_SCOPE, fetchInventoryStats, fetchMapPoints, type DashboardScope, type InventoryStats } from '@/lib/inventory-query';
 import { toInventoryItem, type CompanyOption } from '@/components/DataTable';
 import type { MapPoint } from '@/components/MapLeaflet';
 
 /**
  * Figures, company list and (capped) map points for a dashboard. The table
  * loads its own pages; bump `reloadKey` after edits so it refetches too.
+ * `scope` narrows the figures and map to a company, unit or sub-unit.
  */
-export function useDashboardData(category?: InventoryCategory) {
+export function useDashboardData(category?: InventoryCategory, scope: DashboardScope = ALL_SCOPE) {
   const supabase = useMemo(() => createClient(), []);
   const [stats, setStats] = useState<InventoryStats | null>(null);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
@@ -21,32 +22,42 @@ export function useDashboardData(category?: InventoryCategory) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Only the latest request may update the state: switching filters quickly
+  // must not let an older, slower response overwrite a newer one.
+  const latestRequest = useRef(0);
+  const { companyId, unit, subUnit } = scope;
 
   const fetchAll = useCallback(async () => {
     const [{ data: companyRows, error: companyError }, nextStats, map] = await Promise.all([
       supabase.from('companies').select('id, nama_perusahaan').order('nama_perusahaan'),
-      fetchInventoryStats(supabase),
-      fetchMapPoints(supabase, category ?? 'all'),
+      fetchInventoryStats(supabase, { companyId, unit, subUnit }),
+      fetchMapPoints(supabase, category ?? 'all', { companyId, unit, subUnit }),
     ]);
     if (companyError) throw new Error(companyError.message);
     const companyOptions = (companyRows ?? []).map((row) => ({ id: row.id as string, name: row.nama_perusahaan as string }));
     const names = new Map(companyOptions.map((company) => [company.id, company.name]));
     return { companyOptions, nextStats, map, names };
-  }, [supabase, category]);
+  }, [supabase, category, companyId, unit, subUnit]);
 
-  const load = useCallback(() => fetchAll()
-    .then(({ companyOptions, nextStats, map, names }) => {
-      setCompanies(companyOptions);
-      setStats(nextStats);
-      setPoints(map.rows.map((row) => toInventoryItem(row, names) as MapPoint));
-      setPointTotal(map.total);
-      setError(null);
-    })
-    .catch((err: Error) => setError(err.message))
-    .finally(() => {
-      setLoading(false);
-      setRefreshing(false);
-    }), [fetchAll]);
+  const load = useCallback(() => {
+    const request = ++latestRequest.current;
+    const isLatest = () => request === latestRequest.current;
+    return fetchAll()
+      .then(({ companyOptions, nextStats, map, names }) => {
+        if (!isLatest()) return;
+        setCompanies(companyOptions);
+        setStats(nextStats);
+        setPoints(map.rows.map((row) => toInventoryItem(row, names) as MapPoint));
+        setPointTotal(map.total);
+        setError(null);
+      })
+      .catch((err: Error) => { if (isLatest()) setError(err.message); })
+      .finally(() => {
+        if (!isLatest()) return;
+        setLoading(false);
+        setRefreshing(false);
+      });
+  }, [fetchAll]);
 
   useEffect(() => {
     load();

@@ -30,8 +30,21 @@ const EMPTY_STATS: CategoryStats = {
   lab_at_least_50: 0, risk_safe: 0, risk_moderate: 0, risk_high: 0, volume_l: 0, with_coordinates: 0,
 };
 
-export async function fetchInventoryStats(supabase: SupabaseClient, companyId?: string | null): Promise<InventoryStats> {
-  const { data, error } = await supabase.rpc('inventory_stats', { p_company_id: companyId ?? null });
+/** Company, unit and sub-unit a dashboard is narrowed to; null means all. */
+export interface DashboardScope {
+  companyId: string | null;
+  unit: string | null;
+  subUnit: string | null;
+}
+
+export const ALL_SCOPE: DashboardScope = { companyId: null, unit: null, subUnit: null };
+
+export async function fetchInventoryStats(supabase: SupabaseClient, scope: DashboardScope = ALL_SCOPE): Promise<InventoryStats> {
+  // The unit arguments need migration 20260928000002; leave them out when unused.
+  const args: Record<string, string | null> = { p_company_id: scope.companyId };
+  if (scope.unit) args.p_unit = scope.unit;
+  if (scope.subUnit) args.p_sub_unit = scope.subUnit;
+  const { data, error } = await supabase.rpc('inventory_stats', args);
   if (error) throw new Error(`Gagal memuat ringkasan: ${error.message}`);
   const raw = (data ?? {}) as Partial<Record<InventoryCategory, Partial<CategoryStats>>>;
   return Object.fromEntries(
@@ -237,7 +250,7 @@ export async function fetchInventoryDetails(supabase: SupabaseClient, category: 
  * Points for the map, capped: drawing hundreds of thousands of markers would
  * freeze the browser. Returns the points loaded and how many exist in total.
  */
-export async function fetchMapPoints(supabase: SupabaseClient, category: CategoryFilter, limit = 5000) {
+export async function fetchMapPoints(supabase: SupabaseClient, category: CategoryFilter, scope: DashboardScope = ALL_SCOPE, limit = 5000) {
   const pageSize = 1000;
   const rows: InventoryRow[] = [];
   let total = 0;
@@ -249,6 +262,9 @@ export async function fetchMapPoints(supabase: SupabaseClient, category: Categor
       .not('lng', 'is', null);
     if (category === 'transformator') request = request.in('category', TRAFO_CATEGORIES);
     else if (category !== 'all') request = request.eq('category', category);
+    if (scope.companyId) request = request.eq('company_id', scope.companyId);
+    if (scope.unit) request = request.eq('unit', scope.unit);
+    if (scope.subUnit) request = request.eq('sub_unit', scope.subUnit);
     const { data, error, count } = await request.order('id').range(from, Math.min(from + pageSize, limit) - 1);
     if (error) throw new Error(`Gagal memuat titik peta: ${error.message}`);
     if (from === 0) total = count ?? 0;

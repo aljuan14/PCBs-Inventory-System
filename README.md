@@ -122,6 +122,7 @@ Jalankan **semua** berkas di `supabase/migrations/` **secara berurutan** (nama f
 7. `20260927000001_upload_storage.sql` — bucket `pcbs-files`, tabel `upload_sessions`, konteks batch di `import_batches` (**wajib** untuk fitur upload)
 8. `20260927000002_inventory_filters.sql` — kolom `import_batch_id` di view & indeks untuk filter tabel
 9. `20260928000001_units_and_asset_code.sql` — kolom `unit`, `sub_unit`, `kode_alat`, fungsi `inventory_units`, sidik berkas upload
+10. `20260928000002_stats_by_unit.sql` — `inventory_stats` per unit & sub-unit (filter unit di dashboard nasional)
 
 Lalu jalankan `supabase/seed.sql` untuk mengisi kamus field dan contoh perusahaan.
 
@@ -282,6 +283,7 @@ Hasil atas 45 berkas PLN (27 Sep 2026): 129 sheet / 370.604 baris terbaca, koord
 - [x] Simpan **Kode Trafo** sebagai identitas alat (dasar mode update)
 - [x] Struktur unit perusahaan (PLN: Unit Induk › Unit Pelaksana) & filter bertingkat
 - [x] Import massal satu folder (`scripts/import-folder.ts`)
+- [x] Filter perusahaan › unit › sub-unit di dashboard nasional (ringkasan, grafik, tabel & peta)
 - [ ] Upload banyak berkas sekaligus lewat web
 - [ ] Rekap & perbandingan per unit di dashboard
 - [ ] Mode *update* data (upsert berdasarkan identitas alat) & riwayat perubahan
