@@ -44,8 +44,8 @@ next-env.d.ts
 # local upload working files (see lib/upload-store.ts)
 /tmp_uploads/
 
-# real company inventory data — keep out of the repo
-/Data-inventaris/Data-PLN/
+# inventory workbooks (KLHK templates and real company data) — keep out of the repo
+/Data-inventaris/
 
 # LibreOffice / OnlyOffice lock files
 .~lock.*#
