@@ -1,127 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { parseExcelWithSmartHeader } from '@/lib/excel';
-import fs from 'fs';
-import path from 'path';
+import { readWorkbook } from '@/lib/excel';
+import { scanWorkbook } from '@/lib/import-scan';
+import { downloadWorkbook, findImportedUpload, isUploadId, readUploadSession, saveUploadScan, sha256, type UploadSheet } from '@/lib/upload-store';
 
+// Parsing a large multi-sheet workbook can take a while.
+export const maxDuration = 60;
+
+/**
+ * Step 1 of an import: scan every sheet of a workbook the browser already put
+ * in Storage (see ./init). Each sheet is classified (profile, category,
+ * include by default) for the admin to review; batches are only created once
+ * the admin confirms (see ./confirm).
+ */
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
-    let companyId = formData.get('company_id') as string | null;
-    const newCompanyName = formData.get('new_company_name') as string | null;
-    const jenisData = formData.get('jenis_data') as string | null;
-
-    if (!file) {
-      return NextResponse.json({ error: 'File Excel wajib diunggah.' }, { status: 400 });
-    }
-
-    if (!jenisData || !['transformator_digunakan', 'transformator_tidak_digunakan', 'kapasitor', 'minyak_dielektrik'].includes(jenisData)) {
-      return NextResponse.json({ error: 'Jenis data inventaris tidak valid.' }, { status: 400 });
+    const { uploadId } = (await req.json()) as { uploadId?: string };
+    if (!isUploadId(uploadId)) {
+      return NextResponse.json({ error: 'ID unggahan tidak valid.' }, { status: 400 });
     }
 
     const supabase = await createClient();
-
-    // 1. Jika ada nama perusahaan baru, simpan ke tabel companies
-    if (!companyId && newCompanyName?.trim()) {
-      const { data: newComp, error: compErr } = await supabase
-        .from('companies')
-        .insert({ nama_perusahaan: newCompanyName.trim() })
-        .select('id')
-        .single();
-
-      if (compErr) {
-        console.error('Error inserting company:', compErr);
-        return NextResponse.json({ error: `Gagal menyimpan perusahaan: ${compErr.message}` }, { status: 500 });
-      }
-      companyId = newComp.id;
+    const session = await readUploadSession(supabase, uploadId);
+    if (!session) {
+      return NextResponse.json({ error: 'Sesi unggahan tidak ditemukan. Unggah ulang berkasnya.' }, { status: 404 });
     }
 
-    if (!companyId) {
-      return NextResponse.json({ error: 'Perusahaan wajib dipilih atau diisi.' }, { status: 400 });
+    const buffer = await downloadWorkbook(supabase, session.storage_path);
+    if (!buffer) {
+      return NextResponse.json({ error: 'Berkas belum tersimpan di penyimpanan. Unggah ulang berkasnya.' }, { status: 404 });
     }
 
-    // 2. Baca buffer file
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // 3. Parse headers & preview rows
-    const parseResult = parseExcelWithSmartHeader(arrayBuffer);
-
-    // 4. Buat record import_batches di database
-    const { data: batch, error: batchErr } = await supabase
-      .from('import_batches')
-      .insert({
-        company_id: companyId,
-        jenis_data: jenisData,
-        nama_file_asli: file.name,
-        status: 'pending_mapping',
-      })
-      .select('id')
-      .single();
-
-    if (batchErr) {
-      console.error('Error creating import batch:', batchErr);
-      return NextResponse.json({ error: `Gagal membuat batch import: ${batchErr.message}` }, { status: 500 });
-    }
-
-    const batchId = batch.id;
-
-    // 5. Simpan file secara lokal ke tmp_uploads sebagai cadangan instan
-    const uploadDir = path.join(process.cwd(), 'tmp_uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    const localFilePath = path.join(uploadDir, `${batchId}.xlsx`);
-    fs.writeFileSync(localFilePath, buffer);
-
-    // Simpan juga json preview untuk akses cepat di halaman mapping
-    const metaPath = path.join(uploadDir, `${batchId}.json`);
-    fs.writeFileSync(
-      metaPath,
-      JSON.stringify({
-        batchId,
-        companyId,
-        jenisData,
-        fileName: file.name,
-        headers: parseResult.headers,
-        totalRows: parseResult.totalRows,
-        previewRows: parseResult.previewRows,
-      })
-    );
-
-    // 6. Coba upload ke Supabase Storage (opsional)
+    let workbook;
     try {
-      const storagePath = `${batchId}/${file.name}`;
-      const { error: storageErr } = await supabase.storage
-        .from('pcbs-files')
-        .upload(storagePath, buffer, {
-          contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          upsert: true,
-        });
-
-      if (!storageErr) {
-        await supabase
-          .from('import_batches')
-          .update({ file_storage_path: storagePath })
-          .eq('id', batchId);
-      }
-    } catch (stErr) {
-      console.warn('Supabase storage upload skipped/warning:', stErr);
+      workbook = readWorkbook(buffer);
+    } catch (parseErr) {
+      return NextResponse.json({ error: `Berkas tidak dapat dibaca sebagai Excel: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}` }, { status: 400 });
     }
+
+    const sheets: UploadSheet[] = scanWorkbook(workbook).map(({ sheet }) => sheet);
+
+    if (sheets.every((sheet) => sheet.headers.length === 0)) {
+      return NextResponse.json({ error: 'Tidak ada sheet dengan header tabel yang dapat dikenali.' }, { status: 400 });
+    }
+
+    const fileSha256 = await sha256(buffer);
+    await saveUploadScan(supabase, uploadId, sheets, fileSha256);
+    // Same file already imported for this company: the review step warns the admin.
+    const previousUpload = await findImportedUpload(supabase, session.company_id, fileSha256, uploadId);
 
     return NextResponse.json({
       success: true,
-      batchId,
-      companyId,
-      jenisData,
-      fileName: file.name,
-      headers: parseResult.headers,
-      previewRows: parseResult.previewRows,
-      totalRows: parseResult.totalRows,
+      uploadId,
+      companyId: session.company_id,
+      fileName: session.file_name,
+      previousUpload,
+      // Sample rows stay server-side (only the mapping suggestion needs them).
+      sheets: sheets.map(({ headers, ...sheet }) => ({ ...sheet, sampleRows: undefined, headerCount: headers.length, headers: headers.slice(0, 60) })),
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Upload error:', err);
-    return NextResponse.json({ error: err.message || 'Terjadi kesalahan pada server saat memproses file.' }, { status: 500 });
+    return NextResponse.json({ error: (err instanceof Error && err.message) || 'Terjadi kesalahan pada server saat memproses file.' }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import type { Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 export interface MapPoint {
@@ -16,6 +17,11 @@ export interface MapPoint {
   status?: string | null;
 }
 
+// Popup content is HTML built from spreadsheet values; escape them so a cell
+// cannot inject markup or scripts.
+const escapeHtml = (value: unknown) =>
+  String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] as string);
+
 interface MapProps {
   points: MapPoint[];
   height?: string;
@@ -23,7 +29,7 @@ interface MapProps {
 
 export default function MapLeaflet({ points, height = '480px' }: MapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !mapContainerRef.current) return;
@@ -50,7 +56,7 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
       const map = mapInstanceRef.current;
 
       // Bersihkan marker lama
-      map.eachLayer((layer: any) => {
+      map.eachLayer((layer) => {
         if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
           map.removeLayer(layer);
         }
@@ -124,13 +130,13 @@ export default function MapLeaflet({ points, height = '480px' }: MapProps) {
 
         const popupContent = `
           <div style="font-family: sans-serif; font-size: 13px; line-height: 1.4; min-width: 200px;">
-            <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #0f172a;">${point.name || 'Alat'}</div>
-            <div style="color: #64748b; font-size: 11px; margin-bottom: 8px;">${point.companyName || 'Perusahaan'}</div>
+            <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #0f172a;">${escapeHtml(point.name || 'Alat')}</div>
+            <div style="color: #64748b; font-size: 11px; margin-bottom: 8px;">${escapeHtml(point.companyName || 'Perusahaan')}</div>
             <div style="margin-bottom: 4px;"><strong>Jenis:</strong> ${typeBadge}</div>
-            ${point.serialNumber ? `<div><strong>No. Seri:</strong> ${point.serialNumber}</div>` : ''}
-            ${point.location ? `<div><strong>Lokasi:</strong> ${point.location}</div>` : ''}
+            ${point.serialNumber ? `<div><strong>No. Seri:</strong> ${escapeHtml(point.serialNumber)}</div>` : ''}
+            ${point.location ? `<div><strong>Lokasi:</strong> ${escapeHtml(point.location)}</div>` : ''}
             <div style="margin-top: 6px; padding: 4px 6px; border-radius: 4px; display: inline-block; font-size: 11px; font-weight: 600;" class="${pcbColor}">
-              PCB: ${point.pcbConcentration !== undefined && point.pcbConcentration !== null ? `${point.pcbConcentration} ppm` : 'Belum diuji'}
+              PCB: ${point.pcbConcentration !== undefined && point.pcbConcentration !== null ? `${point.pcbConcentration} ppm · ${pcbClass}` : pcbClass}
             </div>
             <div style="margin-top: 6px; font-size: 10px; color: #94a3b8;">
               Koordinat: ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}

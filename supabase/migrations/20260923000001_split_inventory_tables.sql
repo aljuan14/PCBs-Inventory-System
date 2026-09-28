@@ -23,14 +23,25 @@ ADD CONSTRAINT import_batches_jenis_data_check CHECK (
     )
 );
 
--- Preserve the prototype tables before reusing their names for official schemas.
-ALTER TABLE IF EXISTS public.transformator
-RENAME TO transformator_legacy;
+-- Preserve prototype tables before reusing their names for official schemas.
+-- The guards make this migration safe to rerun after a partial execution.
+DO $$
+BEGIN
+    IF to_regclass('public.transformator') IS NOT NULL
+       AND to_regclass('public.transformator_legacy') IS NULL THEN
+        ALTER TABLE public.transformator RENAME TO transformator_legacy;
+    END IF;
 
-ALTER TABLE IF EXISTS public.kapasitor RENAME TO kapasitor_legacy;
+    IF to_regclass('public.kapasitor') IS NOT NULL
+       AND to_regclass('public.kapasitor_legacy') IS NULL THEN
+        ALTER TABLE public.kapasitor RENAME TO kapasitor_legacy;
+    END IF;
 
-ALTER TABLE IF EXISTS public.minyak_dielektrik
-RENAME TO minyak_dielektrik_legacy;
+    IF to_regclass('public.minyak_dielektrik') IS NOT NULL
+       AND to_regclass('public.minyak_dielektrik_legacy') IS NULL THEN
+        ALTER TABLE public.minyak_dielektrik RENAME TO minyak_dielektrik_legacy;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.transformator_digunakan (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
