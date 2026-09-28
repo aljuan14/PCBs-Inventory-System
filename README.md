@@ -195,6 +195,7 @@ Tidak ada berkas yang disimpan di disk server (`lib/upload-store.ts`): workbook 
 ├── scripts/
 │   ├── check-import.ts                        # Dry-run pipeline import atas berkas Excel (tanpa database)
 │   ├── import-folder.ts                       # Import massal satu folder untuk satu perusahaan
+│   ├── purge-company.ts                       # Hapus semua data impor satu perusahaan (untuk impor ulang)
 │   ├── test-units.ts                          # Uji normalisasi nama unit PLN
 │   ├── test-dms.ts                            # Uji regresi parser koordinat
 │   └── test-supabase.ts                       # Uji koneksi Supabase
@@ -230,6 +231,20 @@ npx tsx scripts/import-folder.ts "Data-inventaris/Data-PLN/0. Inven Ident PLN" -
 - Membutuhkan migrasi sampai `20260928000001`.
 
 Hasil dry run seluruh data PLN (28 Sep 2026): 44 berkas, **370.868 baris** (331.141 trafo digunakan, 36.423 trafo tidak digunakan, 3.201 kapasitor, 103 minyak dielektrik) dari 28 unit induk. Semua baris mendapat unit, dan 1.086 baris duplikat antar-sheet dilewati.
+
+### Mengosongkan data satu perusahaan sebelum impor ulang
+
+`import-folder.ts` tidak menimpa data lama: baris yang sudah ada dilewati dan berkas identik tidak diproses lagi. Untuk impor ulang dari nol, kosongkan dulu data perusahaan tersebut:
+
+```bash
+# Dry run: hanya menghitung apa yang akan dihapus
+npx tsx scripts/purge-company.ts --company "PT PLN (Persero)"
+
+# Hapus sungguhan
+npx tsx scripts/purge-company.ts --company "PT PLN (Persero)" --commit
+```
+
+Menghapus baris inventaris di keempat tabel kategori, batch impor, berkas Excel di Storage, lalu sesi unggah (beserta hash berkasnya). Data perusahaan sendiri tetap ada. Aman dijalankan ulang bila terhenti di tengah.
 
 ---
 
