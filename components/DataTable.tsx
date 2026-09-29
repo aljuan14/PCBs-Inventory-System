@@ -35,6 +35,12 @@ export interface InventoryItem {
   pcbConcentration?: number | null;
   status?: string | null;
   capacity?: string | number | null;
+  year?: number | null;
+  testType?: string | null;
+  /** Coordinates as written in the workbook. */
+  rawCoordinate?: string | null;
+  notes?: ImportNoteRow[];
+  excelRow?: number | null;
   createdAt?: string;
   details?: Record<string, unknown>;
 }
@@ -94,9 +100,73 @@ export function toInventoryItem(row: InventoryRow, companyNames: Map<string, str
     pcbConcentration: toNumber(row.ppm),
     status: row.status,
     capacity: daya !== null ? `${daya} kVA` : volume !== null ? `${volume} L` : null,
+    year: row.tahun_pembuatan ?? null,
+    testType: row.uji_jenis ?? null,
+    rawCoordinate: row.koordinat_raw ?? null,
+    notes: row.catatan_impor ?? [],
+    excelRow: row.baris_excel ?? null,
     createdAt: row.created_at,
   };
 }
+
+/**
+ * Columns an active filter is about. They are shown and highlighted while the
+ * filter is on, so rows opened from the map, a chart or a data quality
+ * finding show the value they were picked for (e.g. coordinates for a map point).
+ */
+type FocusColumn = 'merek' | 'kode' | 'lokasi' | 'koordinat' | 'tahun' | 'daya' | 'volume' | 'pcb' | 'temuan' | 'baris' | 'tanggal';
+
+// catatan_impor `kolom` (a field key, or "koordinat") → table column.
+const NOTE_COLUMNS: Record<string, FocusColumn> = {
+  koordinat: 'koordinat',
+  tahun_pembuatan: 'tahun',
+  uji_konsentrasi_ppm: 'pcb',
+  daya_kva: 'daya',
+  volume_l: 'volume',
+  kode_alat: 'kode',
+  nama_merek: 'merek',
+  merek_minyak_dielektrik: 'merek',
+  nomor_serial: 'merek',
+  lokasi_peralatan: 'lokasi',
+  lokasi_penyimpanan: 'lokasi',
+};
+
+const MISSING_COLUMNS: Partial<Record<InventoryFilters['missing'], FocusColumn>> = {
+  serial: 'merek', name: 'merek', code: 'kode', year: 'tahun', location: 'lokasi', daya: 'daya', volume: 'volume', cleared: 'temuan',
+};
+
+function focusColumns(filters: InventoryFilters): Set<FocusColumn> {
+  const focus = new Set<FocusColumn>();
+  if (filters.mapPoint || filters.coordinates !== 'all') focus.add('koordinat');
+  if (filters.yearRange !== 'all') focus.add('tahun');
+  if (filters.pcbRange !== 'all' || filters.test !== 'all') focus.add('pcb');
+  if (filters.dayaMin !== null || filters.dayaMax !== null) focus.add('daya');
+  const missing = MISSING_COLUMNS[filters.missing];
+  if (missing) focus.add(missing);
+  if (filters.note) {
+    focus.add('temuan');
+    // Note codes name their column: coordinate:unreadable, invalid:tahun_pembuatan, ...
+    const kode = filters.note.kode;
+    const column = kode.startsWith('coordinate:') ? 'koordinat' : NOTE_COLUMNS[kode.split(':')[1] ?? ''] ?? (kode.includes('tahun') ? 'tahun' : undefined);
+    if (column) focus.add(column);
+  }
+  if (filters.batchId) focus.add('baris');
+  if (filters.addedWithin !== 'all') focus.add('tanggal');
+  return focus;
+}
+
+/** Import notes of a row that the active filter is about. */
+function focusedNotes(item: InventoryItem, filters: InventoryFilters) {
+  const notes = item.notes ?? [];
+  if (filters.note) return notes.filter((note) => note.kode === filters.note?.kode);
+  if (filters.missing === 'cleared') return notes.filter((note) => note.jenis === 'dikosongkan');
+  return notes;
+}
+
+const formatCoordinate = (item: InventoryItem) =>
+  item.latitude !== null && item.latitude !== undefined && item.longitude !== null && item.longitude !== undefined
+    ? `${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`
+    : null;
 
 const PAGE_SIZE = 10;
 
@@ -380,10 +450,15 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   };
 
   const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
-  const showTrafoCapacity = paginatedItems.some((item) => item.type.startsWith('transformator'));
-  const showOilVolume = paginatedItems.some((item) => item.type === 'minyak_dielektrik');
-  const showPcb = paginatedItems.some((item) => item.pcbConcentration !== null && item.pcbConcentration !== undefined);
-  const tableColumnCount = 5 + Number(showTrafoCapacity) + Number(showOilVolume) + Number(showPcb);
+  const focus = focusColumns(appliedFilters);
+  const focused = (column: FocusColumn) => focus.has(column);
+  const showTrafoCapacity = focused('daya') || paginatedItems.some((item) => item.type.startsWith('transformator'));
+  const showOilVolume = focused('volume') || paginatedItems.some((item) => item.type === 'minyak_dielektrik');
+  const showPcb = focused('pcb') || paginatedItems.some((item) => item.pcbConcentration !== null && item.pcbConcentration !== undefined);
+  const extraColumns = (['baris', 'koordinat', 'tahun', 'temuan', 'tanggal'] as const).filter(focused);
+  const tableColumnCount = 5 + Number(showTrafoCapacity) + Number(showOilVolume) + Number(showPcb) + extraColumns.length;
+  const th = (column?: FocusColumn) => `py-3.5 px-4${column && focused(column) ? ' bg-emerald-50 text-emerald-800' : ''}`;
+  const td = (column?: FocusColumn) => `py-3.5 px-4${column && focused(column) ? ' bg-emerald-50/50' : ''}`;
 
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
@@ -590,12 +665,17 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
           <thead className="border-b border-slate-200 bg-slate-50/80 font-bold text-slate-700">
             <tr>
               <th className="py-3.5 px-4">No.</th>
-              <th className="py-3.5 px-4">Merek / Seri</th>
+              {focused('baris') && <th className={th('baris')}>Baris Excel</th>}
+              <th className={focused('kode') ? th('kode') : th('merek')}>Merek / Seri</th>
               <th className="py-3.5 px-4">Perusahaan</th>
-              <th className="py-3.5 px-4">Lokasi</th>
-              {showTrafoCapacity && <th className="py-3.5 px-4">Daya (kVA)</th>}
-              {showOilVolume && <th className="py-3.5 px-4">Volume (L)</th>}
-              {showPcb && <th className="py-3.5 px-4">Konsentrasi Uji</th>}
+              <th className={th('lokasi')}>Lokasi</th>
+              {focused('koordinat') && <th className={th('koordinat')}>Koordinat</th>}
+              {focused('tahun') && <th className={th('tahun')}>Tahun</th>}
+              {showTrafoCapacity && <th className={th('daya')}>Daya (kVA)</th>}
+              {showOilVolume && <th className={th('volume')}>Volume (L)</th>}
+              {showPcb && <th className={th('pcb')}>Konsentrasi Uji</th>}
+              {focused('temuan') && <th className={th('temuan')}>Temuan Impor</th>}
+              {focused('tanggal') && <th className={th('tanggal')}>Diinput</th>}
               <th className="py-3.5 px-4">Status</th>
               <th className="py-3.5 px-4 text-right">Aksi</th>
             </tr>
@@ -629,6 +709,8 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                   }
                 }
 
+                const coordinate = formatCoordinate(item);
+                const rowNotes = focused('temuan') ? focusedNotes(item, appliedFilters) : [];
                 const isExpanded = expandedItemId === item.id;
                 const detailEntries = Object.entries(details[item.id] || {}).filter(([key]) => !['id', 'company_id', 'import_batch_id', 'catatan_impor', 'baris_excel'].includes(key)).filter(([, value]) => value !== null && value !== undefined && value !== '');
                 const importNotes = (details[item.id]?.catatan_impor ?? []) as ImportNoteRow[];
@@ -636,28 +718,54 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                   <Fragment key={item.id}>
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4 font-medium">{item.no ?? '-'}</td>
-                    <td className="py-3.5 px-4">
+                    {focused('baris') && <td className={`${td('baris')} tabular-nums`}>{item.excelRow ?? '-'}</td>}
+                    <td className={focused('kode') ? td('kode') : td('merek')}>
                       <button type="button" onClick={() => toggleDetails(item)} className={`text-left font-bold hover:text-emerald-700 ${item.name ? 'text-slate-900' : 'italic text-slate-400'}`}>{item.name || 'Merek tidak tercatat'}</button>
                       {item.type !== 'minyak_dielektrik' && (
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
                           S/N: {item.serialNumber || <span className="font-sans italic text-slate-400">tidak tercatat</span>}
                         </div>
                       )}
-                      {item.code && <div className="text-[11px] text-slate-500 font-mono">Kode: {item.code}</div>}
+                      {(item.code || focused('kode')) && <div className="text-[11px] text-slate-500 font-mono">Kode: {item.code || <span className="font-sans italic text-slate-400">tidak tercatat</span>}</div>}
                     </td>
                     <td className="py-3.5 px-4 font-medium text-slate-700">
                       {item.companyName}
                       {item.unit && <div className="mt-0.5 text-[11px] font-normal text-slate-500">{item.unit}{item.subUnit ? ` › ${item.subUnit}` : ''}</div>}
                     </td>
-                    <td className="py-3.5 px-4"><div className="text-slate-800 font-medium">{item.location || '-'}</div></td>
-                    {showTrafoCapacity && <td className="py-3.5 px-4">{item.type.startsWith('transformator') ? item.capacity || '-' : '-'}</td>}
-                    {showOilVolume && <td className="py-3.5 px-4">{item.type === 'minyak_dielektrik' ? item.capacity || '-' : '-'}</td>}
-                    {showPcb && <td className="py-3.5 px-4">
+                    <td className={td('lokasi')}><div className="text-slate-800 font-medium">{item.location || '-'}</div></td>
+                    {focused('koordinat') && (
+                      <td className={td('koordinat')}>
+                        {coordinate
+                          ? <div className="whitespace-nowrap font-mono text-slate-800">{coordinate}</div>
+                          : <div className="italic text-slate-400">{item.rawCoordinate ? 'Tidak terbaca' : 'Tidak diisi'}</div>}
+                        {item.rawCoordinate && item.rawCoordinate !== coordinate && (
+                          <div className="mt-0.5 max-w-48 truncate text-[11px] text-slate-500" title={item.rawCoordinate}>Di Excel: {item.rawCoordinate}</div>
+                        )}
+                      </td>
+                    )}
+                    {focused('tahun') && <td className={`${td('tahun')} tabular-nums`}>{item.year ?? <span className="italic text-slate-400">tidak tercatat</span>}</td>}
+                    {showTrafoCapacity && <td className={td('daya')}>{item.type.startsWith('transformator') ? item.capacity || '-' : '-'}</td>}
+                    {showOilVolume && <td className={td('volume')}>{item.type === 'minyak_dielektrik' ? item.capacity || '-' : '-'}</td>}
+                    {showPcb && <td className={td('pcb')}>
                       <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${pcbBadge}`}>
                         {pcbIcon}
                         <span>{pcbText}</span>
                       </span>
+                      {focused('pcb') && item.testType && <div className="mt-1 text-[11px] text-slate-500">{item.testType}</div>}
                     </td>}
+                    {focused('temuan') && (
+                      <td className={td('temuan')}>
+                        {rowNotes.length > 0 ? rowNotes.map((note, index) => (
+                          <div key={index} className="max-w-64 text-[11px] text-slate-700">
+                            {note.pesan}
+                            {(note.nilai_asli || note.nilai_baru) && (
+                              <span className="block font-mono text-slate-500">{note.nilai_asli ?? '-'}{note.nilai_baru ? ` → ${note.nilai_baru}` : ''}</span>
+                            )}
+                          </div>
+                        )) : '-'}
+                      </td>
+                    )}
+                    {focused('tanggal') && <td className={`${td('tanggal')} whitespace-nowrap`}>{item.createdAt ? new Date(item.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}</td>}
                     <td className="py-3.5 px-4">
                       <span className="capitalize font-medium text-slate-700">
                         {item.status || 'Aktif'}
