@@ -290,6 +290,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
 
   const [paginatedItems, setPaginatedItems] = useState<InventoryItem[]>([]);
   const [totalItems, setTotalItems] = useState(0);
+  const [totalEstimated, setTotalEstimated] = useState(false);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -429,11 +430,12 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   useEffect(() => {
     let cancelled = false;
     fetchInventoryPage(supabase, query)
-      .then(({ rows, total }) => {
+      .then(({ rows, total, estimated }) => {
         if (cancelled) return;
         setPaginatedItems(rows.map((row) => toInventoryItem(row, companyNames)));
         setDetails({});
         setTotalItems(total);
+        setTotalEstimated(estimated);
         setLoadError(null);
       })
       .catch((err: Error) => {
@@ -481,7 +483,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
             Tabel Data Inventarisasi Peralatan & Minyak
           </h3>
           <p className="text-xs text-slate-500 font-medium">
-            {loading ? 'Memuat data...' : `${totalItems.toLocaleString('id-ID')} data sesuai filter`}
+            {loading ? 'Memuat data...' : `${totalEstimated ? 'Sekitar ' : ''}${totalItems.toLocaleString('id-ID')} data sesuai filter`}
           </p>
         </div>
 

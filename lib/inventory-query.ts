@@ -211,6 +211,10 @@ const cleanSearch = (value: string) => value.replace(/[,()*%\\:"]/g, ' ').trim()
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ADDED_WITHIN_DAYS: Record<Exclude<AddedWithin, 'all'>, number> = { '1d': 1, '7d': 7, '30d': 30 };
 
+// Never null, so they sort without NULLS LAST: a descending sort with it cannot
+// use the (created_at DESC, id DESC) indexes and sorts every row instead.
+const NOT_NULL_COLUMNS = new Set(['created_at', 'id']);
+
 const SORTS: Record<InventorySort, Array<[column: string, ascending: boolean]>> = {
   newest: [['created_at', false], ['id', false]],
   oldest: [['created_at', true], ['id', true]],
@@ -285,19 +289,33 @@ function applyFilters(request: InventoryRequest, category: CategoryFilter, filte
   return request;
 }
 
+// Counts over inventory_items are estimated: an exact count scans every row
+// in scope (25 s for the whole table on the Nano instance), and running it
+// beside the dashboard figures pushed those past their statement timeout.
+// PostgREST counts exactly while the result stays under its max rows (1000)
+// and takes the planner's estimate above; for this data that estimate is
+// within a few percent.
+const ESTIMATE_ABOVE = 1000;
+
 export async function fetchInventoryPage(supabase: SupabaseClient, query: InventoryPageQuery) {
-  let request = applyFilters(supabase.from('inventory_items').select('*', { count: 'exact' }), query.category, query.filters);
+  let request = applyFilters(supabase.from('inventory_items').select('*', { count: 'estimated' }), query.category, query.filters);
 
   const term = cleanSearch(query.search);
   if (term) request = request.or(`name.ilike.*${term}*,serial.ilike.*${term}*,location.ilike.*${term}*,kode_alat.ilike.*${term}*`);
 
   for (const [column, ascending] of SORTS[query.sort]) {
-    request = request.order(column, { ascending, nullsFirst: false });
+    request = request.order(column, NOT_NULL_COLUMNS.has(column) ? { ascending } : { ascending, nullsFirst: false });
   }
   const from = (query.page - 1) * query.pageSize;
   const { data, error, count } = await request.range(from, from + query.pageSize - 1);
+  // A page past an estimate that was too high: the rows ended before it.
+  if (error?.code === 'PGRST103') return { rows: [] as InventoryRow[], total: from, estimated: true };
   if (error) throw new Error(`Gagal memuat data: ${error.message}`);
-  return { rows: (data ?? []) as InventoryRow[], total: count ?? 0 };
+  const rows = (data ?? []) as InventoryRow[];
+  let total = count ?? 0;
+  // An estimate too low would end the pages early: a full page means more may follow.
+  if (total > ESTIMATE_ABOVE && rows.length === query.pageSize) total = Math.max(total, from + rows.length + 1);
+  return { rows, total, estimated: total > ESTIMATE_ABOVE };
 }
 
 // Completeness findings of the pre-import check (missing:<field>) and the table filter showing them.
@@ -492,7 +510,7 @@ export async function fetchMapPoints(supabase: SupabaseClient, category: Categor
   for (let from = 0; from < limit; from += pageSize) {
     let request = supabase
       .from('inventory_items')
-      .select('id, category, company_id, name, serial, location, lat, lng, ppm, status', { count: from === 0 ? 'exact' : undefined })
+      .select('id, category, company_id, name, serial, location, lat, lng, ppm, status', { count: from === 0 ? 'estimated' : undefined })
       .not('lat', 'is', null)
       .not('lng', 'is', null);
     if (category === 'transformator') request = request.in('category', TRAFO_CATEGORIES);
@@ -506,7 +524,8 @@ export async function fetchMapPoints(supabase: SupabaseClient, category: Categor
     rows.push(...((data ?? []) as InventoryRow[]));
     if (!data || data.length < pageSize) break;
   }
-  return { rows, total };
+  // Estimated as in fetchInventoryPage; exact when every point fit under the cap.
+  return { rows, total: rows.length < limit ? rows.length : Math.max(total, rows.length) };
 }
 
 /** Transformers of one bar of the dashboard charts per PCBs risk class: count, and total weight in kg. */
