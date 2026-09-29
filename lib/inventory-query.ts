@@ -465,14 +465,13 @@ export interface UnitSummary {
   sub_unit: string | null;
   total: number;
   tested: number;
-  at_least_50: number;
 }
 
 const UNIT_PAGE_SIZE = 1000;
 
 /**
  * Units and sub-units of a company with their figures (see inventory_units in
- * migration 20260928000001). One row per unit and sub-unit, read in pages:
+ * migration 20260929000009). One row per unit and sub-unit, read in pages:
  * a response holds at most 1000 rows, and PLN alone has hundreds.
  */
 export async function fetchCompanyUnits(supabase: SupabaseClient, companyId: string) {
@@ -483,7 +482,7 @@ export async function fetchCompanyUnits(supabase: SupabaseClient, companyId: str
     rows.push(...((data ?? []) as UnitSummary[]));
     if ((data ?? []).length < UNIT_PAGE_SIZE) break;
   }
-  return rows.map((row) => ({ ...row, total: Number(row.total), tested: Number(row.tested), at_least_50: Number(row.at_least_50) }));
+  return rows.map((row) => ({ ...row, total: Number(row.total), tested: Number(row.tested) }));
 }
 
 /** Imported batches, newest first, for the table's "import batch" filter. */

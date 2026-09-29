@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, X } from 'lucide-react';
+import { Building2, RotateCw, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ALL_SCOPE, fetchCompanyUnits, type DashboardScope, type UnitSummary } from '@/lib/inventory-query';
 import type { CompanyOption } from '@/components/DataTable';
@@ -14,7 +14,8 @@ const SELECT_CLASS = 'min-w-0 rounded-xl border border-slate-200 bg-white px-3 p
  */
 export default function DashboardScopeFilter({ companies, scope, onChange, reloadKey = 0 }: { companies: CompanyOption[]; scope: DashboardScope; onChange: (scope: DashboardScope) => void; reloadKey?: number }) {
   const supabase = useMemo(() => createClient(), []);
-  const [units, setUnits] = useState<{ companyId: string; rows: UnitSummary[] } | null>(null);
+  const [units, setUnits] = useState<{ companyId: string; rows: UnitSummary[]; failed?: boolean } | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const companyId = scope.companyId;
@@ -22,9 +23,10 @@ export default function DashboardScopeFilter({ companies, scope, onChange, reloa
     let cancelled = false;
     fetchCompanyUnits(supabase, companyId)
       .then((rows) => { if (!cancelled) setUnits({ companyId, rows }); })
-      .catch(() => { if (!cancelled) setUnits({ companyId, rows: [] }); });
+      // Said in the filter: an empty list would read as a company without units.
+      .catch(() => { if (!cancelled) setUnits({ companyId, rows: [], failed: true }); });
     return () => { cancelled = true; };
-  }, [supabase, scope.companyId, reloadKey]);
+  }, [supabase, scope.companyId, reloadKey, retryKey]);
 
   // Only the units of the selected company (a previous company's list may still be loaded).
   const companyUnits = useMemo(() => (units && units.companyId === scope.companyId ? units.rows : []), [units, scope.companyId]);
@@ -34,6 +36,7 @@ export default function DashboardScopeFilter({ companies, scope, onChange, reloa
     return [...totals].map(([name, total]) => ({ name, total }));
   }, [companyUnits]);
   const subUnitOptions = companyUnits.filter((row) => row.unit === scope.unit && row.sub_unit);
+  const unitsFailed = units?.companyId === scope.companyId && units.failed;
 
   return <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-4 py-3">
     <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-slate-500"><Building2 className="h-3.5 w-3.5" /><span>Tampilkan data:</span></div>
@@ -46,6 +49,11 @@ export default function DashboardScopeFilter({ companies, scope, onChange, reloa
         <option value="all">Semua unit ({unitOptions.length})</option>
         {unitOptions.map((option) => <option key={option.name} value={option.name}>{option.name} · {option.total.toLocaleString('id-ID')}</option>)}
       </select>
+    )}
+    {unitsFailed && (
+      <button type="button" onClick={() => setRetryKey((key) => key + 1)} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+        Daftar unit gagal dimuat <RotateCw className="h-3.5 w-3.5" /> Coba lagi
+      </button>
     )}
     {subUnitOptions.length > 0 && (
       <select aria-label="Sub-unit" value={scope.subUnit ?? 'all'} onChange={(e) => onChange({ ...scope, subUnit: e.target.value === 'all' ? null : e.target.value })} className={SELECT_CLASS}>

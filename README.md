@@ -143,6 +143,7 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260929000006_dashboard_charts` | Fungsi `inventory_charts` untuk grafik sebaran trafo per unit dan per tahun produksi |
 | `20260929000007_stats_summary` | Tabel ringkasan `inventory_stats_parts` yang dijaga trigger, sehingga angka dashboard tidak lagi menghitung ulang seluruh baris (fungsi lama tetap ada sebagai `inventory_stats_scan`) |
 | `20260929000008_test_methods` | Jumlah hasil uji lab dan uji cepat per kelas ppm di tabel ringkasan, untuk kartu hasil uji per metode |
+| `20260929000009_units_from_summary` | Daftar unit dan sub-unit untuk filter dibaca dari tabel ringkasan, sehingga tidak lagi timeout |
 
 ### Menjalankan Aplikasi
 
