@@ -508,3 +508,51 @@ export async function fetchMapPoints(supabase: SupabaseClient, category: Categor
   }
   return { rows, total };
 }
+
+/** Transformers of one bar of the dashboard charts per PCBs risk class: count, and total weight in kg. */
+export interface ChartFigures {
+  safe: number;
+  moderate: number;
+  high: number;
+  untested: number;
+  safe_kg: number;
+  moderate_kg: number;
+  high_kg: number;
+  untested_kg: number;
+}
+
+export interface ChartGroup extends ChartFigures {
+  /** Company id, unit or sub-unit name; null for rows without a unit. */
+  key: string | null;
+  label: string | null;
+}
+
+export interface ChartYearBand extends ChartFigures {
+  /** First year of a five-year band anchored on 1997; 0 for years before 1972, null for a missing year. */
+  yearFrom: number | null;
+}
+
+export interface InventoryCharts {
+  level: InventoryQuality['level'];
+  /** The company the unit and sub-unit groups belong to: the chosen one, or the only one in scope. */
+  companyId: string | null;
+  groups: ChartGroup[];
+  years: ChartYearBand[];
+}
+
+const CHART_FIGURES: Array<keyof ChartFigures> = ['safe', 'moderate', 'high', 'untested', 'safe_kg', 'moderate_kg', 'high_kg', 'untested_kg'];
+const toChartFigures = (raw: Record<string, unknown>) =>
+  Object.fromEntries(CHART_FIGURES.map((key) => [key, Number(raw[key]) || 0])) as unknown as ChartFigures;
+
+/** Transformers per company / unit / sub-unit and per production year band (inventory_charts, migration 20260929000006). */
+export async function fetchInventoryCharts(supabase: SupabaseClient, scope: DashboardScope, category: InventoryCategory | null = null): Promise<InventoryCharts> {
+  const { data, error } = await supabase.rpc('inventory_charts', { p_company_id: scope.companyId, p_unit: scope.unit, p_sub_unit: scope.subUnit, p_category: category });
+  if (error) throw new Error(`Gagal memuat grafik: ${error.message}`);
+  const raw = (data ?? {}) as { level?: InventoryCharts['level']; company_id?: string | null; groups?: Array<Record<string, unknown>>; years?: Array<Record<string, unknown>> };
+  return {
+    level: raw.level ?? 'company',
+    companyId: raw.company_id ?? null,
+    groups: (raw.groups ?? []).map((group) => ({ ...toChartFigures(group), key: (group.key as string | null) ?? null, label: (group.label as string | null) ?? null })),
+    years: (raw.years ?? []).map((band) => ({ ...toChartFigures(band), yearFrom: band.year_from === null || band.year_from === undefined ? null : Number(band.year_from) })),
+  };
+}

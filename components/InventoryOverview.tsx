@@ -9,6 +9,7 @@ import DataTable, { type TablePreset } from '@/components/DataTable';
 import DashboardCharts, { type CategoryRisk, type Pre1997Coverage } from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
+import DistributionCharts from '@/components/DistributionCharts';
 import InventorySummary from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
 import MapNotice from '@/components/MapNotice';
@@ -78,6 +79,13 @@ export default function InventoryOverview() {
     <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
     <DashboardCharts categoryRisk={categoryRisk} riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} pre1997={pre1997} coverage={coverage} />
+    <DistributionCharts
+      scope={scope}
+      reloadKey={reloadKey}
+      onDrill={setScope}
+      onSelectGroup={(target, pcbRange) => { setScope(target); showRows({ pcbRange }, 'transformator'); }}
+      onSelectYears={(filters) => showRows(filters, 'transformator')}
+    />
     <DataQualityPanel scope={scope} scopeLabel={scopeLabel} companies={companies} reloadKey={reloadKey} onDrill={setScope} onShowRows={showRows} />
     <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>

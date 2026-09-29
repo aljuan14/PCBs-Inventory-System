@@ -7,7 +7,7 @@ import { PRE_1997_FILTER, sumStats, TRAFO_CATEGORIES, type CategoryFilter, type 
 import { formatPercent } from '@/components/DashboardCharts';
 
 /** kg as tons: one decimal below 100 t, whole tons above. */
-const formatTons = (kg: number) => (kg / 1000).toLocaleString('id-ID', { maximumFractionDigits: kg < 100_000 ? 1 : 0 });
+export const formatTons = (kg: number) => (kg / 1000).toLocaleString('id-ID', { maximumFractionDigits: kg < 100_000 ? 1 : 0 });
 const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
 /**

@@ -63,6 +63,7 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 | Filter bertingkat | Filter Perusahaan › Unit Induk › Unit Pelaksana berlaku untuk kartu ringkasan, grafik, peta, dan tabel sekaligus. |
 | Kartu ringkasan | Per jenis trafo: bilah tahun produksi (< 1997, ≥ 1997, tidak diketahui) dan hasil uji PCBs. Kapasitor dan minyak dielektrik sebagai kartu kecil. Setiap baris membuka datanya di tabel. |
 | Tonase transformator | Total tonase dari berat total di formulir, tonase per jenis trafo, dan tonase trafo buatan sebelum 1997. |
+| Sebaran transformator | Dua grafik batang bertumpuk per kelas risiko PCBs, dalam jumlah unit atau tonase. Grafik pertama per perusahaan, Unit Induk, atau Unit Pelaksana (mengikuti filter, 12 terbesar dan sisanya digabung ke "Lainnya"). Grafik kedua per rentang lima tahun produksi, dengan batas 1997 ditandai. Klik nama untuk menelusuri, atau klik batang untuk membuka datanya di tabel. |
 | Proporsi risiko PCBs | Dua diagram donut, keseluruhan dan khusus trafo dengan tahun produksi sebelum 1997, per kelas: < 2 ppm, 2–50 ppm, > 50 ppm, dan belum diuji. Klik salah satu kelas untuk menyaring tabel ke rentang tersebut. |
 | Cakupan uji & temuan | Persentase trafo buatan sebelum 1997 yang sudah diuji per jenis (dengan pembanding semua tahun), serta jumlah temuan ≥ 2 ppm per jenis alat. Semuanya bisa diklik. |
 | Peta sebaran | Peta Leaflet dengan warna yang aman bagi buta warna. Klik titik untuk menampilkan semua data di koordinat itu di tabel. |
@@ -133,6 +134,7 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260929000003_existing_rows_array` | Perbaikan cek duplikat: hasil tidak lagi terpotong di 1.000 baris per permintaan |
 | `20260929000004_transformer_weights` | Kolom berat kering, minyak, dan total (kg) pada tabel trafo, statistik tonase, fungsi `inventory_set_weights` |
 | `20260929000005_weight_parts` | Berat kering dan minyak dijumlahkan hanya dari trafo yang mencatat keduanya |
+| `20260929000006_dashboard_charts` | Fungsi `inventory_charts` untuk grafik sebaran trafo per unit dan per tahun produksi |
 
 ### Menjalankan Aplikasi
 
