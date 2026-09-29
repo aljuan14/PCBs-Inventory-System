@@ -44,6 +44,10 @@ const extra: Array<[string | null, string | null]> = [
   [tidyUnitName('UP3B Sumatera'), 'UP3B Sumatera'],
   [tidyUnitName('UP3 Berau - 01 - Gudang ULP Nunukan'), 'UP3 Berau'],
   [tidyUnitName('UP3 Berau - 15 - Gudang ULP Tanjung Selor'), 'UP3 Berau'],
+  [tidyUnitName('PLN UP3 Ketapang'), 'UP3 Ketapang'],
+  [tidyUnitName('PT PLN (Persero) UP3 Ketapang'), 'UP3 Ketapang'],
+  [tidyUnitName('pln  ulp Sungai Raya'), 'ULP Sungai Raya'],
+  [tidyUnitName('PLN Kantor Pusat'), 'PLN Kantor Pusat'],
 ];
 for (const [actual, expected] of extra) {
   if (actual !== expected) {

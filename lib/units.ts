@@ -57,18 +57,23 @@ export const PLN_UNIT_NAMES = PLN_UNITS.map(([name]) => name);
 // Unit type prefixes that stay upper case ("UP3 Bandung", "UPT Bekasi").
 const UNIT_PREFIX = /^(up3b?|upt|ulp|updk|upk|up2d|up2b|uid|uiw|uit|uip3b|ulpltd|pltd|gi)$/i;
 
+// The company written before a unit type ("PLN UP3 Ketapang", "PT PLN (Persero) UP3 …").
+const COMPANY_BEFORE_UNIT = /^(?:PT\.? )?PLN(?: \(Persero\))? (?=(?:up3b?|upt|ulp|updk|upk|up2d|up2b|uid|uiw|uit|uip3b|ulpltd|pltd) )/i;
+
 /**
  * Tidy casing and spacing so "UP3 PONTIANAK" and "UP3 Pontianak" become one
  * sub-unit, and undo what spreadsheet editing adds to the name:
  * - Excel's fill handle counts up the number in a dragged "UP3 Banten Selatan"
  *   ("UP4 …", "UP5 …", … "UP1270 Banten Selatan"); there is no UP4 or above;
- * - a running number and site appended to it ("UP3 Berau - 01 - Gudang ULP Nunukan").
+ * - a running number and site appended to it ("UP3 Berau - 01 - Gudang ULP Nunukan");
+ * - the company written before the unit type ("PLN UP3 Ketapang" next to "UP3 Ketapang").
  */
 export function tidyUnitName(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value)
     .replace(/\s+/g, ' ')
     .trim()
+    .replace(COMPANY_BEFORE_UNIT, '')
     .replace(/^UP(\d+) /i, (match, number: string) => (Number(number) >= 4 ? 'UP3 ' : match))
     .replace(/^(.+?) - \d+ - .+$/, '$1');
   if (!text || /^[-–.0]+$/.test(text) || /^(n\/?a|contoh|-)$/i.test(text)) return null;
