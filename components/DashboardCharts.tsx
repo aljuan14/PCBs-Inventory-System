@@ -324,7 +324,8 @@ export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote
       onSelectRisk={pre1997.onSelectRisk}
     />
   );
-  const donuts = pre1997Donut ? <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">{donut}{pre1997Donut}</div> : donut;
+  // Side by side only when each donut keeps room for its legend (the sidebar takes 256px).
+  const donuts = pre1997Donut ? <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">{donut}{pre1997Donut}</div> : donut;
 
   if (!showByCategory) return donuts;
 
