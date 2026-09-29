@@ -27,7 +27,13 @@ const HEADER_SCAN_ROWS = 20;
 const MAX_GROUP_ROWS = 3;
 const MAX_SUBLABEL_ROWS = 2;
 
-const text = (value: unknown) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(value ?? '')).replace(/\s+/g, ' ').trim();
+// Control characters other than tab and line breaks. Exports from fixed-width
+// systems pad text with NUL ("TRAFINDO\u0000\u0000…", UID Jatim), which
+// Postgres rejects in text and jsonb ("unsupported Unicode escape sequence").
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+const cleanCell = (value: unknown) => (typeof value === 'string' ? value.replace(CONTROL_CHARACTERS, '') : value);
+
+const text = (value: unknown) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(cleanCell(value) ?? '')).replace(/\s+/g, ' ').trim();
 const isNumericLike = (value: string) => /^[\d.,\s-]+$/.test(value);
 const isLabel = (value: string) => value !== '' && !isNumericLike(value);
 
@@ -186,7 +192,7 @@ export function parseSheet(workbook: XLSX.WorkBook, sheetName: string): SheetPar
     if (filledCounts.length < 200) filledCounts.push(filled.length);
     const rowObj: Record<string, unknown> = {};
     headers.forEach((header, column) => {
-      const value = row[column];
+      const value = cleanCell(row[column]);
       rowObj[header] = value === undefined || value === '' ? null : value;
     });
     allRows.push(rowObj);
