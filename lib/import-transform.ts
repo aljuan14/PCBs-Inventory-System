@@ -175,9 +175,11 @@ export async function findRowsInDatabase(
   companyId: string,
   rows: TransformedRow[],
   excludeBatchId: string | null = null,
+  onProgress?: (done: number, total: number) => void,
 ) {
   const found = new Set<TransformedRow>();
   const starts = Array.from({ length: Math.ceil(rows.length / EXISTING_CHECK_CHUNK) }, (_, index) => index * EXISTING_CHECK_CHUNK);
+  let checked = 0;
   for (let group = 0; group < starts.length; group += EXISTING_CHECK_CONCURRENCY) {
     await Promise.all(starts.slice(group, group + EXISTING_CHECK_CONCURRENCY).map(async (start) => {
       const chunk = rows.slice(start, start + EXISTING_CHECK_CHUNK);
@@ -190,6 +192,8 @@ export async function findRowsInDatabase(
       });
       if (error) throw new Error(`Gagal memeriksa data yang sudah ada: ${error.message}`);
       for (const index of (data ?? []) as number[]) found.add(chunk[index]);
+      checked += chunk.length;
+      onProgress?.(checked, rows.length);
     }));
   }
   return found;
@@ -270,7 +274,13 @@ export interface InsertFailure {
  * Stores transformed rows for a batch in chunks. On failure the rows already
  * stored for this batch are removed, so a retry starts clean.
  */
-export async function insertBatchRows(supabase: SupabaseClient, category: InventoryCategory, rows: TransformedRow[], batch: { id: string; company_id: string }): Promise<InsertFailure | null> {
+export async function insertBatchRows(
+  supabase: SupabaseClient,
+  category: InventoryCategory,
+  rows: TransformedRow[],
+  batch: { id: string; company_id: string },
+  onProgress?: (done: number, total: number) => void,
+): Promise<InsertFailure | null> {
   const records = rows.map((row) => ({ ...row.item, company_id: batch.company_id, import_batch_id: batch.id }));
   const starts = Array.from({ length: Math.ceil(records.length / INSERT_CHUNK_SIZE) }, (_, index) => index * INSERT_CHUNK_SIZE);
   // A few chunks at a time: fewer round trips without flooding the database.
@@ -288,6 +298,7 @@ export async function insertBatchRows(supabase: SupabaseClient, category: Invent
       await supabase.from(category).delete().eq('import_batch_id', batch.id);
       return { message: error.message, detail: error.details ?? error.hint ?? null, code: error.code ?? null, rowNumber: rows[start].rowNumber };
     }
+    onProgress?.(Math.min((group + INSERT_CONCURRENCY) * INSERT_CHUNK_SIZE, records.length), records.length);
   }
   return null;
 }

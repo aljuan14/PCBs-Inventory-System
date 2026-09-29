@@ -12,6 +12,7 @@ import {
   sampleValues,
   transformRows,
 } from '@/lib/import-transform';
+import { progressResponse } from '@/lib/progress';
 import { stepTimer } from '@/lib/timing';
 
 // Parsing and checking a large sheet can take a while.
@@ -20,6 +21,8 @@ export const maxDuration = 60;
 /**
  * Dry run of an import: applies the mapping to every row without writing, and
  * reports what would be stored, skipped, or needs the admin's attention.
+ * Streams its progress (lib/progress.ts); problems found before the work
+ * starts are a plain JSON error.
  */
 export async function POST(
   req: NextRequest,
@@ -49,26 +52,37 @@ export async function POST(
     if (mappingError) return NextResponse.json({ error: mappingError }, { status: 400 });
 
     const replacing = await loadReplaceTarget(supabase, batch, replaceBatchId);
-    const sheet = await loadBatchSheet(supabase, batch);
-    timer.step('load');
-    const { rows, skippedEmpty, issues } = transformRows(category, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
-    timer.step('transform');
 
-    const existing = await findRowsInDatabase(supabase, category, batch.company_id, rows, replacing?.id);
-    const inDatabase = rows.filter((row) => existing.has(row));
-    timer.step('existing');
-    timer.done();
+    return progressResponse('Validation', async (send) => {
+      send({ type: 'plan', stages: ['load', 'transform', 'existing'] });
+      send({ type: 'stage', stage: 'load' });
+      const sheet = await loadBatchSheet(supabase, batch);
+      timer.step('load');
+      send({ type: 'stage', stage: 'transform' });
+      const { rows, skippedEmpty, issues } = transformRows(category, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
+      timer.step('transform');
 
-    return NextResponse.json({
-      totalRows: sheet.allRows.length,
-      dataRows: rows.length,
-      skippedEmpty,
-      duplicatesInDb: { count: inDatabase.length, rows: inDatabase.slice(0, 8).map((row) => row.rowNumber) },
-      issues: issues.list(),
-      missingImportant: missingImportantFields(category, mappings),
-      dashboard: dashboardPreview(category, rows.filter((row) => !existing.has(row))),
-      samples: sampleValues(sheet),
-      replacing,
+      send({ type: 'stage', stage: 'existing' });
+      const existing = await findRowsInDatabase(supabase, category, batch.company_id, rows, replacing?.id,
+        (done, total) => send({ type: 'progress', done, total }));
+      const inDatabase = rows.filter((row) => existing.has(row));
+      timer.step('existing');
+      timer.done();
+
+      return {
+        type: 'result',
+        data: {
+          totalRows: sheet.allRows.length,
+          dataRows: rows.length,
+          skippedEmpty,
+          duplicatesInDb: { count: inDatabase.length, rows: inDatabase.slice(0, 8).map((row) => row.rowNumber) },
+          issues: issues.list(),
+          missingImportant: missingImportantFields(category, mappings),
+          dashboard: dashboardPreview(category, rows.filter((row) => !existing.has(row))),
+          samples: sampleValues(sheet),
+          replacing,
+        },
+      };
     });
   } catch (err) {
     if (err instanceof BatchFileError) return NextResponse.json({ error: err.message }, { status: err.status });

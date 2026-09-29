@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ImportBatch } from '@/lib/types';
 import type { ValidationIssue } from '@/lib/import-transform';
 import CheckIssueList, { type LoadIssueRows } from '@/components/CheckIssueList';
+import ProgressPanel from '@/components/ProgressPanel';
+import { RequestError, applyProgress, postWithProgress, startProgress, type ProgressState } from '@/lib/progress';
 import { getCategoryLabel, suggestInventoryField, type InventoryCategory, type InventoryField } from '@/lib/inventory';
 import {
   ArrowRight,
@@ -91,6 +93,9 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
   const [report, setReport] = useState<ValidationReport | null>(null);
   const [checkedKey, setCheckedKey] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  // Steps of the running check or import, streamed by the server.
+  const [checkProgress, setCheckProgress] = useState<ProgressState | null>(null);
+  const [importProgress, setImportProgress] = useState<ProgressState | null>(null);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   // A revised workbook can replace the rows of an earlier import (null: add as new data).
   const [replaceCandidates, setReplaceCandidates] = useState<ReplaceCandidate[]>([]);
@@ -105,14 +110,13 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
   const runCheck = useCallback(async (currentMappings: Record<string, string>, currentReplaceId: string | null) => {
     setChecking(true);
     setErrorMsg(null);
+    setCheckProgress(startProgress(Date.now()));
     try {
-      const res = await fetch(`/api/mapping/${batchId}/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mappings: currentMappings, replaceBatchId: currentReplaceId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Gagal memeriksa data.');
+      const json = await postWithProgress<ValidationReport>(
+        `/api/mapping/${batchId}/validate`,
+        { mappings: currentMappings, replaceBatchId: currentReplaceId },
+        (event) => setCheckProgress((prev) => prev && applyProgress(prev, event, Date.now())),
+      );
       setReport(json);
       setCheckedKey(JSON.stringify(currentMappings));
       setCheckedReplace(currentReplaceId);
@@ -120,6 +124,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
       setErrorMsg((err instanceof Error && err.message) || 'Gagal memeriksa data.');
     } finally {
       setChecking(false);
+      setCheckProgress(null);
     }
   }, [batchId]);
 
@@ -222,30 +227,25 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
   const handleSaveAndImport = async () => {
     setErrorMsg(null);
     setImporting(true);
+    setImportProgress(startProgress(Date.now()));
 
     try {
-      const res = await fetch('/api/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId, mappings, skipDuplicates, replaceBatchId }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        // Tampilkan pesan error detail dari Supabase
-        const errMsg = json.error || 'Gagal mengimpor data.';
-        const errDetail = json.detail ? `\nDetail: ${json.detail}` : '';
-        const errCode = json.code ? ` (kode: ${json.code})` : '';
-        throw new Error(errMsg + errDetail + errCode);
-      }
+      const json = await postWithProgress<{ importedCount: number; skippedEmpty?: number; skippedDuplicates?: number; replacedRows?: number | null }>(
+        '/api/import',
+        { batchId, mappings, skipDuplicates, replaceBatchId },
+        (event) => setImportProgress((prev) => prev && applyProgress(prev, event, Date.now())),
+      );
 
       setImportSuccess({ count: json.importedCount, skippedEmpty: json.skippedEmpty ?? 0, skippedDuplicates: json.skippedDuplicates ?? 0, replacedRows: json.replacedRows ?? null });
       setSiblings((prev) => prev.map((item) => (item.batchId === batchId ? { ...item, status: 'imported' } : item)));
     } catch (err) {
-      setErrorMsg((err instanceof Error && err.message) || 'Terjadi kesalahan saat mengimpor data.');
+      // Tampilkan pesan error detail dari Supabase
+      const detail = err instanceof RequestError && err.detail ? `\nDetail: ${err.detail}` : '';
+      const code = err instanceof RequestError && err.code ? ` (kode: ${err.code})` : '';
+      setErrorMsg(`${(err instanceof Error && err.message) || 'Terjadi kesalahan saat mengimpor data.'}${detail}${code}`);
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -536,11 +536,13 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
             )}
 
             {!report ? (
-              <div className="flex items-center gap-2 py-6 text-xs text-slate-500">
-                {checking ? <><Loader2 className="h-4 w-4 animate-spin" /> Memeriksa semua baris...</> : 'Belum diperiksa.'}
-              </div>
+              checkProgress
+                ? <ProgressPanel title="Memeriksa semua baris" state={checkProgress} />
+                : <div className="py-6 text-xs text-slate-500">{checking ? 'Memeriksa semua baris...' : 'Belum diperiksa.'}</div>
             ) : (
-              <div className={`space-y-4 ${checking ? 'opacity-50' : ''}`}>
+              <div className="space-y-4">
+                {checkProgress && <ProgressPanel title="Memeriksa ulang semua baris" state={checkProgress} />}
+                <div className={`space-y-4 ${checking ? 'opacity-50' : ''}`}>
                 <div className={`grid grid-cols-2 gap-3 ${report.replacing ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
                   <Stat label="Akan diimpor" value={formatNumber(importCount)} tone="text-emerald-700" />
                   {report.replacing && <Stat label="Baris lama yang diganti" value={formatNumber(report.replacing.rows)} tone="text-rose-700" />}
@@ -582,6 +584,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             )}
           </section>
@@ -600,6 +603,10 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
             {groups.matched.length > 0 && collapsibleGroup('Cocok otomatis', groups.matched, showMatched, () => setShowMatched(!showMatched), `Dipetakan oleh profil ${profileLabel ?? ''}.`)}
             {groups.ignored.length > 0 && collapsibleGroup('Tidak dipakai', groups.ignored, showIgnored, () => setShowIgnored(!showIgnored), 'Kolom di luar skema inventaris (mis. Unit Induk, dimensi, simbol & label) atau kosong.')}
           </section>
+
+          {importProgress && (
+            <ProgressPanel title={report?.replacing ? 'Mengganti data unggahan lama' : 'Mengimpor ke database'} state={importProgress} />
+          )}
 
           {/* Footer Aksi */}
           <div className="flex flex-col-reverse gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
