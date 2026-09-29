@@ -4,6 +4,10 @@ Web dashboard untuk inventarisasi **Polychlorinated Biphenyls (PCBs)** dari bany
 
 **Teknologi:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Supabase (PostgreSQL & Storage) · SheetJS · Leaflet · Recharts
 
+**Aplikasi:** https://pcbs-inventory-system.vercel.app (Vercel)
+
+> ⚠️ **Login masih dalam pengerjaan.** Sampai autentikasi dan Row Level Security selesai, siapa pun yang memegang tautan dapat membaca dan mengubah data. Gunakan tautan hanya di internal tim.
+
 ---
 
 ## Daftar Isi
@@ -13,10 +17,11 @@ Web dashboard untuk inventarisasi **Polychlorinated Biphenyls (PCBs)** dari bany
 3. [Memulai](#memulai)
 4. [Alur Impor Data](#alur-impor-data)
 5. [Impor Massal & Impor Ulang](#impor-massal--impor-ulang)
-6. [Pengujian](#pengujian)
-7. [Skema Database](#skema-database)
-8. [Struktur Direktori](#struktur-direktori)
-9. [Roadmap](#roadmap)
+6. [Deploy ke Vercel](#deploy-ke-vercel)
+7. [Pengujian](#pengujian)
+8. [Skema Database](#skema-database)
+9. [Struktur Direktori](#struktur-direktori)
+10. [Roadmap](#roadmap)
 
 ---
 
@@ -208,6 +213,21 @@ Perintah ini menghapus baris inventaris, batch impor, berkas di Storage, dan ses
 
 ---
 
+## Deploy ke Vercel
+
+Aplikasi berjalan di Vercel karena rute impor (`/api/import`) memproses sheet besar dalam satu request hingga 300 detik (`maxDuration`) sambil mengirim progres bertahap. Batas fungsi di Netlify terlalu pendek untuk itu.
+
+1. **Import repositori** di [vercel.com/new](https://vercel.com/new). Next.js terdeteksi otomatis, jadi pengaturan build tidak perlu diubah.
+2. **Isi Environment Variables** sesuai `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, dan `SUPABASE_ANON_KEY`. Jangan masukkan `SUPABASE_SERVICE_ROLE_KEY`, karena kunci itu hanya untuk skrip di komputer lokal.
+3. **Samakan region fungsi** (Settings → Functions) dengan region proyek Supabase, misalnya Singapore `sin1`, agar impor tidak lambat karena jarak ke database.
+4. **Deploy.** Setiap push ke `main` akan ter-deploy otomatis, dan branch lain mendapat URL preview.
+
+Nilai `NEXT_PUBLIC_*` ditanam ke kode saat build. Setelah mengubahnya di Vercel, lakukan **Redeploy**. Bila dashboard online menampilkan galat 401 dari Supabase, periksa apakah anon key tersalin utuh (diawali `eyJ`).
+
+Workbook yang sangat besar (ratusan ribu baris) lebih aman diimpor dengan `scripts/import-folder.ts` dari komputer lokal, karena satu fungsi Vercel dibatasi memorinya.
+
+---
+
 ## Pengujian
 
 | Perintah | Menguji |
@@ -264,6 +284,7 @@ lib/
   dms.ts                 Parser koordinat
   company-purge.ts       Penghapusan data perusahaan
   data-quality.ts        Perhitungan kualitas data
+  inventory-query.ts     Akses data dashboard: statistik, grafik, tabel, dan peta
 scripts/                 Impor massal, isi ulang berat, purge, dry run, dan pengujian
 supabase/                Migrasi SQL dan seed
 ```
@@ -288,12 +309,20 @@ Data inventaris (`Data-inventaris/`), termasuk template formulir KLHK dan data r
 - [x] Cek duplikat di database dan mode ganti data unggahan sebelumnya
 - [x] Progres bertahap untuk unggah, pindai, periksa, dan impor
 - [x] Berat trafo (kering, minyak, total) dan kartu tonase
+- [x] Grafik sebaran trafo per unit dan per tahun produksi (jumlah unit atau tonase)
+- [x] Tabel ringkasan berbasis trigger, sehingga dashboard tidak lagi timeout
+- [x] Deploy ke Vercel
+
+**Sedang dikerjakan**
+- [ ] Autentikasi (login) dan Row Level Security khusus pengguna terdaftar
 
 **Berikutnya**
 - [ ] Unggah banyak berkas sekaligus lewat web
 - [ ] Pembaruan per baris (berdasarkan kode alat) dan riwayat perubahan
 - [ ] Tampilan ponsel (sidebar yang bisa dilipat)
-- [ ] Autentikasi, peran admin/viewer, dan Row Level Security
+- [ ] Peran admin/viewer
+- [ ] Histogram konsentrasi PCBs (ppm) dengan batas 2 dan 50 ppm
+- [ ] Tabel ringkasan untuk kualitas data (`inventory_quality` masih membaca seluruh baris)
 
 ---
 
