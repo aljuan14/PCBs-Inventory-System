@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseExcelWithSmartHeader } from '@/lib/excel';
 import { parseDMSCoordinate, repairIndonesianCoordinate } from '@/lib/dms';
 import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
-import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isMeaningful, recordMask } from '@/lib/import-profiles';
+import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isExampleRow, isMeaningful, recordMask } from '@/lib/import-profiles';
 import { downloadWorkbook } from '@/lib/upload-store';
 import { resolveUnit, tidyUnitName, type UnitContext } from '@/lib/units';
 
@@ -352,6 +352,11 @@ export function transformRows(
     // Empty pre-filled form rows (running number / default values only) are not data.
     if (!hasIdentity(rawRow, mappings)) {
       skippedEmpty++;
+      return;
+    }
+    if (isExampleRow(rawRow, mappings)) {
+      skippedEmpty++;
+      issues.add('skipped:example', 'info', 'Baris contoh dari template (CONTOH), dilewati', rowNumber);
       return;
     }
     // Leftovers pasted below the form (see recordMask) are not data either, but worth a look.

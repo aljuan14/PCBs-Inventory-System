@@ -277,6 +277,15 @@ export function hasIdentity(row: Record<string, unknown>, mapping: Record<string
   return columns.some((header) => isMeaningful(row[header]));
 }
 
+// The PLN template's example rows read "CONTOH" in the unit columns and carry
+// a sample year and test result (UID Kalbar left one under its header).
+const EXAMPLE_TEXT = /^\s*contoh\s*$/i;
+
+/** A template example row: "CONTOH" in the unit or sub-unit column. */
+export function isExampleRow(row: Record<string, unknown>, mapping: Record<string, string>) {
+  return Object.entries(mapping).some(([header, target]) => (target === 'unit' || target === 'sub_unit') && EXAMPLE_TEXT.test(String(row[header] ?? '')));
+}
+
 /**
  * Which rows are real records. Besides an identity value, a record needs its
  * unit, sub-unit or running number when the sheet fills those in: blocks
@@ -286,7 +295,7 @@ export function hasIdentity(row: Record<string, unknown>, mapping: Record<string
  * kept, as a record whose unit and number were left out.
  */
 export function recordMask(rows: Record<string, unknown>[], rowNumbers: number[], mapping: Record<string, string>) {
-  const identity = rows.map((row) => hasIdentity(row, mapping));
+  const identity = rows.map((row) => hasIdentity(row, mapping) && !isExampleRow(row, mapping));
   const columns = (target: string) => Object.entries(mapping).filter(([, fieldKey]) => fieldKey === target).map(([header]) => header);
   const unitColumns = [...columns('unit'), ...columns('sub_unit')];
   const noColumns = columns('no');
