@@ -115,8 +115,8 @@ function TransformerCard({ category, summary, loading, onSelect }: { category: I
         <div className="mt-4 h-48 animate-pulse rounded-xl bg-slate-100" />
       ) : (
         <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
-          <CompositionBar title="Tahun produksi" total={total} segments={years} onSelect={select} />
-          <CompositionBar title={`Hasil uji PCBs · ${formatPercent(share(tested, total))} sudah diuji`} total={total} segments={results} onSelect={select} />
+          <CompositionBar title="Jumlah trafo menurut tahun produksi" total={total} segments={years} onSelect={select} />
+          <CompositionBar title={`Hasil uji PCBs (semua tahun) · ${formatPercent(share(tested, total))} sudah diuji`} total={total} segments={results} onSelect={select} />
         </div>
       )}
     </div>

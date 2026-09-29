@@ -17,7 +17,7 @@ interface ChartProps {
   /** Clicking a risk class shows its rows in the table. */
   onSelectRisk?: (risk: keyof RiskCounts, category?: InventoryCategory) => void;
   /** Transformers made before 1997, which may contain PCBs; shown as a second donut. */
-  pre1997?: { counts: RiskCounts; onSelectRisk?: (risk: keyof RiskCounts) => void };
+  pre1997?: { counts: RiskCounts; onSelectRisk?: (risk: keyof RiskCounts) => void; subtitle?: string };
   /** Test coverage of transformers made before 1997, under the donuts of the national dashboard. */
   coverage?: Pre1997Coverage;
 }
@@ -344,7 +344,7 @@ export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote
   const pre1997Donut = pre1997 && (
     <RiskProportion
       title="Proporsi Status Risiko PCBs Trafo < 1997"
-      subtitle="Transformator dengan tahun produksi sebelum 1997"
+      subtitle={pre1997.subtitle ?? "Transformator dengan tahun produksi sebelum 1997"}
       emptyText="Belum ada transformator dengan tahun produksi sebelum 1997."
       counts={pre1997.counts}
       footnote="Transformator tanpa tahun produksi tidak termasuk."

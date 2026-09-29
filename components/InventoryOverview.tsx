@@ -11,6 +11,7 @@ import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
 import DistributionCharts from '@/components/DistributionCharts';
 import InventorySummary from '@/components/InventorySummary';
+import TestMethodCard from '@/components/TestMethodCard';
 import TonnageCard from '@/components/TonnageCard';
 import MapNotice from '@/components/MapNotice';
 import { useDashboardData } from '@/components/useDashboardData';
@@ -54,6 +55,7 @@ export default function InventoryOverview() {
   };
   const pre1997 = {
     counts: pre1997RiskCounts(stats, TRAFO_CATEGORIES),
+    subtitle: 'Gabungan trafo masih digunakan dan tidak digunakan dengan tahun produksi sebelum 1997',
     onSelectRisk: (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }, 'transformator'),
   };
   const coverage: Pre1997Coverage = {
@@ -79,6 +81,7 @@ export default function InventoryOverview() {
     <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
     <DashboardCharts categoryRisk={categoryRisk} riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} pre1997={pre1997} coverage={coverage} />
+    <TestMethodCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
     <DistributionCharts
       scope={scope}
       reloadKey={reloadKey}

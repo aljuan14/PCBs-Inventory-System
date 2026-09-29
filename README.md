@@ -71,6 +71,7 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 | Sebaran transformator | Dua grafik batang bertumpuk per kelas risiko PCBs, dalam jumlah unit atau tonase. Grafik pertama per perusahaan, Unit Induk, atau Unit Pelaksana (mengikuti filter, 12 terbesar dan sisanya digabung ke "Lainnya"). Grafik kedua per rentang lima tahun produksi, dengan batas 1997 ditandai. Klik nama untuk menelusuri, atau klik batang untuk membuka datanya di tabel. |
 | Proporsi risiko PCBs | Dua diagram donut, keseluruhan dan khusus trafo dengan tahun produksi sebelum 1997, per kelas: < 2 ppm, 2–50 ppm, > 50 ppm, dan belum diuji. Klik salah satu kelas untuk menyaring tabel ke rentang tersebut. |
 | Cakupan uji & temuan | Persentase trafo buatan sebelum 1997 yang sudah diuji per jenis (dengan pembanding semua tahun), serta jumlah temuan ≥ 2 ppm per jenis alat. Semuanya bisa diklik. |
+| Hasil uji per metode | Khusus trafo buatan sebelum 1997: jumlah hasil **uji lab** dan **uji cepat**, masing-masing dirinci < 2, 2–50, dan > 50 ppm, untuk gabungan atau per jenis trafo. Setiap baris membuka datanya di tabel (filter jenis uji, kelas ppm, dan tahun). |
 | Peta sebaran | Peta Leaflet dengan warna yang aman bagi buta warna. Klik titik untuk menampilkan semua data di koordinat itu di tabel. |
 | Tabel inventaris | Semua kolom tampil (termasuk koordinat, tahun, dan berat kering/minyak/total) dan tabel bisa digeser ke samping, dengan kolom merek dan aksi yang menempel. Kolom yang terkait filter aktif disorot. Tersedia paginasi server, pencarian, edit dan hapus per baris, filter lanjutan (jenis uji, tahun, daya, kelengkapan, batch impor), dan pengurutan. |
 | Kualitas data | Menyediakan skor kelengkapan, perbandingan per unit, dan laporan temuan (`/laporan/kualitas`) yang bisa diekspor ke Excel atau PDF. |
@@ -141,6 +142,7 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260929000005_weight_parts` | Berat kering dan minyak dijumlahkan hanya dari trafo yang mencatat keduanya |
 | `20260929000006_dashboard_charts` | Fungsi `inventory_charts` untuk grafik sebaran trafo per unit dan per tahun produksi |
 | `20260929000007_stats_summary` | Tabel ringkasan `inventory_stats_parts` yang dijaga trigger, sehingga angka dashboard tidak lagi menghitung ulang seluruh baris (fungsi lama tetap ada sebagai `inventory_stats_scan`) |
+| `20260929000008_test_methods` | Jumlah hasil uji lab dan uji cepat per kelas ppm di tabel ringkasan, untuk kartu hasil uji per metode |
 
 ### Menjalankan Aplikasi
 
@@ -312,6 +314,7 @@ Data inventaris (`Data-inventaris/`), termasuk template formulir KLHK dan data r
 - [x] Grafik sebaran trafo per unit dan per tahun produksi (jumlah unit atau tonase)
 - [x] Tabel ringkasan berbasis trigger, sehingga dashboard tidak lagi timeout
 - [x] Deploy ke Vercel
+- [x] Kartu hasil uji per metode (uji lab vs uji cepat) untuk trafo < 1997 dan label kartu ringkasan yang lebih jelas
 
 **Sedang dikerjakan**
 - [ ] Autentikasi (login) dan Row Level Security khusus pengguna terdaftar

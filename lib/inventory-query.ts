@@ -41,6 +41,13 @@ export interface CategoryStats {
   weight_untested_kg: number;
   pre1997_weight_kg: number;
   pre1997_weight_untested_kg: number;
+  /** Tested rows made before 1997 per method (uji_jenis Uji lab / Uji cepat) and PCBs class (migration 20260929000008). */
+  pre1997_lab_safe: number;
+  pre1997_lab_moderate: number;
+  pre1997_lab_high: number;
+  pre1997_quick_safe: number;
+  pre1997_quick_moderate: number;
+  pre1997_quick_high: number;
 }
 
 export type InventoryStats = Record<InventoryCategory, CategoryStats>;
@@ -50,7 +57,8 @@ const EMPTY_STATS: CategoryStats = {
   lab_at_least_50: 0, risk_safe: 0, risk_moderate: 0, risk_high: 0, pre1997_tested: 0, pre1997_risk_safe: 0,
   pre1997_risk_moderate: 0, pre1997_risk_high: 0, volume_l: 0, with_coordinates: 0, with_weight: 0, with_weight_parts: 0,
   weight_kg: 0, weight_dry_kg: 0, weight_oil_kg: 0, weight_safe_kg: 0, weight_moderate_kg: 0, weight_high_kg: 0,
-  weight_untested_kg: 0, pre1997_weight_kg: 0, pre1997_weight_untested_kg: 0,
+  weight_untested_kg: 0, pre1997_weight_kg: 0, pre1997_weight_untested_kg: 0, pre1997_lab_safe: 0, pre1997_lab_moderate: 0,
+  pre1997_lab_high: 0, pre1997_quick_safe: 0, pre1997_quick_moderate: 0, pre1997_quick_high: 0,
 };
 
 /** Company, unit and sub-unit a dashboard is narrowed to; null means all. */
