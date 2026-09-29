@@ -4,7 +4,7 @@
 
 export type JenisData = 'transformator_digunakan' | 'transformator_tidak_digunakan' | 'kapasitor' | 'minyak_dielektrik';
 
-export type ImportBatchStatus = 'pending_mapping' | 'mapped' | 'imported' | 'error';
+export type ImportBatchStatus = 'pending_mapping' | 'mapped' | 'imported' | 'error' | 'replaced';
 
 export interface Company {
   id: string;

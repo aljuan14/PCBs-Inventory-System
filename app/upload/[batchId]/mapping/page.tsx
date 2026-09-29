@@ -32,6 +32,14 @@ interface SiblingBatch {
   status: string;
 }
 
+interface ReplaceCandidate {
+  batchId: string;
+  fileName: string;
+  sheetName: string | null;
+  uploadedAt: string;
+  importedRows: number | null;
+}
+
 interface ValidationReport {
   totalRows: number;
   dataRows: number;
@@ -41,11 +49,14 @@ interface ValidationReport {
   missingImportant: string[];
   dashboard: { before1997: number; from1997: number; unknownYear: number; labTested: number; labAtLeast50: number } | null;
   samples: Record<string, string[]>;
+  /** The earlier upload this import would replace, with its stored rows. */
+  replacing: { id: string; fileName: string; sheetName: string | null; rows: number } | null;
 }
 
 type ColumnState = 'changed' | 'guess' | 'unmapped' | 'auto' | 'ignored';
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
+const formatDate = (value: string) => new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
 
 function Stat({ label, value, tone = 'text-slate-900' }: { label: string; value: string; tone?: string }) {
   return (
@@ -81,24 +92,30 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
   const [checkedKey, setCheckedKey] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
+  // A revised workbook can replace the rows of an earlier import (null: add as new data).
+  const [replaceCandidates, setReplaceCandidates] = useState<ReplaceCandidate[]>([]);
+  const [suggestedReplaceId, setSuggestedReplaceId] = useState<string | null>(null);
+  const [replaceBatchId, setReplaceBatchId] = useState<string | null>(null);
+  const [checkedReplace, setCheckedReplace] = useState<string | null>(null);
   const [showMatched, setShowMatched] = useState(false);
   const [showIgnored, setShowIgnored] = useState(false);
 
-  const [importSuccess, setImportSuccess] = useState<{ count: number; skippedEmpty: number; skippedDuplicates: number } | null>(null);
+  const [importSuccess, setImportSuccess] = useState<{ count: number; skippedEmpty: number; skippedDuplicates: number; replacedRows: number | null } | null>(null);
 
-  const runCheck = useCallback(async (currentMappings: Record<string, string>) => {
+  const runCheck = useCallback(async (currentMappings: Record<string, string>, currentReplaceId: string | null) => {
     setChecking(true);
     setErrorMsg(null);
     try {
       const res = await fetch(`/api/mapping/${batchId}/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mappings: currentMappings }),
+        body: JSON.stringify({ mappings: currentMappings, replaceBatchId: currentReplaceId }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Gagal memeriksa data.');
       setReport(json);
       setCheckedKey(JSON.stringify(currentMappings));
+      setCheckedReplace(currentReplaceId);
     } catch (err) {
       setErrorMsg((err instanceof Error && err.message) || 'Gagal memeriksa data.');
     } finally {
@@ -136,6 +153,11 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
         setSheetName(data.sheetName);
         setProfileLabel(data.profileLabel);
         setSiblings(data.siblings || []);
+        setReplaceCandidates(data.replaceCandidates || []);
+        setSuggestedReplaceId(data.suggestedReplaceId ?? null);
+        // Same file and sheet name imported before: most likely a revision, so replace by default.
+        const initialReplace: string | null = data.suggestedReplaceId ?? null;
+        setReplaceBatchId(initialReplace);
 
         // Profil format (Template KLHK / PLN) sudah menyiapkan mapping; kolom
         // di luar profil dicocokkan dengan kata kunci kategori.
@@ -145,7 +167,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
         }
         setSuggested(data.suggestedMapping || {});
         setMappings(initialMapping);
-        if (data.batch?.status !== 'imported') runCheck(initialMapping);
+        if (data.batch?.status !== 'imported') runCheck(initialMapping, initialReplace);
       } catch (err) {
         setErrorMsg((err instanceof Error && err.message) || 'Gagal memuat batch.');
       } finally {
@@ -170,7 +192,11 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
     });
   };
 
-  const isStale = checkedKey !== JSON.stringify(mappings);
+  const isStale = checkedKey !== JSON.stringify(mappings) || checkedReplace !== replaceBatchId;
+  const chooseReplace = (id: string | null) => {
+    setReplaceBatchId(id);
+    runCheck(mappings, id);
+  };
   const samplesFor = (header: string) => report?.samples[header] ?? (sampleRow[header] !== null && sampleRow[header] !== undefined ? [String(sampleRow[header])] : []);
 
   const columnState = (header: string): ColumnState => {
@@ -201,7 +227,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId, mappings, skipDuplicates }),
+        body: JSON.stringify({ batchId, mappings, skipDuplicates, replaceBatchId }),
       });
 
       const json = await res.json();
@@ -214,7 +240,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
         throw new Error(errMsg + errDetail + errCode);
       }
 
-      setImportSuccess({ count: json.importedCount, skippedEmpty: json.skippedEmpty ?? 0, skippedDuplicates: json.skippedDuplicates ?? 0 });
+      setImportSuccess({ count: json.importedCount, skippedEmpty: json.skippedEmpty ?? 0, skippedDuplicates: json.skippedDuplicates ?? 0, replacedRows: json.replacedRows ?? null });
       setSiblings((prev) => prev.map((item) => (item.batchId === batchId ? { ...item, status: 'imported' } : item)));
     } catch (err) {
       setErrorMsg((err instanceof Error && err.message) || 'Terjadi kesalahan saat mengimpor data.');
@@ -372,6 +398,11 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
           <p className="mt-2 text-sm text-slate-600 font-medium">
             Sebanyak <strong>{formatNumber(importSuccess.count)} baris peralatan</strong> telah disimpan ke database.
           </p>
+          {importSuccess.replacedRows !== null && (
+            <p className="mt-1 text-sm text-slate-600 font-medium">
+              {formatNumber(importSuccess.replacedRows)} baris dari unggahan lama telah dihapus dan digantikan.
+            </p>
+          )}
           {(importSuccess.skippedEmpty > 0 || importSuccess.skippedDuplicates > 0) && (
             <p className="mt-2 text-xs text-slate-500 font-medium">
               Dilewati: {formatNumber(importSuccess.skippedEmpty)} baris kosong atau di luar formulir &bull; {formatNumber(importSuccess.skippedDuplicates)} baris duplikat.
@@ -436,6 +467,50 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
             </div>
           )}
 
+          {replaceCandidates.length > 0 && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <h2 className="text-base font-bold text-slate-900">Cara menyimpan</h2>
+              <p className="text-[11px] text-slate-500">Pilih &ldquo;ganti&rdquo; jika berkas ini versi revisi dari unggahan sebelumnya.</p>
+              <div className="mt-3 space-y-2">
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-xs ${replaceBatchId ? 'border-slate-200' : 'border-emerald-500 bg-emerald-50/50'}`}>
+                  <input type="radio" name="save-mode" checked={!replaceBatchId} onChange={() => chooseReplace(null)} disabled={checking} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                  <span>
+                    <strong className="text-slate-900">Tambahkan sebagai data baru</strong>
+                    <span className="block text-[11px] text-slate-500">Data lama tetap ada. Baris yang identik dengan data di database dilewati.</span>
+                  </span>
+                </label>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-xs ${replaceBatchId ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200'}`}>
+                  <input type="radio" name="save-mode" checked={Boolean(replaceBatchId)} onChange={() => chooseReplace(suggestedReplaceId ?? replaceCandidates[0].batchId)} disabled={checking} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+                  <span className="min-w-0 flex-1">
+                    <strong className="text-slate-900">Ganti data dari unggahan sebelumnya</strong>
+                    <span className="block text-[11px] text-slate-500">Semua baris dari unggahan yang dipilih dihapus dan diganti isi sheet ini, dalam satu langkah.</span>
+                    <select
+                      aria-label="Unggahan yang diganti"
+                      value={replaceBatchId ?? ''}
+                      onChange={(e) => chooseReplace(e.target.value)}
+                      disabled={!replaceBatchId || checking}
+                      className="mt-2 w-full max-w-xl rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                    >
+                      {replaceCandidates.map((candidate) => (
+                        <option key={candidate.batchId} value={candidate.batchId}>
+                          {candidate.fileName}{candidate.sheetName ? ` › ${candidate.sheetName}` : ''} · {formatDate(candidate.uploadedAt)}
+                          {candidate.importedRows !== null ? ` · ${formatNumber(candidate.importedRows)} baris` : ''}
+                          {candidate.batchId === suggestedReplaceId ? ' (berkas & sheet sama)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </label>
+              </div>
+              {replaceBatchId && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  <span>Perubahan yang pernah dibuat langsung di aplikasi (tombol Edit di tabel) pada data unggahan lama ikut tergantikan oleh isi berkas ini.</span>
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Hasil pemeriksaan data */}
           <section className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-5 shadow-xs">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -445,7 +520,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
               </div>
               <button
                 type="button"
-                onClick={() => runCheck(mappings)}
+                onClick={() => runCheck(mappings, replaceBatchId)}
                 disabled={checking}
                 className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-50"
               >
@@ -466,11 +541,12 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
               </div>
             ) : (
               <div className={`space-y-4 ${checking ? 'opacity-50' : ''}`}>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className={`grid grid-cols-2 gap-3 ${report.replacing ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
                   <Stat label="Akan diimpor" value={formatNumber(importCount)} tone="text-emerald-700" />
+                  {report.replacing && <Stat label="Baris lama yang diganti" value={formatNumber(report.replacing.rows)} tone="text-rose-700" />}
                   <Stat label="Baris data di sheet" value={formatNumber(report.dataRows)} />
                   <Stat label="Kosong / di luar formulir (dilewati)" value={formatNumber(report.skippedEmpty)} tone="text-slate-500" />
-                  <Stat label="Sudah ada di database" value={formatNumber(duplicates)} tone={duplicates > 0 ? 'text-amber-700' : 'text-slate-500'} />
+                  <Stat label={report.replacing ? 'Sudah ada di data lain' : 'Sudah ada di database'} value={formatNumber(duplicates)} tone={duplicates > 0 ? 'text-amber-700' : 'text-slate-500'} />
                 </div>
 
                 {duplicates > 0 && (
@@ -537,7 +613,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
 
             <button
               type="button"
-              onClick={isStale ? () => runCheck(mappings) : handleSaveAndImport}
+              onClick={isStale ? () => runCheck(mappings, replaceBatchId) : handleSaveAndImport}
               disabled={importing || checking || (!isStale && importCount === 0)}
               className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 disabled:opacity-50 transition-all"
             >
@@ -554,7 +630,9 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
               ) : (
                 <>
                   <Database className="h-4 w-4" />
-                  <span>Impor {formatNumber(importCount)} baris ke database</span>
+                  <span>{report?.replacing
+                    ? `Ganti ${formatNumber(report.replacing.rows)} baris lama dengan ${formatNumber(importCount)} baris`
+                    : `Impor ${formatNumber(importCount)} baris ke database`}</span>
                 </>
               )}
             </button>

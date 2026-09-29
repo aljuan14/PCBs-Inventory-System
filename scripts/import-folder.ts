@@ -15,7 +15,7 @@
  * Safe to re-run: a file whose identical content was already imported for the
  * company is skipped, and rows already in the database or repeated in the file
  * are skipped as duplicates.
-  * Needs migrations up to 20260928000003. Uses SUPABASE_SERVICE_ROLE_KEY from
+ * Needs migrations up to 20260929000003. Uses SUPABASE_SERVICE_ROLE_KEY from
  * .env.local when present (required once row level security is tightened),
  * otherwise the anon key.
  */
@@ -27,7 +27,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { readWorkbook } from '@/lib/excel';
 import { buildSuggestedMapping } from '@/lib/import-profiles';
 import { scanWorkbook } from '@/lib/import-scan';
-import { buildCheckReport, checkMappings, fetchExistingFingerprints, insertBatchRows, transformRows } from '@/lib/import-transform';
+import { buildCheckReport, checkMappings, findRowsInDatabase, insertBatchRows, transformRows, type TransformedRow } from '@/lib/import-transform';
 import { getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
 import { findImportedUpload, sha256, STORAGE_BUCKET } from '@/lib/upload-store';
 
@@ -126,12 +126,11 @@ async function main() {
   console.log(`Perusahaan: ${companyName}${company.created ? (commit ? ' (baru dibuat)' : ' (belum ada, akan dibuat)') : ''}`);
   console.log(`Berkas: ${files.length}\n`);
 
-  // Fingerprints of rows already stored, per category, grown as sheets are imported.
-  const existing = new Map<InventoryCategory, Set<string>>();
-  const existingFor = async (category: InventoryCategory) => {
-    if (!existing.has(category)) existing.set(category, company.id ? await fetchExistingFingerprints(supabase, category, company.id) : new Set());
-    return existing.get(category) as Set<string>;
-  };
+  // Rows kept earlier in this run, so a dry run also counts copies across files
+  // (a commit finds them in the database). Unit and sub-unit count, as in the
+  // database fingerprint.
+  const seen = new Map<InventoryCategory, Set<string>>();
+  const runKey = (row: TransformedRow) => `${row.item.unit ?? ''}|${row.item.sub_unit ?? ''}|${row.fingerprint}`;
 
   for (const [index, file] of files.entries()) {
     const relative = path.relative(process.cwd(), file);
@@ -193,8 +192,10 @@ async function main() {
 
         const transformed = transformRows(category, parsed, mapping, { profile: sheet.profile, fileName: relative });
         const { rows, skippedCopies } = transformed;
-        const known = await existingFor(category);
-        const fresh = rows.filter((row) => !known.has(row.fingerprint));
+        const inDatabase = company.id ? await findRowsInDatabase(supabase, category, company.id, rows) : new Set<TransformedRow>();
+        const known = seen.get(category) ?? new Set<string>();
+        seen.set(category, known);
+        const fresh = rows.filter((row) => !inDatabase.has(row) && !known.has(runKey(row)));
         const entry: FileResult['sheets'][number] = { sheet: sheet.sheetName, category, rows: rows.length + skippedCopies, inserted: 0, duplicates: skippedCopies + rows.length - fresh.length };
         result.sheets.push(entry);
 
@@ -230,7 +231,7 @@ async function main() {
 
         entry.inserted = commit ? fresh.length : 0;
         for (const row of fresh) {
-          known.add(row.fingerprint);
+          known.add(runKey(row));
           const unit = (row.item.unit as string | undefined) ?? '(tanpa unit)';
           rowsByUnit[unit] = (rowsByUnit[unit] ?? 0) + 1;
         }

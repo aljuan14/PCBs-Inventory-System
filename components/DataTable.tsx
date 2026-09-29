@@ -712,7 +712,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                 const coordinate = formatCoordinate(item);
                 const rowNotes = focused('temuan') ? focusedNotes(item, appliedFilters) : [];
                 const isExpanded = expandedItemId === item.id;
-                const detailEntries = Object.entries(details[item.id] || {}).filter(([key]) => !['id', 'company_id', 'import_batch_id', 'catatan_impor', 'baris_excel'].includes(key)).filter(([, value]) => value !== null && value !== undefined && value !== '');
+                const detailEntries = Object.entries(details[item.id] || {}).filter(([key]) => !['id', 'company_id', 'import_batch_id', 'catatan_impor', 'baris_excel', 'fingerprint'].includes(key)).filter(([, value]) => value !== null && value !== undefined && value !== '');
                 const importNotes = (details[item.id]?.catatan_impor ?? []) as ImportNoteRow[];
                 return (
                   <Fragment key={item.id}>

@@ -51,8 +51,30 @@ export async function GET(
       }
     }
 
+    // Earlier imports of this company and category that a revised workbook can
+    // replace. The one with the same file and sheet name is suggested.
+    const { data: previous } = await supabase
+      .from('import_batches')
+      .select('id, nama_file_asli, sheet_name, uploaded_at, importedRows:laporan_pemeriksaan->importedRows')
+      .eq('company_id', batch.company_id)
+      .eq('jenis_data', batch.jenis_data)
+      .eq('status', 'imported')
+      .neq('id', batch.id)
+      .order('uploaded_at', { ascending: false })
+      .limit(100);
+    const replaceCandidates = (previous ?? []).map((row) => ({
+      batchId: row.id as string,
+      fileName: row.nama_file_asli as string,
+      sheetName: (row.sheet_name as string | null) ?? null,
+      uploadedAt: row.uploaded_at as string,
+      importedRows: row.importedRows === null || row.importedRows === undefined ? null : Number(row.importedRows),
+    }));
+    const suggestedReplaceId = replaceCandidates.find((row) => row.fileName === batch.nama_file_asli && row.sheetName === (batch.sheet_name ?? null))?.batchId ?? null;
+
     return NextResponse.json({
       batch,
+      replaceCandidates,
+      suggestedReplaceId,
       fieldDefinitions: [...(INVENTORY_FIELDS[category] || []), ...getDerivedFields(category).map((field) => ({ ...field, wajib: false, derived: true }))],
       headers,
       sampleRow,

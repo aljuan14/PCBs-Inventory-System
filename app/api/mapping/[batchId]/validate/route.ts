@@ -5,12 +5,14 @@ import {
   BatchFileError,
   checkMappings,
   dashboardPreview,
-  fetchExistingFingerprints,
+  findRowsInDatabase,
   loadBatchSheet,
+  loadReplaceTarget,
   missingImportantFields,
   sampleValues,
   transformRows,
 } from '@/lib/import-transform';
+import { stepTimer } from '@/lib/timing';
 
 // Parsing and checking a large sheet can take a while.
 export const maxDuration = 60;
@@ -25,7 +27,12 @@ export async function POST(
 ) {
   try {
     const { batchId } = await params;
-    const { mappings } = (await req.json()) as { mappings: Record<string, string> };
+    const { mappings, replaceBatchId } = (await req.json()) as {
+      mappings: Record<string, string>;
+      /** Earlier batch this import would replace; its rows do not count as duplicates. */
+      replaceBatchId?: string | null;
+    };
+    const timer = stepTimer(`check ${batchId.slice(0, 8)}`);
     const supabase = await createClient();
 
     const { data: batch, error } = await supabase
@@ -41,11 +48,16 @@ export async function POST(
     const mappingError = checkMappings(category, mappings ?? {});
     if (mappingError) return NextResponse.json({ error: mappingError }, { status: 400 });
 
+    const replacing = await loadReplaceTarget(supabase, batch, replaceBatchId);
     const sheet = await loadBatchSheet(supabase, batch);
+    timer.step('load');
     const { rows, skippedEmpty, issues } = transformRows(category, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
+    timer.step('transform');
 
-    const existing = await fetchExistingFingerprints(supabase, category, batch.company_id);
-    const inDatabase = rows.filter((row) => existing.has(row.fingerprint));
+    const existing = await findRowsInDatabase(supabase, category, batch.company_id, rows, replacing?.id);
+    const inDatabase = rows.filter((row) => existing.has(row));
+    timer.step('existing');
+    timer.done();
 
     return NextResponse.json({
       totalRows: sheet.allRows.length,
@@ -54,8 +66,9 @@ export async function POST(
       duplicatesInDb: { count: inDatabase.length, rows: inDatabase.slice(0, 8).map((row) => row.rowNumber) },
       issues: issues.list(),
       missingImportant: missingImportantFields(category, mappings),
-      dashboard: dashboardPreview(category, rows.filter((row) => !existing.has(row.fingerprint))),
+      dashboard: dashboardPreview(category, rows.filter((row) => !existing.has(row))),
       samples: sampleValues(sheet),
+      replacing,
     });
   } catch (err) {
     if (err instanceof BatchFileError) return NextResponse.json({ error: err.message }, { status: err.status });

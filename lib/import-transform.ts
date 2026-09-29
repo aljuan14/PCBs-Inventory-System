@@ -86,7 +86,8 @@ export function missingImportantFields(category: InventoryCategory, mappings: Re
 }
 
 // Fields whose values together identify a record, used to spot rows that are
-// repeated in the file or were already imported (e.g. a re-uploaded sheet).
+// repeated in the file. Rows already stored are found by the database's own
+// fingerprint (findRowsInDatabase).
 const FINGERPRINT_FIELDS = ['kode_alat', 'no', 'nama_merek', 'merek_minyak_dielektrik', 'nomor_serial', 'tahun_pembuatan', 'daya_kva', 'volume_l', 'koordinat_raw', 'lokasi_peralatan', 'lokasi_penyimpanan'];
 
 const fingerprintFields = (category: InventoryCategory) => {
@@ -110,18 +111,88 @@ function fingerprint(category: InventoryCategory, record: Record<string, unknown
 /** Same values wherever both rows are filled in: one is a copy of the other with fields left out. */
 const compatible = (a: string[], b: string[]) => a.every((value, index) => value === b[index] || value === '' || b[index] === '');
 
-/** Fingerprints of this company's rows already stored in the category table. */
-export async function fetchExistingFingerprints(supabase: SupabaseClient, category: InventoryCategory, companyId: string) {
-  const columns = fingerprintFields(category).join(', ');
-  const fingerprints = new Set<string>();
-  const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase.from(category).select(columns).eq('company_id', companyId).order('id').range(from, from + pageSize - 1);
-    if (error) throw new Error(`Gagal memeriksa data yang sudah ada: ${error.message}`);
-    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) fingerprints.add(fingerprint(category, row));
-    if (!data || data.length < pageSize) break;
+/** An earlier import batch the current one will replace, with its stored row count. */
+export interface ReplaceTarget {
+  id: string;
+  fileName: string;
+  sheetName: string | null;
+  rows: number;
+}
+
+/** Checks that `replaceBatchId` can be replaced by `batch`: an imported batch of the same company and category. */
+export async function loadReplaceTarget(
+  supabase: SupabaseClient,
+  batch: { id: string; company_id: string; jenis_data: string },
+  replaceBatchId: string | null | undefined,
+): Promise<ReplaceTarget | null> {
+  if (!replaceBatchId) return null;
+  const { data } = await supabase
+    .from('import_batches')
+    .select('id, company_id, jenis_data, nama_file_asli, sheet_name, status')
+    .eq('id', replaceBatchId)
+    .maybeSingle();
+  if (!data || data.id === batch.id || data.status !== 'imported' || data.company_id !== batch.company_id || data.jenis_data !== batch.jenis_data) {
+    throw new BatchFileError('Unggahan yang akan diganti tidak ditemukan, sudah diganti, atau berasal dari perusahaan atau kategori lain.', 400);
   }
-  return fingerprints;
+  const { count, error } = await supabase.from(batch.jenis_data).select('id', { count: 'exact', head: true }).eq('import_batch_id', replaceBatchId);
+  if (error) throw new Error(`Gagal menghitung data unggahan lama: ${error.message}`);
+  return { id: data.id, fileName: data.nama_file_asli, sheetName: data.sheet_name, rows: count ?? 0 };
+}
+
+const EXISTING_CHECK_CHUNK = 2000;
+const EXISTING_CHECK_CONCURRENCY = 3;
+
+// The values the database fingerprint is made of, per category: must match the
+// generated fingerprint columns (migration 20260929000002) exactly. Transformer
+// tables also store an oil brand (merek_minyak_dielektrik); it is not their name.
+function fingerprintInput(category: InventoryCategory, item: Record<string, unknown>) {
+  const value = (key: string) => item[key] ?? null;
+  const oil = category === 'minyak_dielektrik';
+  const transformer = category === 'transformator_digunakan' || category === 'transformator_tidak_digunakan';
+  return {
+    unit: value('unit'),
+    sub_unit: value('sub_unit'),
+    kode_alat: value('kode_alat'),
+    no: value('no'),
+    name: oil ? value('merek_minyak_dielektrik') : value('nama_merek'),
+    serial: oil ? null : value('nomor_serial'),
+    tahun_pembuatan: value('tahun_pembuatan'),
+    daya_kva: transformer ? value('daya_kva') : null,
+    volume_l: oil ? value('volume_l') : null,
+    koordinat_raw: value('koordinat_raw'),
+    location: oil ? value('lokasi_penyimpanan') : value('lokasi_peralatan'),
+  };
+}
+
+/**
+ * Rows identical to a record this company already has in the category table,
+ * found by the database (one indexed lookup per chunk). Rows of `excludeBatchId`
+ * do not count: that batch is about to be replaced.
+ */
+export async function findRowsInDatabase(
+  supabase: SupabaseClient,
+  category: InventoryCategory,
+  companyId: string,
+  rows: TransformedRow[],
+  excludeBatchId: string | null = null,
+) {
+  const found = new Set<TransformedRow>();
+  const starts = Array.from({ length: Math.ceil(rows.length / EXISTING_CHECK_CHUNK) }, (_, index) => index * EXISTING_CHECK_CHUNK);
+  for (let group = 0; group < starts.length; group += EXISTING_CHECK_CONCURRENCY) {
+    await Promise.all(starts.slice(group, group + EXISTING_CHECK_CONCURRENCY).map(async (start) => {
+      const chunk = rows.slice(start, start + EXISTING_CHECK_CHUNK);
+      // One array of positions (migration 20260929000003): a set of rows would be cut at the API's 1,000-row cap.
+      const { data, error } = await supabase.rpc('inventory_existing_rows', {
+        p_category: category,
+        p_company_id: companyId,
+        p_rows: chunk.map((row) => fingerprintInput(category, row.item)),
+        p_exclude_batch: excludeBatchId,
+      });
+      if (error) throw new Error(`Gagal memeriksa data yang sudah ada: ${error.message}`);
+      for (const index of (data ?? []) as number[]) found.add(chunk[index]);
+    }));
+  }
+  return found;
 }
 
 export interface ValidationIssue {
@@ -184,7 +255,8 @@ const COMPLETENESS_FIELDS: Record<InventoryCategory, string[]> = {
   minyak_dielektrik: ['merek_minyak_dielektrik', 'volume_l', 'koordinat_raw'],
 };
 
-const INSERT_CHUNK_SIZE = 500;
+const INSERT_CHUNK_SIZE = 1000;
+const INSERT_CONCURRENCY = 3;
 
 export interface InsertFailure {
   message: string;
@@ -200,13 +272,20 @@ export interface InsertFailure {
  */
 export async function insertBatchRows(supabase: SupabaseClient, category: InventoryCategory, rows: TransformedRow[], batch: { id: string; company_id: string }): Promise<InsertFailure | null> {
   const records = rows.map((row) => ({ ...row.item, company_id: batch.company_id, import_batch_id: batch.id }));
-  for (let start = 0; start < records.length; start += INSERT_CHUNK_SIZE) {
-    const chunk = records.slice(start, start + INSERT_CHUNK_SIZE);
-    const { error } = await supabase.from(category).insert(chunk);
-    if (error) {
+  const starts = Array.from({ length: Math.ceil(records.length / INSERT_CHUNK_SIZE) }, (_, index) => index * INSERT_CHUNK_SIZE);
+  // A few chunks at a time: fewer round trips without flooding the database.
+  for (let group = 0; group < starts.length; group += INSERT_CONCURRENCY) {
+    const results = await Promise.all(starts.slice(group, group + INSERT_CONCURRENCY).map(async (start) => {
+      const chunk = records.slice(start, start + INSERT_CHUNK_SIZE);
+      const { error } = await supabase.from(category).insert(chunk);
+      return error ? { start, chunk, error } : null;
+    }));
+    const failed = results.find((result) => result !== null);
+    if (failed) {
+      const { start, chunk, error } = failed;
       console.error(`Insert error on table ${category}`, JSON.stringify(error, null, 2));
       console.error('Sample row attempted:', JSON.stringify(chunk[0], null, 2));
-      if (start > 0) await supabase.from(category).delete().eq('import_batch_id', batch.id);
+      await supabase.from(category).delete().eq('import_batch_id', batch.id);
       return { message: error.message, detail: error.details ?? error.hint ?? null, code: error.code ?? null, rowNumber: rows[start].rowNumber };
     }
   }
@@ -403,6 +482,8 @@ export interface CheckReport {
   issues: ValidationIssue[];
   /** Column mapping used for the import, so the rows it skipped can be read from the workbook later. */
   mappings?: Record<string, string>;
+  /** The earlier upload this import replaced, and how many of its rows were removed. */
+  replaced?: { batchId: string; fileName: string; sheetName: string | null; deletedRows: number };
 }
 
 export function buildCheckReport(

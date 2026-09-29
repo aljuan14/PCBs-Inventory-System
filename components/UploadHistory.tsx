@@ -20,6 +20,7 @@ interface HistoryBatch {
   sheet_name: string | null;
   uploaded_at: string;
   status: string;
+  replaced_at: string | null;
   data_rows: number | null;
   laporan_pemeriksaan: CheckReport | null;
 }
@@ -97,8 +98,8 @@ export default function UploadHistory({ initialCompanyId }: { initialCompanyId: 
     let cancelled = false;
     let request = supabase
       .from('import_batches')
-      .select('id, company_id, jenis_data, nama_file_asli, sheet_name, uploaded_at, status, data_rows, laporan_pemeriksaan')
-      .in('status', ['imported', 'error'])
+      .select('id, company_id, jenis_data, nama_file_asli, sheet_name, uploaded_at, status, replaced_at, data_rows, laporan_pemeriksaan')
+      .in('status', ['imported', 'error', 'replaced'])
       .order('uploaded_at', { ascending: false })
       .limit(limit + 1);
     if (companyId) request = request.eq('company_id', companyId);
@@ -120,7 +121,8 @@ export default function UploadHistory({ initialCompanyId }: { initialCompanyId: 
   const term = search.trim().toLowerCase();
   const visible = term ? batches.filter((batch) => `${batch.nama_file_asli} ${batch.sheet_name ?? ''}`.toLowerCase().includes(term)) : batches;
   const totals = visible.reduce((sum, batch) => ({
-    rows: sum.rows + (batch.laporan_pemeriksaan?.importedRows ?? 0),
+    // Rows of a replaced batch are no longer stored.
+    rows: sum.rows + (batch.status === 'imported' ? batch.laporan_pemeriksaan?.importedRows ?? 0 : 0),
     warnings: sum.warnings + (batch.laporan_pemeriksaan?.issues.filter((issue) => issue.level === 'warning').length ?? 0),
   }), { rows: 0, warnings: 0 });
 
@@ -172,12 +174,18 @@ export default function UploadHistory({ initialCompanyId }: { initialCompanyId: 
               const open = expanded === batch.id;
               return (
                 <Fragment key={batch.id}>
-                  <tr className={`cursor-pointer hover:bg-slate-50/70 ${open ? 'bg-slate-50/70' : ''}`} onClick={() => setExpanded(open ? null : batch.id)}>
+                  <tr className={`cursor-pointer hover:bg-slate-50/70 ${open ? 'bg-slate-50/70' : ''} ${batch.status === 'replaced' ? 'opacity-60' : ''}`} onClick={() => setExpanded(open ? null : batch.id)}>
                     <td className="px-3 py-3 text-slate-400">{open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDate(batch.uploaded_at)}</td>
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2 font-semibold text-slate-900"><FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-700" /><span className="truncate">{batch.nama_file_asli}</span></div>
                       {batch.sheet_name && <div className="ml-6 text-[11px] text-slate-500">{batch.sheet_name}</div>}
+                      {batch.status === 'replaced' && (
+                        <div className="ml-6 mt-0.5 text-[11px] font-semibold text-amber-700">Diganti versi baru{batch.replaced_at ? ` pada ${formatDate(batch.replaced_at)}` : ''}; datanya tidak lagi di database</div>
+                      )}
+                      {report?.replaced && (
+                        <div className="ml-6 mt-0.5 text-[11px] text-slate-500">Menggantikan {formatNumber(report.replaced.deletedRows)} baris dari unggahan sebelumnya</div>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-slate-700">{companyNames.get(batch.company_id) ?? '–'}</td>
                     <td className="px-3 py-3 text-slate-700">{getCategoryLabel(batch.jenis_data)}</td>

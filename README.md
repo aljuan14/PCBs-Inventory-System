@@ -45,6 +45,7 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 | Deteksi format otomatis | Setiap sheet dipindai, baris header ditemukan meskipun ada judul bertingkat, lalu dikenali sebagai **Template KLHK** atau **Format PLN** beserta kategorinya. |
 | Pemetaan kolom | Kolom dipetakan otomatis sesuai profil format. Admin cukup mengonfirmasi, atau memetakan manual bila perlu. |
 | Pemeriksaan sebelum impor | Menampilkan koordinat tidak terbaca, angka atau tanggal tidak valid, field penting yang kosong, dan duplikat. Setiap temuan disertai nomor baris Excel dan contoh nilainya. |
+| Ganti data unggahan sebelumnya | Berkas revisi dapat menggantikan seluruh baris dari unggahan lama (disarankan otomatis bila nama berkas dan sheet sama) dalam satu transaksi. Unggahan lama tetap tercatat di riwayat sebagai "diganti". |
 | Perbaikan koordinat | Membaca format DMS, desimal koma, dan urutan lintang-bujur yang tertukar. Pola rusak yang umum (titik desimal hilang, lintang dan bujur tergabung) diperbaiki bila hasilnya jatuh di wilayah Indonesia. |
 | Penyaringan baris | Baris formulir kosong, sisa tempelan di luar formulir (tanpa Unit Induk, Unit Pelaksana, dan No), serta baris yang ditempel dua kali dilewati. Semuanya dicatat di laporan pemeriksaan. |
 | Normalisasi unit | Penulisan Unit Induk PLN yang beragam (`UIWRKR`, `UIW RKR`, `WRKR`, ...) dipetakan ke 28 nama baku. |
@@ -120,8 +121,10 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260928000001_units_and_asset_code` | Kolom `unit`, `sub_unit`, `kode_alat` dan fungsi `inventory_units` |
 | `20260928000002_stats_by_unit` | Statistik per unit untuk filter dashboard |
 | `20260928000003_data_quality` | Catatan impor per baris, laporan pemeriksaan, fungsi `inventory_quality` |
-| `20260929000001_risk_bands` | Kelas risiko PCBs < 2, 2–50, > 50 ppm dan statistik trafo < 1997 |
 | `20260928000004_dashboard_timeout` | Batas waktu query `anon` dan `authenticated` dinaikkan ke 15 detik |
+| `20260929000001_risk_bands` | Kelas risiko PCBs < 2, 2–50, > 50 ppm dan statistik trafo < 1997 |
+| `20260929000002_import_replace` | Cek duplikat di database (kolom `fingerprint`) dan mode ganti data unggahan sebelumnya |
+| `20260929000003_existing_rows_array` | Perbaikan cek duplikat: hasil tidak lagi terpotong di 1.000 baris per permintaan |
 
 ### Menjalankan Aplikasi
 

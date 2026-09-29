@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import type { InventoryCategory } from '@/lib/inventory';
-import { BatchFileError, buildCheckReport, checkMappings, fetchExistingFingerprints, forgetBatchSheet, insertBatchRows, loadBatchSheet, transformRows } from '@/lib/import-transform';
+import { BatchFileError, buildCheckReport, checkMappings, findRowsInDatabase, forgetBatchSheet, insertBatchRows, loadBatchSheet, loadReplaceTarget, transformRows } from '@/lib/import-transform';
+import { stepTimer } from '@/lib/timing';
 
 // Large sheets (tens of thousands of rows) are parsed and inserted in one request.
 export const maxDuration = 300;
@@ -9,11 +10,13 @@ export const maxDuration = 300;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { batchId, mappings, skipDuplicates = true } = body as {
+    const { batchId, mappings, skipDuplicates = true, replaceBatchId } = body as {
       batchId: string;
       mappings: Record<string, string>; // { [excelColumn]: fieldKey }
       /** Skip rows identical to records already stored for this company. */
       skipDuplicates?: boolean;
+      /** Earlier import batch (a previous version of this sheet) whose rows this import replaces. */
+      replaceBatchId?: string | null;
     };
 
     if (!batchId || !mappings || Object.keys(mappings).length === 0) {
@@ -40,17 +43,24 @@ export async function POST(req: NextRequest) {
     const mappingError = checkMappings(jenisData, mappings);
     if (mappingError) return NextResponse.json({ error: mappingError }, { status: 400 });
 
+    const timer = stepTimer(`import ${batchId.slice(0, 8)}`);
+    const replacing = await loadReplaceTarget(supabase, batch, replaceBatchId);
+
     // 2. Baca sheet & transformasi (logika yang sama dengan pemeriksaan data)
     const sheet = await loadBatchSheet(supabase, batch);
+    timer.step('load');
     const transformed = transformRows(jenisData, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
     const { rows, skippedEmpty, skippedCopies } = transformed;
+    timer.step('transform');
 
+    // Rows of the batch being replaced are about to go, so they are not duplicates.
     let skippedDuplicates = 0;
     let toInsert = rows;
     if (skipDuplicates) {
-      const existing = await fetchExistingFingerprints(supabase, jenisData, batch.company_id);
-      toInsert = rows.filter((row) => !existing.has(row.fingerprint));
+      const existing = await findRowsInDatabase(supabase, jenisData, batch.company_id, rows, replacing?.id);
+      toInsert = rows.filter((row) => !existing.has(row));
       skippedDuplicates = rows.length - toInsert.length;
+      timer.step('existing');
     }
 
     if (toInsert.length === 0) {
@@ -63,7 +73,9 @@ export async function POST(req: NextRequest) {
 
     // 3. Insert bertahap ke tabel sesuai jenis_data
     const failure = await insertBatchRows(supabase, jenisData, toInsert, batch);
+    timer.step('insert');
     if (failure) {
+      timer.done();
       return NextResponse.json({
         error: `Gagal menyimpan data ke database (Excel baris ${failure.rowNumber} dst.): ${failure.message}`,
         detail: failure.detail,
@@ -71,18 +83,36 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
+    // 3b. The old version's rows go only once the new ones are stored; if that
+    // fails, the new rows are removed again so nothing is left half-replaced.
+    let deletedRows = 0;
+    if (replacing) {
+      const { data: deleted, error: replaceError } = await supabase.rpc('replace_import_batch', { p_old: replacing.id, p_new: batchId });
+      timer.step('replace');
+      if (replaceError) {
+        await supabase.from(jenisData).delete().eq('import_batch_id', batchId);
+        timer.done();
+        return NextResponse.json({ error: `Gagal mengganti data unggahan lama: ${replaceError.message}. Tidak ada data yang berubah.` }, { status: 500 });
+      }
+      deletedRows = Number(deleted) || 0;
+    }
+
     // 4. Update status import_batches, dengan laporan pemeriksaan untuk riwayat upload
+    const report = buildCheckReport(transformed, toInsert.length, mappings);
+    if (replacing) report.replaced = { batchId: replacing.id, fileName: replacing.fileName, sheetName: replacing.sheetName, deletedRows };
     await supabase
       .from('import_batches')
-      .update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(transformed, toInsert.length, mappings) })
+      .update({ status: 'imported', laporan_pemeriksaan: report })
       .eq('id', batchId);
     forgetBatchSheet(batchId);
+    timer.done();
 
     return NextResponse.json({
       success: true,
       importedCount: toInsert.length,
       skippedEmpty,
       skippedDuplicates: skippedCopies + skippedDuplicates,
+      replacedRows: replacing ? deletedRows : null,
       tableName: jenisData,
     });
   } catch (err) {
