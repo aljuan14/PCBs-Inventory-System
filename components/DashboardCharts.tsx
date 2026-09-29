@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell } from 'recharts';
 import { useState } from 'react';
 import { ChevronRight, CircleDashed, OctagonAlert, ShieldCheck, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { PCB_CLASSES, type InventoryCategory } from '@/lib/inventory';
+import type { CategoryFilter } from '@/lib/inventory-query';
 
 interface ChartProps {
   /** One row per equipment type; the distribution card is hidden when there is fewer than two. */
@@ -17,6 +18,27 @@ interface ChartProps {
   onSelectRisk?: (risk: keyof RiskCounts, category?: InventoryCategory) => void;
   /** Transformers made before 1997, which may contain PCBs; shown as a second donut. */
   pre1997?: { counts: RiskCounts; onSelectRisk?: (risk: keyof RiskCounts) => void };
+  /** Test coverage of transformers made before 1997, under the donuts of the national dashboard. */
+  coverage?: Pre1997Coverage;
+}
+
+export interface CoverageRow {
+  category: InventoryCategory;
+  label: string;
+  /** Made before 1997: with a test result, and all. */
+  tested: number;
+  total: number;
+  /** Every year, shown for comparison. */
+  allTested: number;
+  allTotal: number;
+}
+
+export interface Pre1997Coverage {
+  rows: CoverageRow[];
+  /** Transformers without a production year, which the card cannot place. */
+  unknownYear: number;
+  /** Opens the untested transformers made before 1997 of one category, or of all ('transformator'). */
+  onSelectUntested?: (category: CategoryFilter) => void;
 }
 
 export interface CategoryRisk {
@@ -180,52 +202,54 @@ function CardHeader({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function unmeasuredNote(rows: CategoryRisk[]) {
-  const names = rows.filter((row) => !row.measured).map((row) => row.label);
-  return names.length > 0 ? `${names.join(', ')} tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs.` : null;
-}
+const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
-function TestCoverage({ rows, loading, onSelectRisk, wide }: { rows: CategoryRisk[]; loading?: boolean; onSelectRisk?: ChartProps['onSelectRisk']; wide?: boolean }) {
-  const measured = rows.filter((row) => row.measured);
-  const note = unmeasuredNote(rows);
+function TestCoverage({ coverage, loading }: { coverage: Pre1997Coverage; loading?: boolean }) {
+  const { rows, unknownYear, onSelectUntested } = coverage;
+  const sum = (key: 'tested' | 'total' | 'allTested' | 'allTotal') => rows.reduce((total, row) => total + row[key], 0);
+  const columns: Array<Omit<CoverageRow, 'category'> & { key: CategoryFilter }> = [
+    ...rows.map(({ category, ...row }) => ({ key: category, ...row })),
+    { key: 'transformator', label: 'Gabungan', tested: sum('tested'), total: sum('total'), allTested: sum('allTested'), allTotal: sum('allTotal') },
+  ];
 
   return (
     <div className={CARD_CLASS}>
       <CardHeader
-        title="Cakupan Uji PCBs per Jenis Alat"
-        subtitle={`Data yang sudah memiliki hasil uji konsentrasi PCBs${onSelectRisk ? ' · klik untuk melihat yang belum diuji' : ''}`}
+        title="Cakupan Uji PCBs Trafo < 1997"
+        subtitle={`Transformator buatan sebelum 1997 yang sudah memiliki hasil uji konsentrasi PCBs${onSelectUntested ? ' · klik untuk melihat yang belum diuji' : ''}`}
       />
       {loading ? (
-        <div className="flex-1 animate-pulse rounded-xl bg-slate-100" />
+        <div className="h-24 animate-pulse rounded-xl bg-slate-100" />
       ) : (
-        <ul className={wide ? 'grid grid-cols-1 gap-2 md:grid-cols-3' : 'flex flex-1 flex-col justify-center gap-2'}>
-          {measured.map((row) => {
-            const total = totalOf(row.counts);
-            const tested = total - row.counts.untested;
-            const share = total > 0 ? (tested / total) * 100 : 0;
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-3">
+          {columns.map((column) => {
+            const untested = column.total - column.tested;
             return (
-              <li key={row.category}>
+              <li key={column.key}>
                 <button
                   type="button"
-                  disabled={!onSelectRisk || row.counts.untested === 0}
-                  onClick={() => onSelectRisk?.('untested', row.category)}
+                  disabled={!onSelectUntested || untested === 0}
+                  onClick={() => onSelectUntested?.(column.key)}
                   className="group w-full rounded-lg px-2 py-2.5 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-emerald-500"
                 >
                   <div className="mb-2 flex items-baseline justify-between gap-3">
-                    <span className="text-xs font-semibold text-slate-800">{row.label}</span>
-                    <span className="text-lg font-semibold tabular-nums text-slate-900">{total > 0 ? formatPercent(share) : '–'}</span>
+                    <span className="text-xs font-semibold text-slate-800">{column.label}</span>
+                    <span className="text-lg font-semibold tabular-nums text-slate-900">{column.total > 0 ? formatPercent(share(column.tested, column.total)) : '–'}</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-slate-600" style={{ width: `${share}%` }} />
+                    <div className="h-full rounded-full bg-slate-600" style={{ width: `${share(column.tested, column.total)}%` }} />
                   </div>
                   <div className="mt-1.5 flex justify-between gap-3 text-[11px] tabular-nums text-slate-500">
-                    <span>{formatNumber(tested)} dari {formatNumber(total)} {unitOf(row)} sudah diuji</span>
-                    {row.counts.untested > 0 && (
+                    <span>{formatNumber(column.tested)} dari {formatNumber(column.total)} unit sudah diuji</span>
+                    {untested > 0 && (
                       <span className="flex items-center gap-0.5 group-enabled:group-hover:text-slate-700">
-                        {formatNumber(row.counts.untested)} belum diuji
-                        {onSelectRisk && <ChevronRight className="h-3 w-3" />}
+                        {formatNumber(untested)} belum diuji
+                        {onSelectUntested && <ChevronRight className="h-3 w-3" />}
                       </span>
                     )}
+                  </div>
+                  <div className="mt-1 text-[11px] tabular-nums text-slate-400">
+                    Semua tahun: {column.allTotal > 0 ? formatPercent(share(column.allTested, column.allTotal)) : '–'}
                   </div>
                 </button>
               </li>
@@ -233,7 +257,11 @@ function TestCoverage({ rows, loading, onSelectRisk, wide }: { rows: CategoryRis
           })}
         </ul>
       )}
-      {note && !loading && <p className="mt-4 text-[11px] text-slate-400">{note}</p>}
+      {!loading && (
+        <p className="mt-4 text-[11px] text-slate-400">
+          Khusus transformator. {formatNumber(unknownYear)} trafo tanpa tahun produksi tidak termasuk karena tidak diketahui apakah buatan sebelum 1997.
+        </p>
+      )}
     </div>
   );
 }
@@ -307,7 +335,7 @@ function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loadi
   );
 }
 
-export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk, pre1997 }: ChartProps) {
+export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk, pre1997, coverage }: ChartProps) {
   const showByCategory = categoryRisk.length > 1;
   const subtitle = 'Pengelompokan berdasarkan konsentrasi PCBs (ppm) hasil uji';
   const donut = riskCounts
@@ -331,17 +359,8 @@ export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote
 
   return (
     <div className="space-y-6">
-      {pre1997Donut ? (
-        <>
-          {donuts}
-          <TestCoverage rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} wide />
-        </>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <TestCoverage rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} />
-          {donut}
-        </div>
-      )}
+      {donuts}
+      {coverage && <TestCoverage coverage={coverage} loading={loading} />}
       <Findings rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} />
     </div>
   );
