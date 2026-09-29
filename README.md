@@ -125,6 +125,8 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260929000001_risk_bands` | Kelas risiko PCBs < 2, 2–50, > 50 ppm dan statistik trafo < 1997 |
 | `20260929000002_import_replace` | Cek duplikat di database (kolom `fingerprint`) dan mode ganti data unggahan sebelumnya |
 | `20260929000003_existing_rows_array` | Perbaikan cek duplikat: hasil tidak lagi terpotong di 1.000 baris per permintaan |
+| `20260929000004_transformer_weights` | Kolom berat kering, minyak, dan total (kg) pada tabel trafo, statistik tonase, fungsi `inventory_set_weights` |
+| `20260929000005_weight_parts` | Berat kering dan minyak dijumlahkan hanya dari trafo yang mencatat keduanya |
 
 ### Menjalankan Aplikasi
 

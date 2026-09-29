@@ -1,4 +1,4 @@
-import { INVENTORY_FIELDS, suggestInventoryField, type InventoryCategory, type InventoryFieldType } from './inventory';
+import { INVENTORY_FIELDS, WEIGHT_FIELDS, suggestInventoryField, type InventoryCategory, type InventoryFieldType } from './inventory';
 
 /**
  * Known spreadsheet layouts. A profile is recognised from a sheet's header
@@ -20,7 +20,7 @@ export const IGNORE = '__ignore__';
  * database column.
  */
 export const DERIVED_FIELDS: Array<{ field_key: string; label: string; tipe_data: InventoryFieldType; categories: InventoryCategory[] }> = [
-  { field_key: '@berat_kg', label: 'Berat total (kg) → dikonversi ke ton', tipe_data: 'numeric', categories: ['transformator_digunakan', 'transformator_tidak_digunakan'] },
+  { field_key: '@berat_kg', label: 'Berat total (kg) → Berat Total (kg), bila kolomnya belum dipetakan', tipe_data: 'numeric', categories: ['transformator_digunakan', 'transformator_tidak_digunakan'] },
   { field_key: '@uji_lab_ppm', label: 'Hasil uji lab / GC (ppm) → Uji lab', tipe_data: 'numeric', categories: ['transformator_digunakan', 'transformator_tidak_digunakan', 'minyak_dielektrik'] },
   { field_key: '@uji_lab_penyedia', label: 'Penguji lab / GC', tipe_data: 'text', categories: ['transformator_digunakan', 'transformator_tidak_digunakan', 'minyak_dielektrik'] },
   { field_key: '@uji_cepat_ppm', label: 'Hasil uji cepat / Dexil (ppm) → Uji cepat', tipe_data: 'numeric', categories: ['transformator_digunakan', 'transformator_tidak_digunakan', 'minyak_dielektrik'] },
@@ -66,7 +66,9 @@ const PLN_RULES: Record<InventoryCategory, Rule[]> = {
     ['daya_kva', ['daya', 'kva']],
     ['ketersediaan_keran_buang', ['saluranpengurasan']],
     ['perawatan_waktu', ['tanggalperawatan']],
-    ['@berat_kg', ['berattotal']],
+    ['berat_kering_kg', ['beratkering']],
+    ['berat_minyak_kg', ['beratminyak']],
+    ['berat_total_kg', ['berattotal']],
     ...PLN_TEST_RULES,
   ],
   transformator_tidak_digunakan: [],
@@ -357,10 +359,14 @@ const ENUM_NORMALIZERS: Record<string, (value: string) => string | null> = {
   status_alat: (value) => (/tidak|attb/i.test(value) ? 'Tidak digunakan' : /masih|^ya\b|^atb$|digunakan/i.test(value) ? 'Masih digunakan' : null),
 };
 
+// A weight of 0 is an empty row of the form (its total is a formula), not a weightless unit.
+const ZERO_IS_EMPTY = new Set([...WEIGHT_FIELDS, '@berat_kg']);
+
 export function convertValue(fieldKey: string, type: string | undefined, value: unknown): string | number | null {
   if (type === 'numeric' || type === 'integer' || type === 'number') {
     const number = parseNumber(value);
-    return number === null ? null : type === 'integer' ? Math.round(number) : number;
+    if (number === null || (number === 0 && ZERO_IS_EMPTY.has(fieldKey))) return null;
+    return type === 'integer' ? Math.round(number) : number;
   }
   if (type === 'date') return parseDate(value);
   if (!isMeaningful(value)) return null;
@@ -377,7 +383,8 @@ export function applyDerivedFields(item: Record<string, unknown>, derived: Recor
   if (derived['@koordinat_bujur'] !== null && derived['@koordinat_bujur'] !== undefined && typeof item.koordinat_raw === 'string') {
     item.koordinat_raw = `${item.koordinat_raw}, ${derived['@koordinat_bujur']}`;
   }
-  if (typeof derived['@berat_kg'] === 'number') setIfEmpty('berat_ton', Number((derived['@berat_kg'] / 1000).toFixed(4)));
+  // Weights are checked and completed in transformRows (see checkWeights).
+  if (typeof derived['@berat_kg'] === 'number') setIfEmpty('berat_total_kg', derived['@berat_kg']);
 
   const hasDirectTest = item.uji_konsentrasi_ppm !== null && item.uji_konsentrasi_ppm !== undefined;
   if (!hasDirectTest) {

@@ -62,7 +62,14 @@ const trafoCommon = (): InventoryField[] => [
   field('koordinat_raw', 'Koordinat', 'text', false),
   field('daya_kva', 'Daya (kVA)', 'numeric', false),
   field('ketersediaan_keran_buang', 'Ketersediaan Keran Buang', 'text', false),
+  // As the PLN form reports them; the total is filled from the two parts when left empty.
+  field('berat_kering_kg', 'Berat Kering Peralatan (kg)', 'numeric', false),
+  field('berat_minyak_kg', 'Berat Minyak/Cairan (kg)', 'numeric', false),
+  field('berat_total_kg', 'Berat Total (kg)', 'numeric', false),
 ];
+
+/** Weights where 0 means "not filled in": the PLN form's total is a formula that reads 0 on an empty row. */
+export const WEIGHT_FIELDS = ['berat_kering_kg', 'berat_minyak_kg', 'berat_total_kg'];
 
 // Where the equipment belongs within the company and its own equipment code
 // (PLN: Unit Induk, Unit Pelaksana, Kode Trafo). See lib/units.ts.

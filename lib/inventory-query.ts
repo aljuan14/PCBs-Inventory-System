@@ -27,6 +27,20 @@ export interface CategoryStats {
   pre1997_risk_high: number;
   volume_l: number;
   with_coordinates: number;
+  /** Rows with a total weight, and the weights summed in kg (migration 20260929000004). */
+  with_weight: number;
+  weight_kg: number;
+  /** Dry and oil weight, over the rows that report both (with_weight_parts; migration 20260929000005). */
+  with_weight_parts: number;
+  weight_dry_kg: number;
+  weight_oil_kg: number;
+  /** Total weight per PCBs risk class, and of equipment made before 1997 (all, untested). */
+  weight_safe_kg: number;
+  weight_moderate_kg: number;
+  weight_high_kg: number;
+  weight_untested_kg: number;
+  pre1997_weight_kg: number;
+  pre1997_weight_untested_kg: number;
 }
 
 export type InventoryStats = Record<InventoryCategory, CategoryStats>;
@@ -34,7 +48,9 @@ export type InventoryStats = Record<InventoryCategory, CategoryStats>;
 const EMPTY_STATS: CategoryStats = {
   total: 0, before_1997: 0, from_1997: 0, unknown_year: 0, tested: 0, lab_tested: 0, lab_below_50: 0,
   lab_at_least_50: 0, risk_safe: 0, risk_moderate: 0, risk_high: 0, pre1997_tested: 0, pre1997_risk_safe: 0,
-  pre1997_risk_moderate: 0, pre1997_risk_high: 0, volume_l: 0, with_coordinates: 0,
+  pre1997_risk_moderate: 0, pre1997_risk_high: 0, volume_l: 0, with_coordinates: 0, with_weight: 0, with_weight_parts: 0,
+  weight_kg: 0, weight_dry_kg: 0, weight_oil_kg: 0, weight_safe_kg: 0, weight_moderate_kg: 0, weight_high_kg: 0,
+  weight_untested_kg: 0, pre1997_weight_kg: 0, pre1997_weight_untested_kg: 0,
 };
 
 /** Company, unit and sub-unit a dashboard is narrowed to; null means all. */
@@ -102,6 +118,10 @@ export interface InventoryRow {
   koordinat_raw?: string | null;
   catatan_impor?: ImportNoteRow[] | null;
   baris_excel?: number | null;
+  /** Transformers only (migration 20260929000004). */
+  berat_kering_kg?: number | null;
+  berat_minyak_kg?: number | null;
+  berat_total_kg?: number | null;
 }
 
 /** One entry of a row's catatan_impor (see ImportNote in lib/import-transform.ts). */
@@ -298,7 +318,8 @@ const MISSING_FINDINGS: Record<string, Partial<InventoryFilters>> = {
  */
 export function issueTableFilter(key: string, label: string): Partial<InventoryFilters> | null {
   if (key.startsWith('missing:')) return MISSING_FINDINGS[key] ?? null;
-  if (key.startsWith('duplicate:') || key.startsWith('skipped:')) return null;
+  // Not kept with the row: read from the workbook. weight:mismatch keeps the reported total, so it is only a finding.
+  if (key.startsWith('duplicate:') || key.startsWith('skipped:') || key === 'weight:mismatch') return null;
   return { note: { kode: key, label } };
 }
 

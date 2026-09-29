@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseExcelWithSmartHeader } from '@/lib/excel';
 import { parseDMSCoordinate, repairIndonesianCoordinate } from '@/lib/dms';
-import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
+import { INVENTORY_FIELDS, WEIGHT_FIELDS, type InventoryCategory } from '@/lib/inventory';
 import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isExampleRow, isMeaningful, recordMask } from '@/lib/import-profiles';
 import { downloadWorkbook } from '@/lib/upload-store';
 import { resolveUnit, tidyUnitName, type UnitContext } from '@/lib/units';
@@ -319,6 +319,48 @@ export interface ImportNote {
 
 const noteText = (value: unknown) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 200));
 
+// Heavier than the largest power transformers in the PLN data (about 400 t):
+// a spreadsheet error (UID Jabar reports oil weights in the billions of kg).
+const MAX_WEIGHT_KG = 1_000_000;
+
+/**
+ * Weights of a transformer row (kg): values over 1.000 t are cleared; a total
+ * written in tons (dry + oil ≈ total × 1000) becomes dry + oil; a missing
+ * total is dry + oil; any other total that differs from its parts is kept as
+ * reported and noted in the check report. berat_ton follows the total.
+ */
+function checkWeights(
+  item: Record<string, unknown>,
+  rowNumber: number,
+  note: (level: ValidationIssue['level'], entry: ImportNote, example?: unknown) => void,
+  found: Array<Parameters<IssueCollector['add']>>,
+) {
+  for (const key of WEIGHT_FIELDS) {
+    const value = item[key];
+    if (typeof value === 'number' && value > MAX_WEIGHT_KG) {
+      note('warning', { kode: 'weight:implausible', jenis: 'dikosongkan', kolom: key, pesan: 'Berat lebih dari 1.000 ton (tidak wajar), dikosongkan', nilai_asli: String(value) }, value);
+      item[key] = null;
+    }
+  }
+  const dry = item.berat_kering_kg;
+  const oil = item.berat_minyak_kg;
+  const total = item.berat_total_kg;
+  if (typeof dry === 'number' && typeof oil === 'number') {
+    const sum = dry + oil;
+    if (typeof total !== 'number') {
+      item.berat_total_kg = sum;
+    } else if (Math.abs(sum - total * 1000) <= 0.02 * sum) {
+      note('info', { kode: 'weight:total_in_tons', jenis: 'diperbaiki', kolom: 'berat_total_kg', pesan: 'Berat total tertulis dalam ton, diganti berat kering + minyak', nilai_asli: String(total), nilai_baru: String(sum) }, `${total} → ${sum}`);
+      item.berat_total_kg = sum;
+    } else if (Math.abs(sum - total) > Math.max(1, 0.02 * total)) {
+      found.push(['weight:mismatch', 'info', 'Berat total tidak sama dengan berat kering + minyak (dipakai berat total yang tertulis)', rowNumber, `${dry} + ${oil} ≠ ${total}`]);
+    }
+  }
+  if (typeof item.berat_total_kg === 'number' && (item.berat_ton === null || item.berat_ton === undefined)) {
+    item.berat_ton = Number((item.berat_total_kg / 1000).toFixed(4));
+  }
+}
+
 export interface TransformedRow {
   rowNumber: number;
   item: Record<string, unknown>;
@@ -413,6 +455,7 @@ export function transformRows(
       note('warning', { kode: 'invalid:tahun_range', jenis: 'dikosongkan', kolom: 'tahun_pembuatan', pesan: `Tahun pembuatan di luar 1900–${currentYear}, dikosongkan`, nilai_asli: String(item.tahun_pembuatan) }, item.tahun_pembuatan);
       item.tahun_pembuatan = null;
     }
+    checkWeights(item, rowNumber, note, found);
     if (typeof item.uji_konsentrasi_ppm === 'number' && item.uji_konsentrasi_ppm < 0) {
       note('warning', { kode: 'invalid:ppm_negative', jenis: 'dikosongkan', kolom: 'uji_konsentrasi_ppm', pesan: 'Konsentrasi PCBs negatif, dikosongkan', nilai_asli: String(item.uji_konsentrasi_ppm) }, item.uji_konsentrasi_ppm);
       item.uji_konsentrasi_ppm = null;
