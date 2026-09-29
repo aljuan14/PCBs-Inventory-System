@@ -6,7 +6,7 @@ import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
 import { INVENTORY_CATEGORIES, hasPcbConcentration } from '@/lib/inventory';
 import { ALL_SCOPE, PRE_1997_FILTER, TRAFO_CATEGORIES, mapPointFilter, pre1997RiskCounts, sumStats, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
 import DataTable, { type TablePreset } from '@/components/DataTable';
-import DashboardCharts, { type CategoryRisk, type Pre1997Donut } from '@/components/DashboardCharts';
+import DashboardCharts, { type Pre1997Donut } from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
 import DistributionCharts from '@/components/DistributionCharts';
@@ -34,16 +34,6 @@ export default function InventoryOverview() {
     tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const categoryRisk: CategoryRisk[] = INVENTORY_CATEGORIES.map((category) => {
-    const summary = stats?.[category.key];
-    return {
-      category: category.key,
-      label: category.label,
-      counts: { safe: summary?.risk_safe ?? 0, moderate: summary?.risk_moderate ?? 0, high: summary?.risk_high ?? 0, untested: (summary?.total ?? 0) - (summary?.tested ?? 0) },
-      volumeL: category.key === 'minyak_dielektrik' ? summary?.volume_l ?? 0 : undefined,
-      measured: hasPcbConcentration(category.key),
-    };
-  });
   // The donut leaves out kapasitor, whose rows can never be tested for PCBs.
   const total = stats ? sumStats(stats, MEASURED_CATEGORIES, 'total') : 0;
   const tested = stats ? sumStats(stats, MEASURED_CATEGORIES, 'tested') : 0;
@@ -72,7 +62,7 @@ export default function InventoryOverview() {
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} />
     <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
-    <DashboardCharts categoryRisk={categoryRisk} riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} pre1997={pre1997} />
+    <DashboardCharts riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} pre1997={pre1997} />
     <TestMethodCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
     <DistributionCharts
       scope={scope}

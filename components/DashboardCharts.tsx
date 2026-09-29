@@ -6,8 +6,6 @@ import { ChevronRight, CircleDashed, OctagonAlert, ShieldCheck, TriangleAlert, t
 import { PCB_CLASSES, type InventoryCategory } from '@/lib/inventory';
 
 interface ChartProps {
-  /** One row per equipment type; the distribution card is hidden when there is fewer than two. */
-  categoryRisk: CategoryRisk[];
   /** Null when the category cannot be classified (no PCBs concentration in its template). */
   riskCounts: RiskCounts | null;
   /** Shown under the donut, e.g. which categories it leaves out. */
@@ -15,7 +13,11 @@ interface ChartProps {
   loading?: boolean;
   /** Clicking a risk class shows its rows in the table. */
   onSelectRisk?: (risk: keyof RiskCounts, category?: InventoryCategory) => void;
-  /** Transformers made before 1997, which may contain PCBs: one donut per entry, beside the overall one. */
+  /**
+   * Transformers made before 1997, which may contain PCBs: one donut per
+   * entry, beside the overall one. With more than one (the national
+   * dashboard), a findings card compares them below.
+   */
   pre1997?: Pre1997Donut[];
 }
 
@@ -27,16 +29,6 @@ export interface Pre1997Donut {
   onSelectRisk?: (risk: keyof RiskCounts) => void;
   /** Transformers of the same type without a production year, named in the footnote. */
   unknownYear?: number;
-}
-
-export interface CategoryRisk {
-  category: InventoryCategory;
-  label: string;
-  counts: RiskCounts;
-  /** Total oil volume in litres, shown for dielectric oil whose rows are containers rather than units. */
-  volumeL?: number;
-  /** False when the category's template has no PCBs concentration column (kapasitor). */
-  measured: boolean;
 }
 
 export interface RiskCounts {
@@ -180,9 +172,6 @@ const totalOf = (counts: RiskCounts) => RISK_CLASSES.reduce((sum, risk) => sum +
 
 const CARD_CLASS = 'flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs';
 
-// Rows of dielectric oil are containers or samples, not units of equipment.
-const unitOf = (row: CategoryRisk) => (row.volumeL !== undefined ? 'data' : 'unit');
-
 function CardHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="mb-5">
@@ -194,63 +183,66 @@ function CardHeader({ title, subtitle }: { title: string; subtitle: string }) {
 
 const FINDING_CLASSES = RISK_CLASSES.filter((risk) => risk.key === 'moderate' || risk.key === 'high');
 
-function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loading?: boolean; onSelectRisk?: ChartProps['onSelectRisk'] }) {
-  const measured = rows.filter((row) => row.measured);
-  const found = measured.reduce((sum, row) => sum + row.counts.moderate + row.counts.high, 0);
-  const tested = measured.reduce((sum, row) => sum + totalOf(row.counts) - row.counts.untested, 0);
-
+/**
+ * PCBs found (≥ 2 ppm) among the tested transformers made before 1997, per
+ * type. The share is of the tested units, which the donuts above (shares of
+ * every unit, untested included) do not show.
+ */
+function Findings({ entries, loading }: { entries: Pre1997Donut[]; loading?: boolean }) {
   return (
     <div className={CARD_CLASS}>
       <CardHeader
-        title="Temuan PCBs ≥ 2 ppm"
-        subtitle={`${formatNumber(found)} temuan dari ${formatNumber(tested)} data yang sudah diuji · batas 50 ppm mengacu pada Konvensi Stockholm`}
+        title="Temuan PCBs ≥ 2 ppm · Trafo < 1997"
+        subtitle="Dihitung dari trafo buatan sebelum 1997 yang sudah diuji, bukan dari semua trafo · batas 50 ppm mengacu pada Konvensi Stockholm"
       />
       {loading ? (
         <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {measured.map((row) => {
-            const rowTested = totalOf(row.counts) - row.counts.untested;
-            const rowFound = row.counts.moderate + row.counts.high;
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {entries.map((entry, index) => {
+            const tested = totalOf(entry.counts) - entry.counts.untested;
+            const found = entry.counts.moderate + entry.counts.high;
             return (
-              <div key={row.category} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-xs font-semibold text-slate-800">{row.label}</span>
-                  {row.volumeL !== undefined && <span className="text-[11px] tabular-nums text-slate-500">{formatNumber(Math.round(row.volumeL))} L total</span>}
+              <div key={index} className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-xs font-semibold text-slate-800">{entry.title ?? 'Trafo'}</span>
+                  {tested > 0 && (
+                    <span className="text-right">
+                      <span className="block text-2xl font-semibold tabular-nums text-slate-900">{formatPercent((found / tested) * 100)}</span>
+                      <span className="text-[11px] text-slate-500">{formatNumber(found)} temuan dari {formatNumber(tested)} yang sudah diuji</span>
+                    </span>
+                  )}
                 </div>
-                {rowTested === 0 ? (
+                {tested === 0 ? (
                   <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
                     <CircleDashed className="h-4 w-4 text-slate-400" /> Belum ada hasil uji.
                   </p>
                 ) : (
-                  <>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      {FINDING_CLASSES.map((risk) => {
-                        const Icon = risk.icon;
-                        const count = row.counts[risk.key];
-                        return (
-                          <button
-                            key={risk.key}
-                            type="button"
-                            disabled={!onSelectRisk || count === 0}
-                            onClick={() => onSelectRisk?.(risk.key, row.category)}
-                            className="rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-emerald-500"
-                          >
-                            <span className={`block text-2xl font-semibold tabular-nums ${count > 0 ? 'text-slate-900' : 'text-slate-300'}`}>{formatNumber(count)}</span>
-                            <span className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
-                              <Icon className={`h-3.5 w-3.5 shrink-0 ${risk.iconClass}`} />
-                              {risk.label}
-                            </span>
-                            <span className="block pl-[18px] text-[10px] text-slate-400">{risk.range}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-slate-500">
-                      {rowFound === 0 && <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />}
-                      {rowFound === 0 ? 'Tidak ada temuan dari' : `${formatPercent((rowFound / rowTested) * 100)} dari`} {formatNumber(rowTested)} {unitOf(row)} yang sudah diuji
-                    </p>
-                  </>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {FINDING_CLASSES.map((risk) => {
+                      const Icon = risk.icon;
+                      const count = entry.counts[risk.key];
+                      return (
+                        <button
+                          key={risk.key}
+                          type="button"
+                          disabled={!entry.onSelectRisk || count === 0}
+                          onClick={() => entry.onSelectRisk?.(risk.key)}
+                          className="rounded-lg bg-slate-50 px-3 py-2 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-emerald-500"
+                        >
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className={`text-2xl font-semibold tabular-nums ${count > 0 ? 'text-slate-900' : 'text-slate-300'}`}>{formatNumber(count)}</span>
+                            <span className="text-[11px] tabular-nums text-slate-500">{formatPercent((count / tested) * 100)}</span>
+                          </span>
+                          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
+                            <Icon className={`h-3.5 w-3.5 shrink-0 ${risk.iconClass}`} />
+                            {risk.label}
+                          </span>
+                          <span className="block pl-[18px] text-[10px] text-slate-400">{risk.range}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             );
@@ -261,8 +253,7 @@ function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loadi
   );
 }
 
-export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk, pre1997 }: ChartProps) {
-  const showByCategory = categoryRisk.length > 1;
+export default function DashboardCharts({ riskCounts, riskFootnote, loading, onSelectRisk, pre1997 }: ChartProps) {
   const subtitle = 'Pengelompokan berdasarkan konsentrasi PCBs (ppm) hasil uji';
   const stackWide = (pre1997?.length ?? 0) > 1;
   const donut = riskCounts
@@ -287,12 +278,12 @@ export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote
     ? <div className={`grid grid-cols-1 gap-6 ${stackWide ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>{donut}{pre1997Donuts}</div>
     : donut;
 
-  if (!showByCategory) return donuts;
+  if (!stackWide) return donuts;
 
   return (
     <div className="space-y-6">
       {donuts}
-      <Findings rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} />
+      <Findings entries={pre1997 ?? []} loading={loading} />
     </div>
   );
 }
