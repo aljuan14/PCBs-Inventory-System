@@ -59,7 +59,7 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 
 | Fitur | Keterangan |
 |---|---|
-| Dashboard nasional & per kategori | Statistik dihitung di server, jadi tetap akurat untuk ratusan ribu baris. |
+| Dashboard nasional & per kategori | Statistik dibaca dari tabel ringkasan yang diperbarui otomatis oleh trigger setiap ada impor, edit, atau hapus, jadi tetap cepat dan akurat untuk ratusan ribu baris. Jumlah baris tabel dan titik peta di atas 1.000 ditampilkan sebagai perkiraan. |
 | Filter bertingkat | Filter Perusahaan › Unit Induk › Unit Pelaksana berlaku untuk kartu ringkasan, grafik, peta, dan tabel sekaligus. |
 | Kartu ringkasan | Per jenis trafo: bilah tahun produksi (< 1997, ≥ 1997, tidak diketahui) dan hasil uji PCBs. Kapasitor dan minyak dielektrik sebagai kartu kecil. Setiap baris membuka datanya di tabel. |
 | Tonase transformator | Total tonase dari berat total di formulir, tonase per jenis trafo, dan tonase trafo buatan sebelum 1997. |
@@ -135,6 +135,7 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260929000004_transformer_weights` | Kolom berat kering, minyak, dan total (kg) pada tabel trafo, statistik tonase, fungsi `inventory_set_weights` |
 | `20260929000005_weight_parts` | Berat kering dan minyak dijumlahkan hanya dari trafo yang mencatat keduanya |
 | `20260929000006_dashboard_charts` | Fungsi `inventory_charts` untuk grafik sebaran trafo per unit dan per tahun produksi |
+| `20260929000007_stats_summary` | Tabel ringkasan `inventory_stats_parts` yang dijaga trigger, sehingga angka dashboard tidak lagi menghitung ulang seluruh baris (fungsi lama tetap ada sebagai `inventory_stats_scan`) |
 
 ### Menjalankan Aplikasi
 
