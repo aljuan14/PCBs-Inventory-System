@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getCategoryColor, getCategoryLabel, INVENTORY_CATEGORIES } from '@/lib/inventory';
+import { getCategoryColor, getCategoryLabel, INVENTORY_CATEGORIES, pcbClassLabel, pcbClassOf } from '@/lib/inventory';
 
 export interface MapPoint {
   id: string;
@@ -110,16 +110,13 @@ export default function MapLeaflet({ points, height = '480px', onSelectPoint }: 
         const typeBadge = getCategoryLabel(category);
 
         // Tentukan status bahaya PCB
-        let pcbClass = 'Bebas PCBs (< 50 ppm)';
+        let pcbClass = pcbClassLabel('safe');
         let pcbColor = 'bg-emerald-100 text-emerald-800';
         if (point.pcbConcentration !== undefined && point.pcbConcentration !== null) {
-          if (point.pcbConcentration > 500) {
-            pcbClass = 'Bahaya tinggi (> 500 ppm)';
-            pcbColor = 'bg-rose-100 text-rose-800';
-          } else if (point.pcbConcentration >= 50) {
-            pcbClass = 'Terkontaminasi PCBs (50–500 ppm)';
-            pcbColor = 'bg-amber-100 text-amber-800';
-          }
+          const risk = pcbClassOf(point.pcbConcentration);
+          pcbClass = pcbClassLabel(risk);
+          if (risk === 'high') pcbColor = 'bg-rose-100 text-rose-800';
+          else if (risk === 'moderate') pcbColor = 'bg-amber-100 text-amber-800';
         } else {
           pcbClass = 'Belum diuji';
           pcbColor = 'bg-slate-100 text-slate-700';

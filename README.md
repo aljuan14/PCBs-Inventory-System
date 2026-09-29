@@ -56,7 +56,7 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 |---|---|
 | Dashboard nasional & per kategori | Statistik dihitung di server, jadi tetap akurat untuk ratusan ribu baris. |
 | Filter bertingkat | Filter Perusahaan › Unit Induk › Unit Pelaksana berlaku untuk kartu ringkasan, grafik, peta, dan tabel sekaligus. |
-| Proporsi risiko PCBs | Diagram donut per kelas: < 50 ppm, 50–500 ppm, > 500 ppm, dan belum diuji. Klik salah satu kelas untuk menyaring tabel ke rentang tersebut. |
+| Proporsi risiko PCBs | Dua diagram donut, keseluruhan dan khusus trafo dengan tahun produksi sebelum 1997, per kelas: < 2 ppm, 2–50 ppm, > 50 ppm, dan belum diuji. Klik salah satu kelas untuk menyaring tabel ke rentang tersebut. |
 | Cakupan uji & temuan | Menampilkan persentase alat yang sudah diuji per jenis serta jumlah temuan ≥ 50 ppm, yang juga bisa diklik. |
 | Peta sebaran | Peta Leaflet dengan warna yang aman bagi buta warna. Klik titik untuk menampilkan semua data di koordinat itu di tabel. |
 | Tabel inventaris | Paginasi server, pencarian, edit dan hapus per baris, filter lanjutan (jenis uji, tahun, daya, kelengkapan, batch impor), serta pengurutan. |
@@ -120,6 +120,7 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260928000001_units_and_asset_code` | Kolom `unit`, `sub_unit`, `kode_alat` dan fungsi `inventory_units` |
 | `20260928000002_stats_by_unit` | Statistik per unit untuk filter dashboard |
 | `20260928000003_data_quality` | Catatan impor per baris, laporan pemeriksaan, fungsi `inventory_quality` |
+| `20260929000001_risk_bands` | Kelas risiko PCBs < 2, 2–50, > 50 ppm dan statistik trafo < 1997 |
 | `20260928000004_dashboard_timeout` | Batas waktu query `anon` dan `authenticated` dinaikkan ke 15 detik |
 
 ### Menjalankan Aplikasi

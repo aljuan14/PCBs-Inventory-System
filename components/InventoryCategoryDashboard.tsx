@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertCircle, RefreshCw, UploadCloud } from 'lucide-react';
-import { INVENTORY_CATEGORIES, hasPcbConcentration, type InventoryCategory } from '@/lib/inventory';
-import { issueTableFilter, mapPointFilter, type InventoryFilters, type IssueLink } from '@/lib/inventory-query';
+import { INVENTORY_CATEGORIES, PCB_CLASSES, hasPcbConcentration, type InventoryCategory } from '@/lib/inventory';
+import { PRE_1997_FILTER, TRAFO_CATEGORIES, issueTableFilter, mapPointFilter, pre1997RiskCounts, type InventoryFilters, type IssueLink } from '@/lib/inventory-query';
 import DataTable, { type EditableInventoryFields, type InventoryItem } from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
 import MapNotice from '@/components/MapNotice';
@@ -71,6 +71,9 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
   const moderate = summary?.risk_moderate ?? 0;
   const high = summary?.risk_high ?? 0;
   const riskCounts = hasPcbConcentration(category) ? { safe: summary?.risk_safe ?? 0, moderate, high, untested: total - tested } : null;
+  const pre1997 = TRAFO_CATEGORIES.includes(category)
+    ? { counts: pre1997RiskCounts(stats, [category]), onSelectRisk: (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }) }
+    : undefined;
 
   return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8">
     <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -78,8 +81,8 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
       <div className="flex gap-2"><button type="button" onClick={reload} disabled={refreshing} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Segarkan</button><a href="/upload" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><UploadCloud className="h-4 w-4" /> Upload data</a></div>
     </header>
     {error && <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800"><AlertCircle className="h-4 w-4" /> {error}</div>}
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Total data</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(total)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Sudah diuji</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(tested)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Terkontaminasi</div><div className="mt-2 text-3xl font-semibold text-amber-700">{loading ? '...' : formatNumber(moderate)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Bahaya tinggi</div><div className="mt-2 text-3xl font-semibold text-rose-700">{loading ? '...' : formatNumber(high)}</div></div></section>
-    <DashboardCharts categoryRisk={[]} riskCounts={riskCounts} loading={loading} onSelectRisk={(pcbRange) => showRows({ pcbRange })} />
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Total data</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(total)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Sudah diuji</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(tested)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{PCB_CLASSES.moderate.label} ({PCB_CLASSES.moderate.range})</div><div className="mt-2 text-3xl font-semibold text-amber-700">{loading ? '...' : formatNumber(moderate)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{PCB_CLASSES.high.label} ({PCB_CLASSES.high.range})</div><div className="mt-2 text-3xl font-semibold text-rose-700">{loading ? '...' : formatNumber(high)}</div></div></section>
+    <DashboardCharts categoryRisk={[]} riskCounts={riskCounts} loading={loading} onSelectRisk={(pcbRange) => showRows({ pcbRange })} pre1997={pre1997} />
     <div ref={tableRef} className="scroll-mt-6"><DataTable category={category} companies={companies} reloadKey={reloadKey} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta sebaran {config.shortLabel}</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="360px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;

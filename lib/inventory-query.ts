@@ -20,6 +20,11 @@ export interface CategoryStats {
   risk_safe: number;
   risk_moderate: number;
   risk_high: number;
+  /** Tested rows and risk classes among rows made before 1997 (tahun_pembuatan < 1997). */
+  pre1997_tested: number;
+  pre1997_risk_safe: number;
+  pre1997_risk_moderate: number;
+  pre1997_risk_high: number;
   volume_l: number;
   with_coordinates: number;
 }
@@ -28,7 +33,8 @@ export type InventoryStats = Record<InventoryCategory, CategoryStats>;
 
 const EMPTY_STATS: CategoryStats = {
   total: 0, before_1997: 0, from_1997: 0, unknown_year: 0, tested: 0, lab_tested: 0, lab_below_50: 0,
-  lab_at_least_50: 0, risk_safe: 0, risk_moderate: 0, risk_high: 0, volume_l: 0, with_coordinates: 0,
+  lab_at_least_50: 0, risk_safe: 0, risk_moderate: 0, risk_high: 0, pre1997_tested: 0, pre1997_risk_safe: 0,
+  pre1997_risk_moderate: 0, pre1997_risk_high: 0, volume_l: 0, with_coordinates: 0,
 };
 
 /** Company, unit and sub-unit a dashboard is narrowed to; null means all. */
@@ -56,6 +62,20 @@ export async function fetchInventoryStats(supabase: SupabaseClient, scope: Dashb
 /** Sum a figure over several categories. */
 export const sumStats = (stats: InventoryStats, categories: InventoryCategory[], key: keyof CategoryStats) =>
   categories.reduce((sum, category) => sum + stats[category][key], 0);
+
+/** Risk classes of the rows made before 1997, for the dashboard's second donut. */
+export function pre1997RiskCounts(stats: InventoryStats | null, categories: InventoryCategory[]) {
+  const sum = (key: keyof CategoryStats) => (stats ? sumStats(stats, categories, key) : 0);
+  return {
+    safe: sum('pre1997_risk_safe'),
+    moderate: sum('pre1997_risk_moderate'),
+    high: sum('pre1997_risk_high'),
+    untested: sum('before_1997') - sum('pre1997_tested'),
+  };
+}
+
+/** Table filter for the rows counted by pre1997RiskCounts (tahun_pembuatan < 1997). */
+export const PRE_1997_FILTER: Partial<InventoryFilters> = { yearRange: 'custom', yearMin: null, yearMax: 1996 };
 
 /** A row of the `inventory_items` view. */
 export interface InventoryRow {
@@ -163,7 +183,7 @@ export interface InventoryPageQuery {
   pageSize: number;
 }
 
-const TRAFO_CATEGORIES: InventoryCategory[] = ['transformator_digunakan', 'transformator_tidak_digunakan'];
+export const TRAFO_CATEGORIES: InventoryCategory[] = ['transformator_digunakan', 'transformator_tidak_digunakan'];
 
 // PostgREST filter syntax treats these characters specially inside or().
 const cleanSearch = (value: string) => value.replace(/[,()*%\\:"]/g, ' ').trim();
@@ -199,9 +219,10 @@ function applyFilters(request: InventoryRequest, category: CategoryFilter, filte
   if (filters.mapPoint) request = request.in('id', filters.mapPoint.ids);
   if (filters.note) request = request.contains('catatan_impor', noteMatch({ kode: filters.note.kode }));
 
-  if (filters.pcbRange === 'safe') request = request.lt('ppm', 50);
-  else if (filters.pcbRange === 'moderate') request = request.gte('ppm', 50).lte('ppm', 500);
-  else if (filters.pcbRange === 'high') request = request.gt('ppm', 500);
+  // Bounds of PCB_CLASSES in lib/inventory.ts.
+  if (filters.pcbRange === 'safe') request = request.lt('ppm', 2);
+  else if (filters.pcbRange === 'moderate') request = request.gte('ppm', 2).lte('ppm', 50);
+  else if (filters.pcbRange === 'high') request = request.gt('ppm', 50);
   else if (filters.pcbRange === 'untested') request = request.is('ppm', null);
 
   if (filters.test === 'lab') request = request.ilike('uji_jenis', '%lab%').not('ppm', 'is', null);

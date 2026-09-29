@@ -3,7 +3,7 @@
 import { PieChart, Pie, Cell } from 'recharts';
 import { useState } from 'react';
 import { ChevronRight, CircleDashed, OctagonAlert, ShieldCheck, TriangleAlert, type LucideIcon } from 'lucide-react';
-import type { InventoryCategory } from '@/lib/inventory';
+import { PCB_CLASSES, type InventoryCategory } from '@/lib/inventory';
 
 interface ChartProps {
   /** One row per equipment type; the distribution card is hidden when there is fewer than two. */
@@ -15,6 +15,8 @@ interface ChartProps {
   loading?: boolean;
   /** Clicking a risk class shows its rows in the table. */
   onSelectRisk?: (risk: keyof RiskCounts, category?: InventoryCategory) => void;
+  /** Transformers made before 1997, which may contain PCBs; shown as a second donut. */
+  pre1997?: { counts: RiskCounts; onSelectRisk?: (risk: keyof RiskCounts) => void };
 }
 
 export interface CategoryRisk {
@@ -36,9 +38,9 @@ export interface RiskCounts {
 
 // Same bands and wording as the table's PCBs filter; ppm = konsentrasi PCBs in the KLHK template.
 const RISK_CLASSES: { key: keyof RiskCounts; label: string; range: string; color: string; icon: LucideIcon; iconClass: string }[] = [
-  { key: 'safe', label: 'Bebas PCBs', range: '< 50 ppm', color: '#059669', icon: ShieldCheck, iconClass: 'text-emerald-600' },
-  { key: 'moderate', label: 'Terkontaminasi PCBs', range: '50–500 ppm', color: '#f59e0b', icon: TriangleAlert, iconClass: 'text-amber-600' },
-  { key: 'high', label: 'Bahaya tinggi', range: '> 500 ppm', color: '#e11d48', icon: OctagonAlert, iconClass: 'text-rose-600' },
+  { key: 'safe', ...PCB_CLASSES.safe, color: '#059669', icon: ShieldCheck, iconClass: 'text-emerald-600' },
+  { key: 'moderate', ...PCB_CLASSES.moderate, color: '#f59e0b', icon: TriangleAlert, iconClass: 'text-amber-600' },
+  { key: 'high', ...PCB_CLASSES.high, color: '#e11d48', icon: OctagonAlert, iconClass: 'text-rose-600' },
   { key: 'untested', label: 'Belum diuji', range: 'konsentrasi kosong', color: '#cbd5e1', icon: CircleDashed, iconClass: 'text-slate-400' },
 ];
 
@@ -46,7 +48,17 @@ const formatNumber = (value: number) => value.toLocaleString('id-ID');
 // A non-zero share too small for one decimal (e.g. 37 of 113.047) must not read as 0%.
 const formatPercent = (value: number) => (value > 0 && value < 0.05 ? '< 0,1%' : `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`);
 
-function RiskProportion({ counts, footnote, loading, onSelectRisk }: { counts: RiskCounts; footnote?: string; loading?: boolean; onSelectRisk?: ChartProps['onSelectRisk'] }) {
+interface RiskProportionProps {
+  title: string;
+  subtitle: string;
+  emptyText: string;
+  counts: RiskCounts;
+  footnote?: string;
+  loading?: boolean;
+  onSelectRisk?: (risk: keyof RiskCounts) => void;
+}
+
+function RiskProportion({ title, subtitle, emptyText, counts, footnote, loading, onSelectRisk }: RiskProportionProps) {
   const [active, setActive] = useState<keyof RiskCounts | null>(null);
   const total = RISK_CLASSES.reduce((sum, risk) => sum + counts[risk.key], 0);
   const tested = total - counts.untested;
@@ -57,11 +69,9 @@ function RiskProportion({ counts, footnote, loading, onSelectRisk }: { counts: R
   return (
     <div className="flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
       <div className="mb-5">
-        <h3 className="text-base font-bold text-slate-900">
-          Proporsi Status Risiko PCBs Keseluruhan
-        </h3>
+        <h3 className="text-base font-bold text-slate-900">{title}</h3>
         <p className="text-xs text-slate-500 font-medium">
-          Pengelompokan berdasarkan konsentrasi PCBs (ppm) hasil uji{onSelectRisk ? ' · klik untuk melihat datanya di tabel' : ''}
+          {subtitle}{onSelectRisk ? ' · klik untuk melihat datanya di tabel' : ''}
         </p>
       </div>
 
@@ -69,7 +79,7 @@ function RiskProportion({ counts, footnote, loading, onSelectRisk }: { counts: R
         <div className="flex-1 animate-pulse rounded-xl bg-slate-100" />
       ) : total === 0 ? (
         <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 text-xs text-slate-500">
-          Belum ada data inventaris.
+          {emptyText}
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center gap-4 sm:flex-row sm:gap-6">
@@ -175,7 +185,7 @@ function unmeasuredNote(rows: CategoryRisk[]) {
   return names.length > 0 ? `${names.join(', ')} tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs.` : null;
 }
 
-function TestCoverage({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loading?: boolean; onSelectRisk?: ChartProps['onSelectRisk'] }) {
+function TestCoverage({ rows, loading, onSelectRisk, wide }: { rows: CategoryRisk[]; loading?: boolean; onSelectRisk?: ChartProps['onSelectRisk']; wide?: boolean }) {
   const measured = rows.filter((row) => row.measured);
   const note = unmeasuredNote(rows);
 
@@ -188,7 +198,7 @@ function TestCoverage({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; l
       {loading ? (
         <div className="flex-1 animate-pulse rounded-xl bg-slate-100" />
       ) : (
-        <ul className="flex flex-1 flex-col justify-center gap-2">
+        <ul className={wide ? 'grid grid-cols-1 gap-2 md:grid-cols-3' : 'flex flex-1 flex-col justify-center gap-2'}>
           {measured.map((row) => {
             const total = totalOf(row.counts);
             const tested = total - row.counts.untested;
@@ -238,7 +248,7 @@ function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loadi
   return (
     <div className={CARD_CLASS}>
       <CardHeader
-        title="Temuan PCBs ≥ 50 ppm"
+        title="Temuan PCBs ≥ 2 ppm"
         subtitle={`${formatNumber(found)} temuan dari ${formatNumber(tested)} data yang sudah diuji · batas 50 ppm mengacu pada Konvensi Stockholm`}
       />
       {loading ? (
@@ -297,18 +307,40 @@ function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loadi
   );
 }
 
-export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk }: ChartProps) {
+export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk, pre1997 }: ChartProps) {
   const showByCategory = categoryRisk.length > 1;
-  const donut = riskCounts ? <RiskProportion counts={riskCounts} footnote={riskFootnote} loading={loading} onSelectRisk={onSelectRisk} /> : <RiskNotMeasured />;
+  const subtitle = 'Pengelompokan berdasarkan konsentrasi PCBs (ppm) hasil uji';
+  const donut = riskCounts
+    ? <RiskProportion title="Proporsi Status Risiko PCBs Keseluruhan" subtitle={subtitle} emptyText="Belum ada data inventaris." counts={riskCounts} footnote={riskFootnote} loading={loading} onSelectRisk={onSelectRisk && ((risk) => onSelectRisk(risk))} />
+    : <RiskNotMeasured />;
+  const pre1997Donut = pre1997 && (
+    <RiskProportion
+      title="Proporsi Status Risiko PCBs Trafo < 1997"
+      subtitle="Transformator dengan tahun produksi sebelum 1997"
+      emptyText="Belum ada transformator dengan tahun produksi sebelum 1997."
+      counts={pre1997.counts}
+      footnote="Transformator tanpa tahun produksi tidak termasuk."
+      loading={loading}
+      onSelectRisk={pre1997.onSelectRisk}
+    />
+  );
+  const donuts = pre1997Donut ? <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">{donut}{pre1997Donut}</div> : donut;
 
-  if (!showByCategory) return donut;
+  if (!showByCategory) return donuts;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <TestCoverage rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} />
-        {donut}
-      </div>
+      {pre1997Donut ? (
+        <>
+          {donuts}
+          <TestCoverage rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} wide />
+        </>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <TestCoverage rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} />
+          {donut}
+        </div>
+      )}
       <Findings rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} />
     </div>
   );
