@@ -6,7 +6,7 @@ import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
 import { INVENTORY_CATEGORIES, hasPcbConcentration } from '@/lib/inventory';
 import { ALL_SCOPE, PRE_1997_FILTER, TRAFO_CATEGORIES, mapPointFilter, pre1997RiskCounts, sumStats, type CategoryFilter, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
 import DataTable, { type TablePreset } from '@/components/DataTable';
-import DashboardCharts, { type CategoryRisk, type Pre1997Coverage } from '@/components/DashboardCharts';
+import DashboardCharts, { type CategoryRisk, type Pre1997Coverage, type Pre1997Donut } from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
 import DistributionCharts from '@/components/DistributionCharts';
@@ -53,11 +53,17 @@ export default function InventoryOverview() {
     high: stats ? sumStats(stats, MEASURED_CATEGORIES, 'risk_high') : 0,
     untested: total - tested,
   };
-  const pre1997 = {
-    counts: pre1997RiskCounts(stats, TRAFO_CATEGORIES),
-    subtitle: 'Gabungan trafo masih digunakan dan tidak digunakan dengan tahun produksi sebelum 1997',
-    onSelectRisk: (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }, 'transformator'),
-  };
+  // One donut per transformer type: combined, the pre-1997 figures read as
+  // belonging to the "Transformator Masih Digunakan" card above them.
+  const pre1997: Pre1997Donut[] = TRAFO_CATEGORIES.map((category) => {
+    const label = category === 'transformator_digunakan' ? 'Masih Digunakan' : 'Tidak Digunakan';
+    return {
+      title: `Trafo ${label}`,
+      subtitle: `Transformator ${label.toLowerCase()} dengan tahun produksi sebelum 1997`,
+      counts: pre1997RiskCounts(stats, [category]),
+      onSelectRisk: (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }, category),
+    };
+  });
   const coverage: Pre1997Coverage = {
     rows: TRAFO_CATEGORIES.map((category) => {
       const summary = stats?.[category];

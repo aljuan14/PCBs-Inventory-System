@@ -73,7 +73,7 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
   const high = summary?.risk_high ?? 0;
   const riskCounts = hasPcbConcentration(category) ? { safe: summary?.risk_safe ?? 0, moderate, high, untested: total - tested } : null;
   const pre1997 = TRAFO_CATEGORIES.includes(category)
-    ? { counts: pre1997RiskCounts(stats, [category]), onSelectRisk: (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }) }
+    ? [{ counts: pre1997RiskCounts(stats, [category]), onSelectRisk: (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }) }]
     : undefined;
 
   return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8">

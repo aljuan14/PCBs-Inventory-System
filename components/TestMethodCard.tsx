@@ -3,15 +3,15 @@
 import { useState } from 'react';
 import { ChevronRight, FlaskConical, Zap, type LucideIcon } from 'lucide-react';
 import { getCategoryLabel } from '@/lib/inventory';
-import { PRE_1997_FILTER, sumStats, TRAFO_CATEGORIES, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats, type TestFilter } from '@/lib/inventory-query';
+import { PRE_1997_FILTER, sumStats, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats, type TestFilter } from '@/lib/inventory-query';
 import { RISK_CLASSES, formatPercent } from '@/components/DashboardCharts';
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
 const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
-type Scope = Extract<CategoryFilter, 'transformator' | 'transformator_digunakan' | 'transformator_tidak_digunakan'>;
+// One transformer type at a time: combined figures read as belonging to either type.
+type Scope = Extract<CategoryFilter, 'transformator_digunakan' | 'transformator_tidak_digunakan'>;
 const SCOPES: Array<{ key: Scope; label: string }> = [
-  { key: 'transformator', label: 'Gabungan' },
   { key: 'transformator_digunakan', label: 'Masih digunakan' },
   { key: 'transformator_tidak_digunakan', label: 'Tidak digunakan' },
 ];
@@ -27,7 +27,8 @@ const METHODS: Array<{ key: 'lab' | 'quick'; test: TestFilter; label: string; ic
 
 /**
  * Test results of transformers made before 1997 per method (Uji lab, Uji
- * cepat) and PCBs class, from inventory_stats (migration 20260929000008).
+ * cepat) and PCBs class, per transformer type, from inventory_stats
+ * (migration 20260929000008).
  * Each class opens its rows in the table.
  */
 export default function TestMethodCard({ stats, loading, onSelect }: {
@@ -35,8 +36,8 @@ export default function TestMethodCard({ stats, loading, onSelect }: {
   loading: boolean;
   onSelect?: (filters: Partial<InventoryFilters>, type: CategoryFilter) => void;
 }) {
-  const [scope, setScope] = useState<Scope>('transformator');
-  const categories = scope === 'transformator' ? TRAFO_CATEGORIES : [scope];
+  const [scope, setScope] = useState<Scope>('transformator_digunakan');
+  const categories = [scope];
   const sum = (key: keyof CategoryStats) => (stats ? sumStats(stats, categories, key) : 0);
   const methods = METHODS.map((method) => {
     const counts = Object.fromEntries(TESTED_CLASSES.map((risk) => [risk.key, sum(`pre1997_${method.key}_${risk.key}` as keyof CategoryStats)])) as Record<TestedClass, number>;
@@ -44,7 +45,7 @@ export default function TestMethodCard({ stats, loading, onSelect }: {
   });
   const tested = methods.reduce((total, method) => total + method.total, 0);
   const pre1997 = sum('before_1997');
-  const scopeLabel = scope === 'transformator' ? 'trafo masih digunakan dan tidak digunakan' : getCategoryLabel(scope).toLowerCase();
+  const scopeLabel = getCategoryLabel(scope).toLowerCase();
 
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">

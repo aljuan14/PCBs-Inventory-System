@@ -16,10 +16,18 @@ interface ChartProps {
   loading?: boolean;
   /** Clicking a risk class shows its rows in the table. */
   onSelectRisk?: (risk: keyof RiskCounts, category?: InventoryCategory) => void;
-  /** Transformers made before 1997, which may contain PCBs; shown as a second donut. */
-  pre1997?: { counts: RiskCounts; onSelectRisk?: (risk: keyof RiskCounts) => void; subtitle?: string };
+  /** Transformers made before 1997, which may contain PCBs: one donut per entry, beside the overall one. */
+  pre1997?: Pre1997Donut[];
   /** Test coverage of transformers made before 1997, under the donuts of the national dashboard. */
   coverage?: Pre1997Coverage;
+}
+
+export interface Pre1997Donut {
+  /** Defaults to "Trafo < 1997"; the national dashboard names each transformer type. */
+  title?: string;
+  subtitle?: string;
+  counts: RiskCounts;
+  onSelectRisk?: (risk: keyof RiskCounts) => void;
 }
 
 export interface CoverageRow {
@@ -78,9 +86,11 @@ interface RiskProportionProps {
   footnote?: string;
   loading?: boolean;
   onSelectRisk?: (risk: keyof RiskCounts) => void;
+  /** Legend under the donut on wide screens, for three donuts in a row. */
+  stackWide?: boolean;
 }
 
-function RiskProportion({ title, subtitle, emptyText, counts, footnote, loading, onSelectRisk }: RiskProportionProps) {
+function RiskProportion({ title, subtitle, emptyText, counts, footnote, loading, onSelectRisk, stackWide }: RiskProportionProps) {
   const [active, setActive] = useState<keyof RiskCounts | null>(null);
   const total = RISK_CLASSES.reduce((sum, risk) => sum + counts[risk.key], 0);
   const tested = total - counts.untested;
@@ -104,7 +114,7 @@ function RiskProportion({ title, subtitle, emptyText, counts, footnote, loading,
           {emptyText}
         </div>
       ) : (
-        <div className="flex flex-1 flex-col items-center gap-4 sm:flex-row sm:gap-6">
+        <div className={`flex flex-1 flex-col items-center gap-4 sm:flex-row sm:gap-6 ${stackWide ? 'xl:flex-col xl:gap-4' : ''}`}>
           <div className="relative h-48 w-48 shrink-0" onMouseLeave={() => setActive(null)}>
             <PieChart width={192} height={192}>
               <Pie
@@ -206,11 +216,8 @@ const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100
 
 function TestCoverage({ coverage, loading }: { coverage: Pre1997Coverage; loading?: boolean }) {
   const { rows, unknownYear, onSelectUntested } = coverage;
-  const sum = (key: 'tested' | 'total' | 'allTested' | 'allTotal') => rows.reduce((total, row) => total + row[key], 0);
-  const columns: Array<Omit<CoverageRow, 'category'> & { key: CategoryFilter }> = [
-    ...rows.map(({ category, ...row }) => ({ key: category, ...row })),
-    { key: 'transformator', label: 'Gabungan', tested: sum('tested'), total: sum('total'), allTested: sum('allTested'), allTotal: sum('allTotal') },
-  ];
+  // One column per transformer type; a combined column read as belonging to either.
+  const columns: Array<Omit<CoverageRow, 'category'> & { key: CategoryFilter }> = rows.map(({ category, ...row }) => ({ key: category, ...row }));
 
   return (
     <div className={CARD_CLASS}>
@@ -221,7 +228,7 @@ function TestCoverage({ coverage, loading }: { coverage: Pre1997Coverage; loadin
       {loading ? (
         <div className="h-24 animate-pulse rounded-xl bg-slate-100" />
       ) : (
-        <ul className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {columns.map((column) => {
             const untested = column.total - column.tested;
             return (
@@ -338,22 +345,28 @@ function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loadi
 export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk, pre1997, coverage }: ChartProps) {
   const showByCategory = categoryRisk.length > 1;
   const subtitle = 'Pengelompokan berdasarkan konsentrasi PCBs (ppm) hasil uji';
+  const stackWide = (pre1997?.length ?? 0) > 1;
   const donut = riskCounts
-    ? <RiskProportion title="Proporsi Status Risiko PCBs Keseluruhan" subtitle={subtitle} emptyText="Belum ada data inventaris." counts={riskCounts} footnote={riskFootnote} loading={loading} onSelectRisk={onSelectRisk && ((risk) => onSelectRisk(risk))} />
+    ? <RiskProportion title="Proporsi Status Risiko PCBs Keseluruhan" subtitle={subtitle} emptyText="Belum ada data inventaris." counts={riskCounts} footnote={riskFootnote} loading={loading} onSelectRisk={onSelectRisk && ((risk) => onSelectRisk(risk))} stackWide={stackWide} />
     : <RiskNotMeasured />;
-  const pre1997Donut = pre1997 && (
+  const pre1997Donuts = (pre1997 ?? []).map((entry, index) => (
     <RiskProportion
-      title="Proporsi Status Risiko PCBs Trafo < 1997"
-      subtitle={pre1997.subtitle ?? "Transformator dengan tahun produksi sebelum 1997"}
+      key={index}
+      title={`Proporsi Status Risiko PCBs ${entry.title ?? 'Trafo'} < 1997`}
+      subtitle={entry.subtitle ?? 'Transformator dengan tahun produksi sebelum 1997'}
       emptyText="Belum ada transformator dengan tahun produksi sebelum 1997."
-      counts={pre1997.counts}
+      counts={entry.counts}
       footnote="Transformator tanpa tahun produksi tidak termasuk."
       loading={loading}
-      onSelectRisk={pre1997.onSelectRisk}
+      onSelectRisk={entry.onSelectRisk}
+      stackWide={stackWide}
     />
-  );
-  // Side by side only when each donut keeps room for its legend (the sidebar takes 256px).
-  const donuts = pre1997Donut ? <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">{donut}{pre1997Donut}</div> : donut;
+  ));
+  // Side by side only when each donut keeps room for its legend (the sidebar
+  // takes 256px): two with the legend beside the donut, three with it below.
+  const donuts = pre1997Donuts.length > 0
+    ? <div className={`grid grid-cols-1 gap-6 ${stackWide ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>{donut}{pre1997Donuts}</div>
+    : donut;
 
   if (!showByCategory) return donuts;
 
