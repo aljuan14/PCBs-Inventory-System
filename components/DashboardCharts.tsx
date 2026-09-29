@@ -4,7 +4,6 @@ import { PieChart, Pie, Cell } from 'recharts';
 import { useState } from 'react';
 import { ChevronRight, CircleDashed, OctagonAlert, ShieldCheck, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { PCB_CLASSES, type InventoryCategory } from '@/lib/inventory';
-import type { CategoryFilter } from '@/lib/inventory-query';
 
 interface ChartProps {
   /** One row per equipment type; the distribution card is hidden when there is fewer than two. */
@@ -18,8 +17,6 @@ interface ChartProps {
   onSelectRisk?: (risk: keyof RiskCounts, category?: InventoryCategory) => void;
   /** Transformers made before 1997, which may contain PCBs: one donut per entry, beside the overall one. */
   pre1997?: Pre1997Donut[];
-  /** Test coverage of transformers made before 1997, under the donuts of the national dashboard. */
-  coverage?: Pre1997Coverage;
 }
 
 export interface Pre1997Donut {
@@ -28,25 +25,8 @@ export interface Pre1997Donut {
   subtitle?: string;
   counts: RiskCounts;
   onSelectRisk?: (risk: keyof RiskCounts) => void;
-}
-
-export interface CoverageRow {
-  category: InventoryCategory;
-  label: string;
-  /** Made before 1997: with a test result, and all. */
-  tested: number;
-  total: number;
-  /** Every year, shown for comparison. */
-  allTested: number;
-  allTotal: number;
-}
-
-export interface Pre1997Coverage {
-  rows: CoverageRow[];
-  /** Transformers without a production year, which the card cannot place. */
-  unknownYear: number;
-  /** Opens the untested transformers made before 1997 of one category, or of all ('transformator'). */
-  onSelectUntested?: (category: CategoryFilter) => void;
+  /** Transformers of the same type without a production year, named in the footnote. */
+  unknownYear?: number;
 }
 
 export interface CategoryRisk {
@@ -212,67 +192,6 @@ function CardHeader({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
-
-function TestCoverage({ coverage, loading }: { coverage: Pre1997Coverage; loading?: boolean }) {
-  const { rows, unknownYear, onSelectUntested } = coverage;
-  // One column per transformer type; a combined column read as belonging to either.
-  const columns: Array<Omit<CoverageRow, 'category'> & { key: CategoryFilter }> = rows.map(({ category, ...row }) => ({ key: category, ...row }));
-
-  return (
-    <div className={CARD_CLASS}>
-      <CardHeader
-        title="Cakupan Uji PCBs Trafo < 1997"
-        subtitle={`Transformator buatan sebelum 1997 yang sudah memiliki hasil uji konsentrasi PCBs${onSelectUntested ? ' · klik untuk melihat yang belum diuji' : ''}`}
-      />
-      {loading ? (
-        <div className="h-24 animate-pulse rounded-xl bg-slate-100" />
-      ) : (
-        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          {columns.map((column) => {
-            const untested = column.total - column.tested;
-            return (
-              <li key={column.key}>
-                <button
-                  type="button"
-                  disabled={!onSelectUntested || untested === 0}
-                  onClick={() => onSelectUntested?.(column.key)}
-                  className="group w-full rounded-lg px-2 py-2.5 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-emerald-500"
-                >
-                  <div className="mb-2 flex items-baseline justify-between gap-3">
-                    <span className="text-xs font-semibold text-slate-800">{column.label}</span>
-                    <span className="text-lg font-semibold tabular-nums text-slate-900">{column.total > 0 ? formatPercent(share(column.tested, column.total)) : '–'}</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-slate-600" style={{ width: `${share(column.tested, column.total)}%` }} />
-                  </div>
-                  <div className="mt-1.5 flex justify-between gap-3 text-[11px] tabular-nums text-slate-500">
-                    <span>{formatNumber(column.tested)} dari {formatNumber(column.total)} unit sudah diuji</span>
-                    {untested > 0 && (
-                      <span className="flex items-center gap-0.5 group-enabled:group-hover:text-slate-700">
-                        {formatNumber(untested)} belum diuji
-                        {onSelectUntested && <ChevronRight className="h-3 w-3" />}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-[11px] tabular-nums text-slate-400">
-                    Semua tahun: {column.allTotal > 0 ? formatPercent(share(column.allTested, column.allTotal)) : '–'}
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {!loading && (
-        <p className="mt-4 text-[11px] text-slate-400">
-          Khusus transformator. {formatNumber(unknownYear)} trafo tanpa tahun produksi tidak termasuk karena tidak diketahui apakah buatan sebelum 1997.
-        </p>
-      )}
-    </div>
-  );
-}
-
 const FINDING_CLASSES = RISK_CLASSES.filter((risk) => risk.key === 'moderate' || risk.key === 'high');
 
 function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loading?: boolean; onSelectRisk?: ChartProps['onSelectRisk'] }) {
@@ -342,7 +261,7 @@ function Findings({ rows, loading, onSelectRisk }: { rows: CategoryRisk[]; loadi
   );
 }
 
-export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk, pre1997, coverage }: ChartProps) {
+export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote, loading, onSelectRisk, pre1997 }: ChartProps) {
   const showByCategory = categoryRisk.length > 1;
   const subtitle = 'Pengelompokan berdasarkan konsentrasi PCBs (ppm) hasil uji';
   const stackWide = (pre1997?.length ?? 0) > 1;
@@ -356,7 +275,7 @@ export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote
       subtitle={entry.subtitle ?? 'Transformator dengan tahun produksi sebelum 1997'}
       emptyText="Belum ada transformator dengan tahun produksi sebelum 1997."
       counts={entry.counts}
-      footnote="Transformator tanpa tahun produksi tidak termasuk."
+      footnote={`${entry.unknownYear !== undefined ? `${formatNumber(entry.unknownYear)} trafo` : 'Transformator'} tanpa tahun produksi tidak termasuk karena tidak diketahui apakah buatan sebelum 1997.`}
       loading={loading}
       onSelectRisk={entry.onSelectRisk}
       stackWide={stackWide}
@@ -373,7 +292,6 @@ export default function DashboardCharts({ categoryRisk, riskCounts, riskFootnote
   return (
     <div className="space-y-6">
       {donuts}
-      {coverage && <TestCoverage coverage={coverage} loading={loading} />}
       <Findings rows={categoryRisk} loading={loading} onSelectRisk={onSelectRisk} />
     </div>
   );

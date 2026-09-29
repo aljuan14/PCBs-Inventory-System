@@ -4,9 +4,9 @@ import { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
 import { INVENTORY_CATEGORIES, hasPcbConcentration } from '@/lib/inventory';
-import { ALL_SCOPE, PRE_1997_FILTER, TRAFO_CATEGORIES, mapPointFilter, pre1997RiskCounts, sumStats, type CategoryFilter, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
+import { ALL_SCOPE, PRE_1997_FILTER, TRAFO_CATEGORIES, mapPointFilter, pre1997RiskCounts, sumStats, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
 import DataTable, { type TablePreset } from '@/components/DataTable';
-import DashboardCharts, { type CategoryRisk, type Pre1997Coverage, type Pre1997Donut } from '@/components/DashboardCharts';
+import DashboardCharts, { type CategoryRisk, type Pre1997Donut } from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
 import DistributionCharts from '@/components/DistributionCharts';
@@ -61,24 +61,10 @@ export default function InventoryOverview() {
       title: `Trafo ${label}`,
       subtitle: `Transformator ${label.toLowerCase()} dengan tahun produksi sebelum 1997`,
       counts: pre1997RiskCounts(stats, [category]),
+      unknownYear: stats?.[category].unknown_year ?? 0,
       onSelectRisk: (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }, category),
     };
   });
-  const coverage: Pre1997Coverage = {
-    rows: TRAFO_CATEGORIES.map((category) => {
-      const summary = stats?.[category];
-      return {
-        category,
-        label: INVENTORY_CATEGORIES.find((entry) => entry.key === category)?.label ?? category,
-        tested: summary?.pre1997_tested ?? 0,
-        total: summary?.before_1997 ?? 0,
-        allTested: summary?.tested ?? 0,
-        allTotal: summary?.total ?? 0,
-      };
-    }),
-    unknownYear: stats ? sumStats(stats, TRAFO_CATEGORIES, 'unknown_year') : 0,
-    onSelectUntested: (category: CategoryFilter) => showRows({ pcbRange: 'untested', ...PRE_1997_FILTER }, category),
-  };
 
   return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8">
     <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Ringkasan nasional</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Dashboard nasional</h1><p className="mt-2 text-sm text-slate-500">Ringkasan inventarisasi PCBs seluruh kategori{scopeLabel ? <> untuk <span className="font-semibold text-slate-700">{scopeLabel}</span></> : ''}.</p></div><div className="flex gap-2"><button type="button" onClick={reload} disabled={refreshing} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Segarkan</button><a href="/upload" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><UploadCloud className="h-4 w-4" /> Upload data</a></div></header>
@@ -86,7 +72,7 @@ export default function InventoryOverview() {
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} />
     <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
-    <DashboardCharts categoryRisk={categoryRisk} riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} pre1997={pre1997} coverage={coverage} />
+    <DashboardCharts categoryRisk={categoryRisk} riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} pre1997={pre1997} />
     <TestMethodCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
     <DistributionCharts
       scope={scope}
