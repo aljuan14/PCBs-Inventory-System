@@ -10,6 +10,7 @@ import DashboardCharts, { type CategoryRisk, type Pre1997Coverage } from '@/comp
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
 import InventorySummary from '@/components/InventorySummary';
+import TonnageCard from '@/components/TonnageCard';
 import MapNotice from '@/components/MapNotice';
 import { useDashboardData } from '@/components/useDashboardData';
 
@@ -75,6 +76,7 @@ export default function InventoryOverview() {
     {error && <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" /> {error}</div>}
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} />
     <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
+    <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
     <DashboardCharts categoryRisk={categoryRisk} riskCounts={riskCounts} riskFootnote="Kapasitor tidak termasuk karena templatenya tidak memuat kolom konsentrasi PCBs." loading={loading} onSelectRisk={(pcbRange, category) => showRows({ pcbRange }, category)} pre1997={pre1997} coverage={coverage} />
     <DataQualityPanel scope={scope} scopeLabel={scopeLabel} companies={companies} reloadKey={reloadKey} onDrill={setScope} onShowRows={showRows} />
     <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} /></div>
