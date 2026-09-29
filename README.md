@@ -120,6 +120,7 @@ Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL E
 | `20260928000001_units_and_asset_code` | Kolom `unit`, `sub_unit`, `kode_alat` dan fungsi `inventory_units` |
 | `20260928000002_stats_by_unit` | Statistik per unit untuk filter dashboard |
 | `20260928000003_data_quality` | Catatan impor per baris, laporan pemeriksaan, fungsi `inventory_quality` |
+| `20260928000004_dashboard_timeout` | Batas waktu query `anon` dan `authenticated` dinaikkan ke 15 detik |
 
 ### Menjalankan Aplikasi
 

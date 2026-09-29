@@ -43,7 +43,8 @@ const RISK_CLASSES: { key: keyof RiskCounts; label: string; range: string; color
 ];
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
-const formatPercent = (value: number) => `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`;
+// A non-zero share too small for one decimal (e.g. 37 of 113.047) must not read as 0%.
+const formatPercent = (value: number) => (value > 0 && value < 0.05 ? '< 0,1%' : `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`);
 
 function RiskProportion({ counts, footnote, loading, onSelectRisk }: { counts: RiskCounts; footnote?: string; loading?: boolean; onSelectRisk?: ChartProps['onSelectRisk'] }) {
   const [active, setActive] = useState<keyof RiskCounts | null>(null);
