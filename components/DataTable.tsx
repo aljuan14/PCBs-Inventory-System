@@ -41,6 +41,10 @@ export interface InventoryItem {
   rawCoordinate?: string | null;
   notes?: ImportNoteRow[];
   excelRow?: number | null;
+  /** Transformers: dry, oil and total weight in kg. */
+  weightDry?: number | null;
+  weightOil?: number | null;
+  weightTotal?: number | null;
   createdAt?: string;
   details?: Record<string, unknown>;
 }
@@ -105,6 +109,9 @@ export function toInventoryItem(row: InventoryRow, companyNames: Map<string, str
     rawCoordinate: row.koordinat_raw ?? null,
     notes: row.catatan_impor ?? [],
     excelRow: row.baris_excel ?? null,
+    weightDry: toNumber(row.berat_kering_kg),
+    weightOil: toNumber(row.berat_minyak_kg),
+    weightTotal: toNumber(row.berat_total_kg),
     createdAt: row.created_at,
   };
 }
@@ -162,6 +169,8 @@ function focusedNotes(item: InventoryItem, filters: InventoryFilters) {
   if (filters.missing === 'cleared') return notes.filter((note) => note.jenis === 'dikosongkan');
   return notes;
 }
+
+const formatKg = (kg: number | null | undefined) => (kg === null || kg === undefined ? '-' : `${kg.toLocaleString('id-ID', { maximumFractionDigits: 1 })} kg`);
 
 const formatCoordinate = (item: InventoryItem) =>
   item.latitude !== null && item.latitude !== undefined && item.longitude !== null && item.longitude !== undefined
@@ -452,13 +461,17 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
   const focus = focusColumns(appliedFilters);
   const focused = (column: FocusColumn) => focus.has(column);
-  const showTrafoCapacity = focused('daya') || paginatedItems.some((item) => item.type.startsWith('transformator'));
-  const showOilVolume = focused('volume') || paginatedItems.some((item) => item.type === 'minyak_dielektrik');
-  const showPcb = focused('pcb') || paginatedItems.some((item) => item.pcbConcentration !== null && item.pcbConcentration !== undefined);
-  const extraColumns = (['baris', 'koordinat', 'tahun', 'temuan', 'tanggal'] as const).filter(focused);
-  const tableColumnCount = 5 + Number(showTrafoCapacity) + Number(showOilVolume) + Number(showPcb) + extraColumns.length;
-  const th = (column?: FocusColumn) => `py-3.5 px-4${column && focused(column) ? ' bg-emerald-50 text-emerald-800' : ''}`;
+  // Every column is shown and the table scrolls sideways; the import findings
+  // column only while a finding filter is on.
+  const tableColumnCount = 14 + Number(focused('temuan'));
+  const th = (column?: FocusColumn) => `whitespace-nowrap py-3.5 px-4${column && focused(column) ? ' bg-emerald-50 text-emerald-800' : ''}`;
   const td = (column?: FocusColumn) => `py-3.5 px-4${column && focused(column) ? ' bg-emerald-50/50' : ''}`;
+  // No and brand stay on the left and the actions on the right while scrolling;
+  // their backgrounds are opaque so the scrolled columns pass underneath.
+  const STICKY_NO = 'sticky left-0 z-10 w-14 min-w-14';
+  const STICKY_NAME = 'sticky left-14 z-10 min-w-56 border-r border-slate-100';
+  const STICKY_ACTIONS = 'sticky right-0 z-10 border-l border-slate-100';
+  const stickyCell = (column?: FocusColumn) => (column && focused(column) ? 'bg-emerald-50' : 'bg-inherit');
 
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
@@ -659,25 +672,27 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
       )}
 
       {/* Table */}
+      <p className="mb-2 text-[11px] text-slate-400">Geser tabel ke samping untuk melihat semua kolom.</p>
       <div className={`relative overflow-x-auto rounded-xl border border-slate-200/80 ${loading ? 'opacity-60' : ''}`}>
-        {loading && <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-slate-400" />}
-        <table className="w-full text-left text-xs">
-          <thead className="border-b border-slate-200 bg-slate-50/80 font-bold text-slate-700">
+        {loading && <Loader2 className="absolute right-3 top-3 z-20 h-4 w-4 animate-spin text-slate-400" />}
+        <table className="w-full min-w-[1700px] text-left text-xs">
+          <thead className="border-b border-slate-200 bg-slate-50 font-bold text-slate-700">
             <tr>
-              <th className="py-3.5 px-4">No.</th>
-              {focused('baris') && <th className={th('baris')}>Baris Excel</th>}
-              <th className={focused('kode') ? th('kode') : th('merek')}>Merek / Seri</th>
-              <th className="py-3.5 px-4">Perusahaan</th>
+              <th className={`${th()} ${STICKY_NO} bg-slate-50`}>No.</th>
+              <th className={`${th(focused('kode') ? 'kode' : 'merek')} ${STICKY_NAME} ${focused('kode') || focused('merek') ? '' : 'bg-slate-50'}`}>Merek / Seri</th>
+              <th className={th('baris')}>Baris Excel</th>
+              <th className={th()}>Perusahaan / Unit</th>
               <th className={th('lokasi')}>Lokasi</th>
-              {focused('koordinat') && <th className={th('koordinat')}>Koordinat</th>}
-              {focused('tahun') && <th className={th('tahun')}>Tahun</th>}
-              {showTrafoCapacity && <th className={th('daya')}>Daya (kVA)</th>}
-              {showOilVolume && <th className={th('volume')}>Volume (L)</th>}
-              {showPcb && <th className={th('pcb')}>Konsentrasi Uji</th>}
+              <th className={th('koordinat')}>Koordinat</th>
+              <th className={th('tahun')}>Tahun</th>
+              <th className={th('daya')}>Daya (kVA)</th>
+              <th className={th('volume')}>Volume (L)</th>
+              <th className={th()}>Berat (kg)</th>
+              <th className={th('pcb')}>Konsentrasi Uji</th>
+              <th className={th()}>Status</th>
+              <th className={th('tanggal')}>Diinput</th>
               {focused('temuan') && <th className={th('temuan')}>Temuan Impor</th>}
-              {focused('tanggal') && <th className={th('tanggal')}>Diinput</th>}
-              <th className="py-3.5 px-4">Status</th>
-              <th className="py-3.5 px-4 text-right">Aksi</th>
+              <th className={`${th()} ${STICKY_ACTIONS} bg-slate-50 text-right`}>Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -716,10 +731,9 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                 const importNotes = (details[item.id]?.catatan_impor ?? []) as ImportNoteRow[];
                 return (
                   <Fragment key={item.id}>
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4 font-medium">{item.no ?? '-'}</td>
-                    {focused('baris') && <td className={`${td('baris')} tabular-nums`}>{item.excelRow ?? '-'}</td>}
-                    <td className={focused('kode') ? td('kode') : td('merek')}>
+                  <tr key={item.id} className="bg-white transition-colors hover:bg-slate-50">
+                    <td className={`${td()} ${STICKY_NO} bg-inherit font-medium`}>{item.no ?? '-'}</td>
+                    <td className={`${td()} ${STICKY_NAME} ${stickyCell(focused('kode') ? 'kode' : 'merek')}`}>
                       <button type="button" onClick={() => toggleDetails(item)} className={`text-left font-bold hover:text-emerald-700 ${item.name ? 'text-slate-900' : 'italic text-slate-400'}`}>{item.name || 'Merek tidak tercatat'}</button>
                       {item.type !== 'minyak_dielektrik' && (
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
@@ -728,31 +742,42 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                       )}
                       {(item.code || focused('kode')) && <div className="text-[11px] text-slate-500 font-mono">Kode: {item.code || <span className="font-sans italic text-slate-400">tidak tercatat</span>}</div>}
                     </td>
-                    <td className="py-3.5 px-4 font-medium text-slate-700">
+                    <td className={`${td('baris')} tabular-nums`}>{item.excelRow ?? '-'}</td>
+                    <td className={`${td()} font-medium text-slate-700`}>
                       {item.companyName}
                       {item.unit && <div className="mt-0.5 text-[11px] font-normal text-slate-500">{item.unit}{item.subUnit ? ` › ${item.subUnit}` : ''}</div>}
                     </td>
                     <td className={td('lokasi')}><div className="text-slate-800 font-medium">{item.location || '-'}</div></td>
-                    {focused('koordinat') && (
-                      <td className={td('koordinat')}>
-                        {coordinate
-                          ? <div className="whitespace-nowrap font-mono text-slate-800">{coordinate}</div>
-                          : <div className="italic text-slate-400">{item.rawCoordinate ? 'Tidak terbaca' : 'Tidak diisi'}</div>}
-                        {item.rawCoordinate && item.rawCoordinate !== coordinate && (
-                          <div className="mt-0.5 max-w-48 truncate text-[11px] text-slate-500" title={item.rawCoordinate}>Di Excel: {item.rawCoordinate}</div>
-                        )}
-                      </td>
-                    )}
-                    {focused('tahun') && <td className={`${td('tahun')} tabular-nums`}>{item.year ?? <span className="italic text-slate-400">tidak tercatat</span>}</td>}
-                    {showTrafoCapacity && <td className={td('daya')}>{item.type.startsWith('transformator') ? item.capacity || '-' : '-'}</td>}
-                    {showOilVolume && <td className={td('volume')}>{item.type === 'minyak_dielektrik' ? item.capacity || '-' : '-'}</td>}
-                    {showPcb && <td className={td('pcb')}>
-                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${pcbBadge}`}>
+                    <td className={td('koordinat')}>
+                      {coordinate
+                        ? <div className="whitespace-nowrap font-mono text-slate-800">{coordinate}</div>
+                        : <div className="italic text-slate-400">{item.rawCoordinate ? 'Tidak terbaca' : 'Tidak diisi'}</div>}
+                      {item.rawCoordinate && item.rawCoordinate !== coordinate && (
+                        <div className="mt-0.5 max-w-48 truncate text-[11px] text-slate-500" title={item.rawCoordinate}>Di Excel: {item.rawCoordinate}</div>
+                      )}
+                    </td>
+                    <td className={`${td('tahun')} tabular-nums`}>{item.year ?? <span className="italic text-slate-400">tidak tercatat</span>}</td>
+                    <td className={`${td('daya')} whitespace-nowrap`}>{item.type.startsWith('transformator') ? item.capacity || '-' : '-'}</td>
+                    <td className={`${td('volume')} whitespace-nowrap`}>{item.type === 'minyak_dielektrik' ? item.capacity || '-' : '-'}</td>
+                    <td className={`${td()} whitespace-nowrap tabular-nums`}>
+                      {item.weightTotal !== null && item.weightTotal !== undefined ? formatKg(item.weightTotal) : '-'}
+                      {(item.weightDry !== null && item.weightDry !== undefined) || (item.weightOil !== null && item.weightOil !== undefined) ? (
+                        <div className="mt-0.5 text-[11px] text-slate-500">kering {formatKg(item.weightDry)} · minyak {formatKg(item.weightOil)}</div>
+                      ) : null}
+                    </td>
+                    <td className={td('pcb')}>
+                      <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${pcbBadge}`}>
                         {pcbIcon}
                         <span>{pcbText}</span>
                       </span>
-                      {focused('pcb') && item.testType && <div className="mt-1 text-[11px] text-slate-500">{item.testType}</div>}
-                    </td>}
+                      {item.testType && <div className="mt-1 text-[11px] text-slate-500">{item.testType}</div>}
+                    </td>
+                    <td className={td()}>
+                      <span className="capitalize font-medium text-slate-700">
+                        {item.status || 'Aktif'}
+                      </span>
+                    </td>
+                    <td className={`${td('tanggal')} whitespace-nowrap`}>{item.createdAt ? new Date(item.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}</td>
                     {focused('temuan') && (
                       <td className={td('temuan')}>
                         {rowNotes.length > 0 ? rowNotes.map((note, index) => (
@@ -765,13 +790,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                         )) : '-'}
                       </td>
                     )}
-                    {focused('tanggal') && <td className={`${td('tanggal')} whitespace-nowrap`}>{item.createdAt ? new Date(item.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-'}</td>}
-                    <td className="py-3.5 px-4">
-                      <span className="capitalize font-medium text-slate-700">
-                        {item.status || 'Aktif'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
+                    <td className={`${td()} ${STICKY_ACTIONS} bg-inherit`}>
                       <div className="flex justify-end gap-1.5">
                         <button
                           type="button"
