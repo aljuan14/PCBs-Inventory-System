@@ -12,7 +12,7 @@ import {
   sampleValues,
   transformRows,
 } from '@/lib/import-transform';
-import { progressResponse } from '@/lib/progress';
+import { flushProgress, progressResponse } from '@/lib/progress';
 import { stepTimer } from '@/lib/timing';
 
 // Parsing and checking a large sheet can take a while.
@@ -53,18 +53,19 @@ export async function POST(
 
     const replacing = await loadReplaceTarget(supabase, batch, replaceBatchId);
 
-    return progressResponse('Validation', async (send) => {
+    return progressResponse(req, 'Validation', async (send) => {
       send({ type: 'plan', stages: ['load', 'transform', 'existing'] });
       send({ type: 'stage', stage: 'load' });
       const sheet = await loadBatchSheet(supabase, batch);
       timer.step('load');
       send({ type: 'stage', stage: 'transform' });
+      await flushProgress();
       const { rows, skippedEmpty, issues } = transformRows(category, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
       timer.step('transform');
 
       send({ type: 'stage', stage: 'existing' });
       const existing = await findRowsInDatabase(supabase, category, batch.company_id, rows, replacing?.id,
-        (done, total) => send({ type: 'progress', done, total }));
+        (done, total) => send({ type: 'progress', done, total, unit: 'rows' }));
       const inDatabase = rows.filter((row) => existing.has(row));
       timer.step('existing');
       timer.done();

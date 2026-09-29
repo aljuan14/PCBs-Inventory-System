@@ -82,7 +82,7 @@ export async function createUploadSession(supabase: SupabaseClient, companyId: s
   const { error } = await supabase.from('upload_sessions').insert({ id: uploadId, company_id: companyId, file_name: fileName, storage_path: storagePath });
   if (error) throw new Error(`Gagal mencatat unggahan: ${error.message}`);
 
-  return { uploadId, storagePath, token: signed.token };
+  return { uploadId, storagePath, token: signed.token, signedUrl: signed.signedUrl };
 }
 
 export async function readUploadSession(supabase: SupabaseClient, uploadId: string) {

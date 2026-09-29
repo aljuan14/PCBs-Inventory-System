@@ -12,6 +12,15 @@ function formatDuration(ms: number) {
   return `${Math.floor(seconds / 60)} mnt ${seconds % 60} dtk`;
 }
 
+const formatMegabytes = (bytes: number) => (bytes / 1024 / 1024).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** The current step's count in its own unit: "2.000 / 25.943 baris", "7 / 23 sheet · Trafo Online", "2,1 / 5,0 MB". */
+function formatCount(state: ProgressState) {
+  if (state.unit === 'bytes') return `${formatMegabytes(state.done)} / ${formatMegabytes(state.total)} MB`;
+  const count = `${formatNumber(state.done)} / ${formatNumber(state.total)} ${state.unit === 'sheets' ? 'sheet' : 'baris'}`;
+  return state.label ? `${count} · ${state.label}` : count;
+}
+
 const formatStep = (ms: number) => (ms < 1000 ? `${Math.max(1, Math.round(ms / 100)) / 10} dtk` : formatDuration(ms)).replace('.', ',');
 
 /** Steps of a running check or import, with the overall share, time spent and a rough estimate of the time left. */
@@ -47,7 +56,7 @@ export default function ProgressPanel({ title, state }: { title: string; state: 
                   : <Circle className="h-3.5 w-3.5 shrink-0 text-slate-300" />}
               <span className={entry.endedAt || running ? 'text-slate-800' : 'text-slate-400'}>{STAGE_LABELS[entry.stage]}</span>
               {running && state.total > 0 && (
-                <span className="tabular-nums text-slate-500">{formatNumber(state.done)} / {formatNumber(state.total)} baris</span>
+                <span className="min-w-0 truncate tabular-nums text-slate-500">{formatCount(state)}</span>
               )}
               {entry.endedAt && entry.startedAt && (
                 <span className="ml-auto tabular-nums text-slate-400">{formatStep(entry.endedAt - entry.startedAt)}</span>

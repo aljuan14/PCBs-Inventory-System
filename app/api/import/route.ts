@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import type { InventoryCategory } from '@/lib/inventory';
 import { BatchFileError, buildCheckReport, checkMappings, findRowsInDatabase, forgetBatchSheet, insertBatchRows, loadBatchSheet, loadReplaceTarget, transformRows } from '@/lib/import-transform';
-import { progressResponse, type ProgressStage } from '@/lib/progress';
+import { flushProgress, progressResponse, type ProgressStage } from '@/lib/progress';
 import { stepTimer } from '@/lib/timing';
 
 // Large sheets (tens of thousands of rows) are parsed and inserted in one request.
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     // From here the work streams its progress (lib/progress.ts) and finishes
     // even if the page is closed.
-    return progressResponse('Import', async (send) => {
+    return progressResponse(req, 'Import', async (send) => {
       const stages: ProgressStage[] = ['load', 'transform', ...(skipDuplicates ? ['existing' as const] : []), 'insert', ...(replacing ? ['replace' as const] : [])];
       send({ type: 'plan', stages });
 
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       const sheet = await loadBatchSheet(supabase, batch);
       timer.step('load');
       send({ type: 'stage', stage: 'transform' });
+      await flushProgress();
       const transformed = transformRows(jenisData, sheet, mappings, { profile: batch.profile, fileName: batch.nama_file_asli });
       const { rows, skippedEmpty, skippedCopies } = transformed;
       timer.step('transform');
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
         return {
           type: 'error',
           error: skippedDuplicates > 0 ? `Semua ${skippedDuplicates} baris sudah ada di database.` : 'Tidak ada baris data yang dapat diimpor.',
+          status: 400,
         };
       }
 

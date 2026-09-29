@@ -6,7 +6,9 @@ import { createClient } from '@/lib/supabase/client';
 import { UploadCloud, FileSpreadsheet, Building2, Layers, CheckCircle, ArrowRight, Loader2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 import { IMPORT_PROFILE_LABELS, type ImportProfile } from '@/lib/import-profiles';
-import { MAX_UPLOAD_BYTES, STORAGE_BUCKET } from '@/lib/upload-store';
+import { MAX_UPLOAD_BYTES } from '@/lib/upload-store';
+import ProgressPanel from '@/components/ProgressPanel';
+import { applyProgress, postWithProgress, startProgress, uploadWithProgress, type ProgressEvent, type ProgressState } from '@/lib/progress';
 
 interface CompanyOption {
   id: string;
@@ -83,6 +85,9 @@ export default function UploadPage() {
   // Upload & review states
   const [uploadStage, setUploadStage] = useState<'upload' | 'scan' | null>(null);
   const uploading = uploadStage !== null;
+  // Steps of the upload (reported by the browser) and the scan (streamed by the server).
+  const [uploadProgress, setUploadProgress] = useState<ProgressState | null>(null);
+  const trackUpload = (event: ProgressEvent) => setUploadProgress((prev) => prev && applyProgress(prev, event, Date.now()));
   const [confirming, setConfirming] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -141,6 +146,8 @@ export default function UploadPage() {
     }
 
     setUploadStage('upload');
+    const started = Date.now();
+    setUploadProgress(applyProgress(startProgress(started, ['upload', 'download', 'parse', 'scan', 'save']), { type: 'stage', stage: 'upload' }, started));
 
     try {
       // 1. Reserve an upload slot, then send the workbook straight to Storage.
@@ -159,26 +166,12 @@ export default function UploadPage() {
         throw new Error(init.error || 'Gagal menyiapkan unggahan.');
       }
 
-      const { error: storageErr } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .uploadToSignedUrl(init.storagePath, init.token, file, {
-          contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-      if (storageErr) {
-        throw new Error(`Gagal mengunggah berkas ke penyimpanan: ${storageErr.message}`);
-      }
+      await uploadWithProgress(init.signedUrl, file, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        (sent, total) => trackUpload({ type: 'progress', done: sent, total, unit: 'bytes' }));
 
       // 2. Scan every sheet of the stored workbook.
       setUploadStage('scan');
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploadId: init.uploadId }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Gagal memproses berkas Excel.');
-      }
+      const json = await postWithProgress<ScanResult>('/api/upload', { uploadId: init.uploadId }, trackUpload);
 
       setScan(json);
       setSelection(Object.fromEntries((json.sheets as ScannedSheet[]).map((sheet) => [sheet.sheetName, { include: sheet.include, category: sheet.category ?? '' }])));
@@ -187,6 +180,7 @@ export default function UploadPage() {
       setErrorMsg((err instanceof Error && err.message) || 'Terjadi kesalahan saat upload.');
     } finally {
       setUploadStage(null);
+      setUploadProgress(null);
     }
   };
 
@@ -368,6 +362,11 @@ export default function UploadPage() {
                 )}
               </button>
             </div>
+            {uploadProgress && (
+              <div className="mt-6">
+                <ProgressPanel title={`Memproses ${file?.name ?? 'berkas'}`} state={uploadProgress} />
+              </div>
+            )}
           </div>
         </form>
       ) : (
