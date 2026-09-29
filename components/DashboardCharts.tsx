@@ -59,7 +59,7 @@ export interface RiskCounts {
 }
 
 // Same bands and wording as the table's PCBs filter; ppm = konsentrasi PCBs in the KLHK template.
-const RISK_CLASSES: { key: keyof RiskCounts; label: string; range: string; color: string; icon: LucideIcon; iconClass: string }[] = [
+export const RISK_CLASSES: { key: keyof RiskCounts; label: string; range: string; color: string; icon: LucideIcon; iconClass: string }[] = [
   { key: 'safe', ...PCB_CLASSES.safe, color: '#059669', icon: ShieldCheck, iconClass: 'text-emerald-600' },
   { key: 'moderate', ...PCB_CLASSES.moderate, color: '#f59e0b', icon: TriangleAlert, iconClass: 'text-amber-600' },
   { key: 'high', ...PCB_CLASSES.high, color: '#e11d48', icon: OctagonAlert, iconClass: 'text-rose-600' },
@@ -68,7 +68,7 @@ const RISK_CLASSES: { key: keyof RiskCounts; label: string; range: string; color
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
 // A non-zero share too small for one decimal (e.g. 37 of 113.047) must not read as 0%.
-const formatPercent = (value: number) => (value > 0 && value < 0.05 ? '< 0,1%' : `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`);
+export const formatPercent = (value: number) => (value > 0 && value < 0.05 ? '< 0,1%' : `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`);
 
 interface RiskProportionProps {
   title: string;
