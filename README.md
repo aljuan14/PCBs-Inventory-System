@@ -45,10 +45,14 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 | Deteksi format otomatis | Setiap sheet dipindai, baris header ditemukan meskipun ada judul bertingkat, lalu dikenali sebagai **Template KLHK** atau **Format PLN** beserta kategorinya. |
 | Pemetaan kolom | Kolom dipetakan otomatis sesuai profil format. Admin cukup mengonfirmasi, atau memetakan manual bila perlu. |
 | Pemeriksaan sebelum impor | Menampilkan koordinat tidak terbaca, angka atau tanggal tidak valid, field penting yang kosong, dan duplikat. Setiap temuan disertai nomor baris Excel dan contoh nilainya. |
+| Cek duplikat di database | Setiap baris punya *fingerprint* (kolom terindeks) dari unit, sub-unit, kode alat, No, merek, seri, tahun, daya, volume, koordinat, dan lokasi. Baris yang sudah tersimpan untuk perusahaan yang sama dikenali dalam satu query per 2.000 baris, tanpa mengunduh seluruh data. |
 | Ganti data unggahan sebelumnya | Berkas revisi dapat menggantikan seluruh baris dari unggahan lama (disarankan otomatis bila nama berkas dan sheet sama) dalam satu transaksi. Unggahan lama tetap tercatat di riwayat sebagai "diganti". |
+| Progres bertahap | Unggah (MB terkirim), pindai (per sheet), pemeriksaan, dan impor (per baris) menampilkan langkah yang berjalan, durasinya, dan perkiraan sisa waktu. |
+| Berat transformator | Berat kering peralatan, berat minyak/cairan, dan berat total (kg) dari formulir PLN disimpan. Nilai 0 dianggap kosong, nilai di atas 1.000 ton dikosongkan, total yang tertulis dalam ton dikoreksi, dan total yang kosong dihitung dari kering + minyak. |
 | Perbaikan koordinat | Membaca format DMS, desimal koma, dan urutan lintang-bujur yang tertukar. Pola rusak yang umum (titik desimal hilang, lintang dan bujur tergabung) diperbaiki bila hasilnya jatuh di wilayah Indonesia. |
-| Penyaringan baris | Baris formulir kosong, sisa tempelan di luar formulir (tanpa Unit Induk, Unit Pelaksana, dan No), serta baris yang ditempel dua kali dilewati. Semuanya dicatat di laporan pemeriksaan. |
-| Normalisasi unit | Penulisan Unit Induk PLN yang beragam (`UIWRKR`, `UIW RKR`, `WRKR`, ...) dipetakan ke 28 nama baku. |
+| Penyaringan baris | Baris formulir kosong, baris CONTOH dari template PLN, sisa tempelan di luar formulir (tanpa Unit Induk, Unit Pelaksana, dan No), serta baris yang ditempel dua kali dilewati. Semuanya dicatat di laporan pemeriksaan. |
+| Pembersihan sel | Karakter kontrol tak terlihat (misalnya NUL dari ekspor sistem lain) dibuang dari setiap sel sebelum diproses. |
+| Normalisasi unit | Penulisan Unit Induk PLN yang beragam (`UIWRKR`, `UIW RKR`, `WRKR`, ...) dipetakan ke 28 nama baku. Awalan perusahaan pada sub-unit ("PLN UP3 Ketapang") dibuang. |
 | Riwayat unggah | Setiap impor menyimpan laporan pemeriksaannya, sehingga bisa ditinjau kembali di `/upload/riwayat`. |
 
 ### Dashboard & Analisis
@@ -57,10 +61,12 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 |---|---|
 | Dashboard nasional & per kategori | Statistik dihitung di server, jadi tetap akurat untuk ratusan ribu baris. |
 | Filter bertingkat | Filter Perusahaan › Unit Induk › Unit Pelaksana berlaku untuk kartu ringkasan, grafik, peta, dan tabel sekaligus. |
+| Kartu ringkasan | Per jenis trafo: bilah tahun produksi (< 1997, ≥ 1997, tidak diketahui) dan hasil uji PCBs. Kapasitor dan minyak dielektrik sebagai kartu kecil. Setiap baris membuka datanya di tabel. |
+| Tonase transformator | Total tonase dari berat total di formulir, tonase per jenis trafo, dan tonase trafo buatan sebelum 1997. |
 | Proporsi risiko PCBs | Dua diagram donut, keseluruhan dan khusus trafo dengan tahun produksi sebelum 1997, per kelas: < 2 ppm, 2–50 ppm, > 50 ppm, dan belum diuji. Klik salah satu kelas untuk menyaring tabel ke rentang tersebut. |
-| Cakupan uji & temuan | Menampilkan persentase alat yang sudah diuji per jenis serta jumlah temuan ≥ 50 ppm, yang juga bisa diklik. |
+| Cakupan uji & temuan | Persentase trafo buatan sebelum 1997 yang sudah diuji per jenis (dengan pembanding semua tahun), serta jumlah temuan ≥ 2 ppm per jenis alat. Semuanya bisa diklik. |
 | Peta sebaran | Peta Leaflet dengan warna yang aman bagi buta warna. Klik titik untuk menampilkan semua data di koordinat itu di tabel. |
-| Tabel inventaris | Paginasi server, pencarian, edit dan hapus per baris, filter lanjutan (jenis uji, tahun, daya, kelengkapan, batch impor), serta pengurutan. |
+| Tabel inventaris | Semua kolom tampil (termasuk koordinat, tahun, dan berat kering/minyak/total) dan tabel bisa digeser ke samping, dengan kolom merek dan aksi yang menempel. Kolom yang terkait filter aktif disorot. Tersedia paginasi server, pencarian, edit dan hapus per baris, filter lanjutan (jenis uji, tahun, daya, kelengkapan, batch impor), dan pengurutan. |
 | Kualitas data | Menyediakan skor kelengkapan, perbandingan per unit, dan laporan temuan (`/laporan/kualitas`) yang bisa diekspor ke Excel atau PDF. |
 
 ### Manajemen Perusahaan
@@ -142,13 +148,15 @@ npm run build   # build produksi (termasuk pemeriksaan TypeScript)
 
 ```text
 1. Unggah workbook   ──►  2. Review sheet     ──►  3. Pemetaan kolom   ──►  4. Pemeriksaan   ──►  5. Impor
-   (/upload)              pilih sheet & kategori    (/upload/[batchId]/      temuan per baris       per 500 baris
+   (/upload)              pilih sheet & kategori    (/upload/[batchId]/      temuan per baris       per 1.000 baris
                           satu batch per sheet       mapping)                 & duplikat             ke tabel kategori
 ```
 
 - Tidak ada berkas yang disimpan di disk server. Workbook disimpan di Supabase Storage, hasil pemindaian di `upload_sessions`, dan konteks pemetaan di `import_batches`, jadi alur ini berjalan di platform serverless.
 - Baris yang sudah ada di database dilewati secara default. Baris kembar di dalam berkas yang sama cukup diimpor sekali.
+- **Mode ganti:** berkas revisi dapat menggantikan unggahan sebelumnya. Baris baru disimpan dulu, lalu baris lama dihapus dan batch lamanya ditandai "diganti" dalam satu transaksi. Bila langkah itu gagal, baris baru dihapus lagi.
 - Bila impor gagal di tengah, baris dari batch tersebut dibatalkan.
+- Proses panjang mengirim progresnya secara bertahap (NDJSON) bila diminta browser (`Accept: application/x-ndjson`). Halaman lama yang belum dimuat ulang tetap menerima JSON biasa.
 - Unggahan yang tidak pernah dijadikan batch dihapus otomatis setelah 7 hari.
 
 > **Catatan deploy:** workbook PLN terbesar (sekitar 12 MB) membutuhkan ratusan MB memori dan beberapa detik untuk diproses. Pastikan konfigurasi fungsi di Vercel mengizinkan durasi hingga 300 detik untuk impor.
@@ -174,6 +182,18 @@ npx tsx scripts/import-folder.ts "<folder>" --company "PT PLN (Persero)" --commi
 
 Langkah yang dipakai sama dengan unggah lewat web. Skrip ini aman dijalankan ulang, karena berkas yang identik dan baris yang sudah ada otomatis dilewati.
 
+### Mengisi ulang berat transformator
+
+Kolom berat ditambahkan setelah data PLN diimpor. Skrip ini mengisinya dari berkas asli tiap batch di Storage tanpa impor ulang. Hanya kolom berat yang diperbarui, dicocokkan lewat nomor baris Excel.
+
+```bash
+npx tsx scripts/backfill-weights.ts                # dry run
+npx tsx scripts/backfill-weights.ts --only Jabar   # batch yang nama berkasnya memuat teks tertentu
+npx tsx scripts/backfill-weights.ts --commit       # simpan
+```
+
+Batch yang barisnya tidak punya nomor baris Excel (diimpor sebelum migrasi `20260928000003`) perlu diunggah ulang dengan mode ganti.
+
 ### Mengosongkan data perusahaan
 
 ```bash
@@ -190,16 +210,15 @@ Perintah ini menghapus baris inventaris, batch impor, berkas di Storage, dan ses
 | Perintah | Menguji |
 |---|---|
 | `npx tsx scripts/test-dms.ts` | Parser koordinat, termasuk pola yang harus ditolak |
-| `npx tsx scripts/test-units.ts` | Normalisasi nama Unit Induk PLN |
+| `npx tsx scripts/test-units.ts` | Normalisasi nama Unit Induk dan sub-unit PLN |
 | `npx tsx scripts/check-import.ts "<folder>"` | Dry run seluruh pipeline impor tanpa database: jumlah baris, temuan validasi, dan duplikat per sheet |
 
-**Hasil dry run data PLN (28 September 2026):** 45 berkas menghasilkan 356.991 baris data:
-- 324.154 trafo digunakan
-- 32.558 trafo tidak digunakan
+**Data PLN terimpor (29 September 2026):** 28 berkas UID/UIT/UIP3B/UIW, dengan UID Jaya yang semula 17 berkas digabung menjadi satu. Isi database dicocokkan dengan hasil baca ulang semua berkas, per sheet dan per angka dashboard:
+- 320.966 trafo digunakan
+- 32.552 trafo tidak digunakan
 - 176 kapasitor
-- 103 minyak dielektrik
-
-Sekitar 65% koordinatnya valid. Sebanyak 8.790 baris kembar di dalam berkas dan ribuan baris sisa tempelan dilewati.
+- 103 data minyak dielektrik (29.029 L)
+- 230.391 ton berat trafo, dari 145.280 trafo yang beratnya tercatat
 
 ---
 
@@ -209,11 +228,12 @@ Sekitar 65% koordinatnya valid. Sebanyak 8.790 baris kembar di dalam berkas dan 
 |---|---|
 | `companies` | Profil perusahaan pemilik peralatan |
 | `upload_sessions` | Satu baris per workbook yang diunggah (lokasi berkas, hasil pindai, sidik SHA-256) |
-| `import_batches` | Satu baris per sheet yang diimpor, berisi status, konteks pemetaan, dan laporan pemeriksaan |
-| `transformator_digunakan`, `transformator_tidak_digunakan`, `kapasitor`, `minyak_dielektrik` | Data inventaris per formulir KLHK, termasuk unit, kode alat, dan catatan impor per baris |
+| `import_batches` | Satu baris per sheet yang diimpor, berisi status (`imported`, `replaced`, ...), konteks pemetaan, dan laporan pemeriksaan |
+| `transformator_digunakan`, `transformator_tidak_digunakan`, `kapasitor`, `minyak_dielektrik` | Data inventaris per formulir KLHK, termasuk unit, kode alat, catatan impor, nomor baris Excel, dan `fingerprint` per baris. Tabel trafo juga menyimpan berat kering, minyak, dan total (kg) |
 | `field_definitions` | Kamus field baku untuk pemetaan |
 | `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta dashboard |
-| `inventory_stats()`, `inventory_units()`, `inventory_quality()` | Statistik dashboard, rekap per unit, dan skor kualitas data yang dihitung di server |
+| `inventory_stats()`, `inventory_units()`, `inventory_quality()` | Statistik dashboard (termasuk tonase), rekap per unit, dan skor kualitas data yang dihitung di server |
+| `inventory_existing_rows()`, `replace_import_batch()`, `inventory_set_weights()` | Cek duplikat per potongan baris, penggantian batch dalam satu transaksi, dan pengisian berat per batch |
 | Storage `pcbs-files` | Bucket privat untuk workbook yang diunggah |
 
 ---
@@ -234,12 +254,14 @@ lib/
   excel.ts               Parser Excel dan pendeteksi header
   import-profiles.ts     Profil format (KLHK, PLN), pemetaan otomatis, penyaringan baris
   import-scan.ts         Pemindaian sheet (dipakai web dan skrip)
-  import-transform.ts    Transformasi, validasi, deteksi duplikat, penyimpanan
+  import-transform.ts    Transformasi, validasi, berat, deteksi duplikat, penyimpanan
+  progress.ts            Progres bertahap (NDJSON) untuk pindai, periksa, dan impor
+  timing.ts              Log durasi per langkah di server
   units.ts               Normalisasi unit dan sub-unit
   dms.ts                 Parser koordinat
   company-purge.ts       Penghapusan data perusahaan
   data-quality.ts        Perhitungan kualitas data
-scripts/                 Impor massal, purge, dry run, dan pengujian
+scripts/                 Impor massal, isi ulang berat, purge, dry run, dan pengujian
 supabase/                Migrasi SQL dan seed
 ```
 
@@ -259,10 +281,15 @@ Data inventaris (`Data-inventaris/`), termasuk template formulir KLHK dan data r
 - [x] Kualitas data: skor kelengkapan, laporan temuan (Excel/PDF), riwayat unggah
 - [x] Donut risiko, kartu cakupan uji, dan peta yang terhubung ke tabel
 - [x] Hapus perusahaan beserta seluruh datanya
+- [x] Kelas risiko < 2 / 2–50 / > 50 ppm dan fokus pada trafo buatan sebelum 1997
+- [x] Cek duplikat di database dan mode ganti data unggahan sebelumnya
+- [x] Progres bertahap untuk unggah, pindai, periksa, dan impor
+- [x] Berat trafo (kering, minyak, total) dan kartu tonase
 
 **Berikutnya**
 - [ ] Unggah banyak berkas sekaligus lewat web
-- [ ] Mode *update* data (upsert berdasarkan kode alat) dan riwayat perubahan
+- [ ] Pembaruan per baris (berdasarkan kode alat) dan riwayat perubahan
+- [ ] Tampilan ponsel (sidebar yang bisa dilipat)
 - [ ] Autentikasi, peran admin/viewer, dan Row Level Security
 
 ---
