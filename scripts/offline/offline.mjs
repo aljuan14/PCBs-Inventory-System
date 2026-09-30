@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pull } from './data-pull.mjs';
-import { OfflineError, ROOT, ensureDocker, log, main, run, step, supabase } from './lib.mjs';
+import { OfflineError, ROOT, ensureDocker, log, main, run, startSupabase, step, supabase } from './lib.mjs';
 
 const APP_URL = 'http://localhost:3000';
 const ENV_FILE = path.join(ROOT, '.env.local');
@@ -43,7 +43,7 @@ async function updateCode() {
 
 async function startDatabase() {
   step('Menyalakan database lokal (Docker)');
-  await supabase(['start']);
+  await startSupabase();
   await supabase(['migration', 'up', '--local']);
 }
 

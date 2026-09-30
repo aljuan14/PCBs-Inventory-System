@@ -22,6 +22,8 @@ export const DATA_BRANCH = 'main';
 
 /** Container name comes from project_id in supabase/config.toml. */
 export const DB_CONTAINER = 'supabase_db_pcbs-inventory';
+const NETWORK = 'supabase_network_pcbs-inventory';
+const LOOPBACK_OPTION = 'com.docker.network.bridge.host_binding_ipv4';
 
 /** Filled by supabase/seed.sql, not by the sync. */
 const SKIP_TABLES = new Set(['public.field_definitions']);
@@ -102,6 +104,43 @@ export async function ensureDocker() {
   if (code !== 0) throw new OfflineError('Docker belum berjalan. Buka Docker Desktop, tunggu sampai statusnya "running", lalu ulangi.');
 }
 
+/**
+ * The Supabase CLI publishes its ports on every network interface, while the
+ * local stack uses the CLI's well-known default passwords and keys. The CLI
+ * reuses an existing Docker network of the right name, so create that network
+ * first with loopback as the default host address: the ports then only open
+ * for this laptop. Call before "supabase start".
+ */
+export async function ensureLoopbackNetwork() {
+  const { code, stdout } = await run('docker', ['network', 'inspect', NETWORK, '--format', '{{json .Options}}'], { capture: true, allowFail: true });
+  if (code === 0) {
+    if (stdout.includes(`"${LOOPBACK_OPTION}":"127.0.0.1"`)) return;
+    // Created by the CLI without the option: recreate it (the stack must be down).
+    await supabase(['stop'], { capture: true, allowFail: true });
+    await run('docker', ['network', 'rm', NETWORK], { capture: true, allowFail: true });
+  }
+  await run('docker', ['network', 'create', '-o', `${LOOPBACK_OPTION}=127.0.0.1`, NETWORK], { capture: true });
+}
+
+/** Safety net after start: stop the stack if any port is still reachable from the network. */
+export async function ensurePortsPrivate() {
+  const { stdout } = await run('docker', ['ps', '--filter', 'name=_pcbs-inventory', '--format', '{{.Names}}\t{{.Ports}}'], { capture: true });
+  const exposed = stdout.split('\n').filter((line) => /(^|[\s,])(0\.0\.0\.0|\[::\]|::):\d+->/.test(line));
+  if (!exposed.length) return;
+  await supabase(['stop'], { capture: true, allowFail: true });
+  throw new OfflineError(
+    'Port Supabase terbuka ke jaringan (bisa diakses laptop lain di Wi-Fi yang sama), jadi Supabase dimatikan lagi.\n'
+    + 'Jalankan ulang "npm run offline"; kalau pesan ini muncul lagi, hubungi admin.',
+  );
+}
+
+/** supabase start with the loopback network and the port check around it. */
+export async function startSupabase() {
+  await ensureLoopbackNetwork();
+  await supabase(['start']);
+  await ensurePortsPrivate();
+}
+
 // ---------------------------------------------------------------------------
 // Database access (psql inside the local database container)
 
@@ -124,6 +163,7 @@ export async function query(sql, { url } = {}) {
 export async function ensureDatabase() {
   const { code } = await run('docker', [...PSQL, '-c', 'select 1'], { capture: true, allowFail: true });
   if (code !== 0) throw new OfflineError('Database lokal belum berjalan. Jalankan "npm run offline" (atau "npm run db:start") terlebih dahulu.');
+  await ensurePortsPrivate();
 }
 
 // ---------------------------------------------------------------------------

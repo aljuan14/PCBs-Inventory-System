@@ -36,8 +36,14 @@ Internet tetap dibutuhkan untuk: sinkronisasi data, build pertama (font), dan pe
 
 ### Linux
 
-Pasang `git`, Node.js LTS, dan Docker Engine, pastikan user ada di grup `docker`,
-lalu jalankan perintah yang sama seperti di atas.
+Pasang `git`, Node.js LTS, dan Docker Engine, lalu:
+
+```bash
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER      # lalu logout/login
+```
+
+Setelah itu jalankan perintah yang sama seperti di atas.
 
 ## Pemakaian sehari-hari
 
@@ -89,9 +95,13 @@ Pendaftaran dari halaman login dimatikan, dan reset password lewat email tidak t
 
 ## Catatan keamanan
 
-- Supabase lokal memakai kunci dan password bawaan CLI (sama di semua instalasi).
-  Port-nya (54321, 54322) **tidak boleh bisa diakses dari jaringan lain**.
-  Jangan matikan firewall Windows, dan jangan izinkan Docker di jaringan *Public*.
+- Supabase lokal memakai kunci dan password bawaan CLI (sama di semua instalasi),
+  jadi port-nya (54321 API, 54322 database, 54323 Studio) **hanya dibuka untuk laptop
+  itu sendiri**: script membuat jaringan Docker Supabase dengan alamat `127.0.0.1`
+  sebelum Supabase dinyalakan, lalu memeriksa ulang dan mematikan Supabase kalau
+  ternyata ada port yang terbuka ke jaringan. Jalankan Supabase lewat `npm run offline`
+  atau `npm run db:start`, jangan `npx supabase start` langsung.
+- Supabase Studio (http://127.0.0.1:54323) bisa dipakai untuk melihat isi database.
 - File `.env.local` ditulis otomatis. Kalau sebelumnya berisi konfigurasi Supabase Cloud,
   salinannya disimpan sebagai `.env.cloud`.
 - Repo data berisi seluruh data inventaris dan hash password akun: jaga agar tetap **private**.
