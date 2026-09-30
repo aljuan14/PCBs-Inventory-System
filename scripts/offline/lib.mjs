@@ -331,7 +331,12 @@ export async function fingerprint() {
   return Object.fromEntries(rows.map(([table, count, hash]) => [table, `${count}:${hash}`]));
 }
 
-export const sameFingerprint = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Compare per table: the union's row order, and so the key order, is not guaranteed. */
+export function sameFingerprint(a, b) {
+  if (!a || !b) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
 
 // ---------------------------------------------------------------------------
 // Local sync state
