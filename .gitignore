@@ -53,3 +53,6 @@ next-env.d.ts
 # offline mode: clone of the private data repo and this laptop's sync state
 /offline-data/
 /.offline-state.json
+
+# reports with company data (this repo is public)
+/laporan-*.pdf
