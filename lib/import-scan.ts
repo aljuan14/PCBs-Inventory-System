@@ -39,7 +39,7 @@ export async function scanWorkbookWithProgress(workbook: WorkBook, onSheet: (don
 
 function scanSheet(workbook: WorkBook, sheetName: string): ScannedSheet {
   const parsed = parseSheet(workbook, sheetName);
-  const initial = detectSheet(sheetName, parsed.headers, parsed.totalRows, workbook.SheetNames.length);
+  const initial = detectSheet(sheetName, parsed.headers, parsed.totalRows, workbook.SheetNames);
   let dataRows = parsed.allRows;
   if (initial.category) {
     const mapping = buildSuggestedMapping(initial.profile, initial.category, parsed.headers, parsed.allRows.slice(0, SAMPLE_ROWS));
@@ -47,7 +47,7 @@ function scanSheet(workbook: WorkBook, sheetName: string): ScannedSheet {
     dataRows = parsed.allRows.filter((_, index) => records[index]);
   }
   // Re-run with the real row count so sheets of empty form rows are skipped.
-  const detection = detectSheet(sheetName, parsed.headers, dataRows.length, workbook.SheetNames.length);
+  const detection = detectSheet(sheetName, parsed.headers, dataRows.length, workbook.SheetNames);
   const sheet: UploadSheet = {
     sheetName,
     headerRowIndex: parsed.headerRowIndex,

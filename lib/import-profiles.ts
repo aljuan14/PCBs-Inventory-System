@@ -209,13 +209,17 @@ function guessCategoryFromName(sheetName: string): InventoryCategory | null {
   return null;
 }
 
+const copySuffix = /\s*\(\d+\)\s*$/;
+
 /**
  * Decide the profile, target category and default inclusion of one sheet.
- * `dataRows` is the number of rows that carry real inventory data.
+ * `dataRows` is the number of rows that carry real inventory data;
+ * `sheetNames` lists every sheet of the workbook.
  */
-export function detectSheet(sheetName: string, headers: string[], dataRows: number, sheetCount: number): SheetDetection {
+export function detectSheet(sheetName: string, headers: string[], dataRows: number, sheetNames: string[]): SheetDetection {
   const normalized = headers.map(normalizeHeader);
   const name = sheetName.trim();
+  const sheetCount = sheetNames.length;
 
   if (headers.length === 0 || dataRows === 0) return { profile: null, category: null, include: false, reason: 'Sheet kosong atau tidak berisi data inventaris.' };
   if (/^database$/i.test(name)) return { profile: null, category: null, include: false, reason: 'Daftar pilihan (dropdown), bukan data.' };
@@ -231,9 +235,15 @@ export function detectSheet(sheetName: string, headers: string[], dataRows: numb
     else if (/online/i.test(name)) category = 'transformator_digunakan';
     else if (hasHeader(normalized, 'kosongterisi')) category = 'transformator_tidak_digunakan';
     else if (hasHeader(normalized, 'rencanapenggunaan')) category = 'transformator_digunakan';
-  } else if (hasHeader(normalized, 'titikkoordinat') && (hasHeader(normalized, 'namamerek') || hasHeader(normalized, 'merekminyakdielektrik'))) {
+  } else if (
+    // Some companies drop the coordinate column; the location column still marks the template.
+    (hasHeader(normalized, 'titikkoordinat') || hasHeader(normalized, 'lokasiperalatan') || hasHeader(normalized, 'lokasipenyimpanan'))
+    && (hasHeader(normalized, 'namamerek') || hasHeader(normalized, 'merekminyakdielektrik'))
+  ) {
     profile = 'template_klhk';
-    if (hasHeader(normalized, 'namamerekkapasitor')) category = 'kapasitor';
+    // A dielectric-oil status column wins over a mislabelled "NAMA/MEREK KAPASITOR" column.
+    if (hasHeader(normalized, 'statusminyak')) category = 'minyak_dielektrik';
+    else if (hasHeader(normalized, 'namamerekkapasitor')) category = 'kapasitor';
     else if (hasHeader(normalized, 'namamerektransformator')) {
       const unused = hasHeader(normalized, 'terakhirdigunakan') || hasHeader(normalized, 'kondisididalam') || /tidak/i.test(name);
       category = unused ? 'transformator_tidak_digunakan' : 'transformator_digunakan';
@@ -241,7 +251,14 @@ export function detectSheet(sheetName: string, headers: string[], dataRows: numb
   }
 
   if (/reaktor/i.test(name)) return { profile, category: null, include: false, reason: 'Reaktor bukan kategori inventaris; pilih kategori jika ingin tetap diimpor.' };
-  if (/rekap|pivot|data per|hanya|copy of|\(\d+\)\s*$|^sheet\s*\d*$/i.test(name)) {
+  // "(2)" marks a copy only when the workbook also has the sheet it copies;
+  // Toray numbers its four different tables "(1)" to "(4)". A default name
+  // such as "Sheet1" says nothing: many companies fill in the template there.
+  const base = name.replace(copySuffix, '').toLowerCase();
+  // Excel cuts sheet names at 31 characters, so "INVENTARISASI PENGELOLAAN P (2)"
+  // copies "INVENTARISASI PENGELOLAAN PCBs": compare by prefix.
+  const isCopy = copySuffix.test(name) && sheetNames.some((other) => other.trim() !== name && other.trim().replace(copySuffix, '').toLowerCase().startsWith(base));
+  if (/rekap|pivot|data per|hanya|copy of/i.test(name) || isCopy) {
     return { profile, category: category ?? guessCategoryFromName(name), include: false, reason: 'Nama sheet menandakan rekap, salinan, atau duplikat. Periksa sebelum disertakan.' };
   }
 
@@ -255,7 +272,11 @@ export function detectSheet(sheetName: string, headers: string[], dataRows: numb
       reason: single ? 'Format tidak dikenali. Kolom akan dicocokkan dengan kata kunci; periksa pemetaan.' : 'Format tidak dikenali (kemungkinan ringkasan atau data mentah).',
     };
   }
-  if (!category) return { profile, category: null, include: true, reason: 'Kategori tidak dapat ditentukan otomatis. Pilih kategori.' };
+  if (!category) {
+    const guessed = guessCategoryFromName(name);
+    if (guessed) return { profile, category: guessed, include: true, reason: 'Kategori ditebak dari nama sheet; periksa sebelum mengimpor.' };
+    return { profile, category: null, include: true, reason: 'Kategori tidak dapat ditentukan otomatis. Pilih kategori.' };
+  }
   return { profile, category, include: true, reason: '' };
 }
 
