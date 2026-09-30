@@ -49,3 +49,7 @@ next-env.d.ts
 
 # LibreOffice / OnlyOffice lock files
 .~lock.*#
+
+# offline mode: clone of the private data repo and this laptop's sync state
+/offline-data/
+/.offline-state.json
