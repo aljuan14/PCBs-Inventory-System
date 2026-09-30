@@ -16,6 +16,8 @@ import { pull } from './data-pull.mjs';
 import { OfflineError, ROOT, ensureDocker, log, main, run, startSupabase, step, supabase, writeLocalEnv } from './lib.mjs';
 
 const APP_URL = 'http://localhost:3000';
+// Only this laptop: the browser talks to Supabase on 127.0.0.1, so other devices could not use it anyway.
+const HOST = '127.0.0.1';
 const BUILD_STAMP = path.join(ROOT, '.next', 'offline-build.txt');
 const nextBin = path.join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
 
@@ -77,7 +79,7 @@ async function buildIfNeeded() {
 async function openBrowserWhenReady() {
   for (let i = 0; i < 120; i++) {
     try {
-      await fetch(APP_URL, { redirect: 'manual' });
+      await fetch(`http://${HOST}:3000`, { redirect: 'manual' });
       const [command, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', APP_URL]]
         : process.platform === 'darwin' ? ['open', [APP_URL]] : ['xdg-open', [APP_URL]];
       run(command, args, { capture: true, allowFail: true }).catch(() => {});
@@ -99,5 +101,5 @@ main(async () => {
 
   step(`Aplikasi berjalan di ${APP_URL}  (tutup jendela ini atau tekan Ctrl+C untuk berhenti)`);
   openBrowserWhenReady();
-  await run(process.execPath, [nextBin, dev ? 'dev' : 'start', '-p', '3000']);
+  await run(process.execPath, [nextBin, dev ? 'dev' : 'start', '-p', '3000', '-H', HOST]);
 });
