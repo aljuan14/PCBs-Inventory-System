@@ -119,30 +119,53 @@ export function parseSheet(workbook: XLSX.WorkBook, sheetName: string): SheetPar
   const colCount = Math.max(...rawRows.slice(Math.max(0, anchor - MAX_GROUP_ROWS), bandEnd + 1).map((row) => row.length));
   const merges = worksheet['!merges'] ?? [];
 
+  // Per-row lookups for the header band, built once. Some workbooks repeat a
+  // header block across all 16k columns with tens of thousands of merges, so
+  // anything scanning merges or columns per cell would take minutes.
+  const bandStart = Math.max(0, anchor - MAX_GROUP_ROWS);
+  const bandRows = new Map<number, { texts: string[]; labelCount: number; mergeAt: (XLSX.Range | undefined)[]; filledLeft: Int32Array }>();
+  for (let r = bandStart; r <= bandEnd; r++) {
+    const texts = rawRows[r].map(text);
+    const mergeAt: (XLSX.Range | undefined)[] = [];
+    // Nearest non-empty column at or left of each column (-1 when none).
+    const filledLeft = new Int32Array(Math.max(colCount, texts.length));
+    let last = -1;
+    for (let c = 0; c < filledLeft.length; c++) {
+      if ((texts[c] ?? '') !== '') last = c;
+      filledLeft[c] = last;
+    }
+    bandRows.set(r, { texts, labelCount: texts.filter(isLabel).length, mergeAt, filledLeft });
+  }
+  for (const range of merges) {
+    for (let r = Math.max(range.s.r, bandStart); r <= Math.min(range.e.r, bandEnd); r++) {
+      const { mergeAt } = bandRows.get(r)!;
+      for (let c = range.s.c; c <= Math.min(range.e.c, colCount - 1); c++) mergeAt[c] ??= range;
+    }
+  }
+
   // Group label for a column: nearest label above `belowRow` in the band,
   // taken from a merged range or forward-filled from the left. Title rows
   // (a single label, or merges spanning most of the sheet) are ignored.
   const groupFor = (column: number, belowRow: number, forwardFill = true) => {
-    for (let r = belowRow - 1; r >= Math.max(0, anchor - MAX_GROUP_ROWS); r--) {
-      const row = rawRows[r].map(text);
-      if (row.filter(isLabel).length < 2) continue;
-      const merge = merges.find((range) => range.s.r <= r && range.e.r >= r && range.s.c <= column && range.e.c >= column);
+    for (let r = belowRow - 1; r >= bandStart; r--) {
+      const { texts, labelCount, mergeAt, filledLeft } = bandRows.get(r)!;
+      if (labelCount < 2) continue;
+      const merge = mergeAt[column];
       if (merge) {
         const value = text(rawRows[merge.s.r]?.[merge.s.c]);
         if (isLabel(value) && merge.e.c - merge.s.c + 1 <= colCount * 0.6) return value;
         continue;
       }
       if (!forwardFill) continue;
-      for (let c = column; c >= 0; c--) {
-        if (row[c] === '') continue;
-        if (isLabel(row[c])) return row[c];
-        break;
-      }
+      const c = filledLeft[column] ?? -1;
+      if (c >= 0 && isLabel(texts[c])) return texts[c];
     }
     return '';
   };
 
   const headers: string[] = [];
+  const usedHeaders = new Set<string>();
+  const nextSuffix = new Map<string, number>();
   for (let column = 0; column < colCount; column++) {
     let label = isLabel(anchorRow[column] ?? '') ? anchorRow[column] : '';
     let group = '';
@@ -158,12 +181,14 @@ export function parseSheet(workbook: XLSX.WorkBook, sheetName: string): SheetPar
       if (!label) group = groupFor(column, anchor, false);
     }
     let header = group && label && group.toLowerCase() !== label.toLowerCase() ? `${group} - ${label}` : label || group || `Kolom_${column + 1}`;
-    if (headers.includes(header)) {
-      let counter = 2;
-      while (headers.includes(`${header} (${counter})`)) counter++;
+    if (usedHeaders.has(header)) {
+      let counter = nextSuffix.get(header) ?? 2;
+      while (usedHeaders.has(`${header} (${counter})`)) counter++;
+      nextSuffix.set(header, counter + 1);
       header = `${header} (${counter})`;
     }
     headers.push(header);
+    usedHeaders.add(header);
   }
 
   const headerTexts = new Set(anchorRow.filter(isLabel).map((value) => value.toLowerCase()));
