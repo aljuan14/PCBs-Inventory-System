@@ -97,10 +97,13 @@ export function supabase(args, options) {
 export const git = (args, options) => run('git', args, { cwd: DATA_REPO_DIR, ...options });
 
 export async function ensureDocker() {
-  const { code } = await run('docker', ['info'], { capture: true, allowFail: true }).catch((error) => {
+  const { code, stderr } = await run('docker', ['info'], { capture: true, allowFail: true }).catch((error) => {
     if (error instanceof OfflineError) throw new OfflineError('Docker belum terpasang. Pasang Docker Desktop (Windows) atau Docker Engine (Linux) terlebih dahulu.');
     throw error;
   });
+  if (code !== 0 && /permission denied/i.test(stderr)) {
+    throw new OfflineError('User ini belum punya akses ke Docker. Jalankan  sudo usermod -aG docker $USER  lalu logout dan login lagi (atau restart laptop).');
+  }
   if (code !== 0) throw new OfflineError('Docker belum berjalan. Buka Docker Desktop, tunggu sampai statusnya "running", lalu ulangi.');
 }
 
