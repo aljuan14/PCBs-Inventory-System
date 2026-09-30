@@ -13,11 +13,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pull } from './data-pull.mjs';
-import { OfflineError, ROOT, ensureDocker, log, main, run, startSupabase, step, supabase } from './lib.mjs';
+import { OfflineError, ROOT, ensureDocker, log, main, run, startSupabase, step, supabase, writeLocalEnv } from './lib.mjs';
 
 const APP_URL = 'http://localhost:3000';
-const ENV_FILE = path.join(ROOT, '.env.local');
-const CLOUD_ENV_BACKUP = path.join(ROOT, '.env.cloud');
 const BUILD_STAMP = path.join(ROOT, '.next', 'offline-build.txt');
 const nextBin = path.join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
 
@@ -26,6 +24,11 @@ async function updateCode() {
   const { stdout: dirty } = await run('git', ['status', '--porcelain', '--untracked-files=no'], { capture: true });
   if (dirty.trim()) {
     log('Ada perubahan kode lokal, pembaruan otomatis dilewati.');
+    return;
+  }
+  const upstream = await run('git', ['rev-parse', '--abbrev-ref', '@{u}'], { capture: true, allowFail: true });
+  if (upstream.code !== 0) {
+    log('Branch ini tidak terhubung ke GitHub, pembaruan otomatis dilewati.');
     return;
   }
   const { stdout: before } = await run('git', ['rev-parse', 'HEAD'], { capture: true });
@@ -45,36 +48,6 @@ async function startDatabase() {
   step('Menyalakan database lokal (Docker)');
   await startSupabase();
   await supabase(['migration', 'up', '--local']);
-}
-
-/** Read keys from "supabase status" and write them to .env.local, keeping a copy of a cloud config. */
-async function writeEnv() {
-  const { stdout } = await supabase(['status', '-o', 'env'], { capture: true });
-  const status = Object.fromEntries(
-    stdout.split('\n').map((line) => line.match(/^([A-Z_]+)="?(.*?)"?$/)).filter(Boolean).map((match) => [match[1], match[2]]),
-  );
-  const url = status.API_URL;
-  const anonKey = status.ANON_KEY;
-  const serviceKey = status.SERVICE_ROLE_KEY;
-  if (!url || !anonKey || !serviceKey) throw new OfflineError('Tidak bisa membaca kunci Supabase lokal dari "supabase status".');
-
-  const current = fs.existsSync(ENV_FILE) ? fs.readFileSync(ENV_FILE, 'utf8') : '';
-  if (current.includes(`NEXT_PUBLIC_SUPABASE_URL=${url}`) && current.includes(anonKey)) return;
-
-  if (current && !current.includes('127.0.0.1') && !current.includes('localhost') && !fs.existsSync(CLOUD_ENV_BACKUP)) {
-    fs.copyFileSync(ENV_FILE, CLOUD_ENV_BACKUP);
-    log('.env.local lama (Supabase Cloud) disimpan sebagai .env.cloud');
-  }
-  fs.writeFileSync(ENV_FILE, [
-    '# Ditulis otomatis oleh "npm run offline": Supabase lokal di Docker.',
-    `NEXT_PUBLIC_SUPABASE_URL=${url}`,
-    `NEXT_PUBLIC_SUPABASE_ANON_KEY=${anonKey}`,
-    `SUPABASE_URL=${url}`,
-    `SUPABASE_ANON_KEY=${anonKey}`,
-    `SUPABASE_SERVICE_ROLE_KEY=${serviceKey}`,
-    '',
-  ].join('\n'));
-  log('.env.local diarahkan ke Supabase lokal.');
 }
 
 async function pullData() {
@@ -120,7 +93,7 @@ main(async () => {
   await ensureDocker();
   await updateCode();
   await startDatabase();
-  await writeEnv();
+  await writeLocalEnv();
   await pullData();
   if (!dev) await buildIfNeeded();
 

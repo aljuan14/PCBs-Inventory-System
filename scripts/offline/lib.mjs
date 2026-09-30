@@ -141,6 +141,39 @@ export async function startSupabase() {
   await ensurePortsPrivate();
 }
 
+const ENV_FILE = path.join(ROOT, '.env.local');
+const CLOUD_ENV_BACKUP = path.join(ROOT, '.env.cloud');
+
+/** Read keys from "supabase status" and write them to .env.local, keeping a copy of a cloud config. */
+export async function writeLocalEnv() {
+  const { stdout } = await supabase(['status', '-o', 'env'], { capture: true });
+  const status = Object.fromEntries(
+    stdout.split('\n').map((line) => line.match(/^([A-Z_]+)="?(.*?)"?$/)).filter(Boolean).map((match) => [match[1], match[2]]),
+  );
+  const url = status.API_URL;
+  const anonKey = status.ANON_KEY;
+  const serviceKey = status.SERVICE_ROLE_KEY;
+  if (!url || !anonKey || !serviceKey) throw new OfflineError('Tidak bisa membaca kunci Supabase lokal dari "supabase status".');
+
+  const current = fs.existsSync(ENV_FILE) ? fs.readFileSync(ENV_FILE, 'utf8') : '';
+  if (current.includes(`NEXT_PUBLIC_SUPABASE_URL=${url}`) && current.includes(anonKey)) return;
+
+  if (current && !current.includes('127.0.0.1') && !current.includes('localhost') && !fs.existsSync(CLOUD_ENV_BACKUP)) {
+    fs.copyFileSync(ENV_FILE, CLOUD_ENV_BACKUP);
+    log('.env.local lama (Supabase Cloud) disimpan sebagai .env.cloud');
+  }
+  fs.writeFileSync(ENV_FILE, [
+    '# Ditulis otomatis oleh "npm run offline": Supabase lokal di Docker.',
+    `NEXT_PUBLIC_SUPABASE_URL=${url}`,
+    `NEXT_PUBLIC_SUPABASE_ANON_KEY=${anonKey}`,
+    `SUPABASE_URL=${url}`,
+    `SUPABASE_ANON_KEY=${anonKey}`,
+    `SUPABASE_SERVICE_ROLE_KEY=${serviceKey}`,
+    '',
+  ].join('\n'));
+  log('.env.local diarahkan ke Supabase lokal.');
+}
+
 // ---------------------------------------------------------------------------
 // Database access (psql inside the local database container)
 
