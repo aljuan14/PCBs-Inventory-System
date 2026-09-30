@@ -16,8 +16,7 @@
  * company is skipped, and rows already in the database or repeated in the file
  * are skipped as duplicates.
  * Needs migrations up to 20260929000003. Uses SUPABASE_SERVICE_ROLE_KEY from
- * .env.local when present (required once row level security is tightened),
- * otherwise the anon key.
+ * .env.local (the anon key cannot write since login became required).
  */
 import fs from 'fs';
 import path from 'path';
@@ -74,8 +73,9 @@ if (files.length === 0) fail('Tidak ada berkas Excel yang cocok.');
 
 loadEnvConfig(process.cwd());
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-if (!supabaseUrl || !supabaseKey) fail('Variabel Supabase tidak ditemukan di .env.local.');
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl) fail('Variabel Supabase tidak ditemukan di .env.local.');
+if (!supabaseKey) fail('SUPABASE_SERVICE_ROLE_KEY tidak ditemukan di .env.local (anon key tidak bisa menulis sejak login diwajibkan).');
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
 async function checkSchema() {

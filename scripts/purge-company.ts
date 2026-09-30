@@ -9,7 +9,7 @@
  *
  * Dry run by default: only counts what would be removed. Add --commit to
  * delete. Safe to re-run if it stops halfway. Uses SUPABASE_SERVICE_ROLE_KEY
- * from .env.local when present, otherwise the anon key.
+ * from .env.local.
  */
 import { loadEnvConfig } from '@next/env';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -41,8 +41,9 @@ function fail(message: string): never {
 
 loadEnvConfig(process.cwd());
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-if (!supabaseUrl || !supabaseKey) fail('Variabel Supabase tidak ditemukan di .env.local.');
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl) fail('Variabel Supabase tidak ditemukan di .env.local.');
+if (!supabaseKey) fail('SUPABASE_SERVICE_ROLE_KEY tidak ditemukan di .env.local (anon key tidak bisa menulis sejak login diwajibkan).');
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
 const fmt = (n: number) => n.toLocaleString('id-ID');

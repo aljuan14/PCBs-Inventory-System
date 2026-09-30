@@ -10,7 +10,7 @@
  *   npx tsx scripts/backfill-weights.ts --only Jabar   # batches whose file name contains the text
  *   npx tsx scripts/backfill-weights.ts --commit       # write
  *
- * Uses SUPABASE_SERVICE_ROLE_KEY from .env.local when present, otherwise the anon key.
+ * Uses SUPABASE_SERVICE_ROLE_KEY from .env.local.
  */
 import { loadEnvConfig } from '@next/env';
 import { createClient } from '@supabase/supabase-js';
@@ -31,8 +31,9 @@ function fail(message: string): never {
 
 loadEnvConfig(process.cwd());
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-if (!supabaseUrl || !supabaseKey) fail('Variabel Supabase tidak ditemukan di .env.local.');
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl) fail('Variabel Supabase tidak ditemukan di .env.local.');
+if (!supabaseKey) fail('SUPABASE_SERVICE_ROLE_KEY tidak ditemukan di .env.local (anon key tidak bisa menulis sejak login diwajibkan).');
 const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
 const CHUNK = 2000;

@@ -1,9 +1,11 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Building2, Droplets, Grid2X2, History, Layers3, ShieldCheck, UploadCloud, Zap, ZapOff } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Building2, Droplets, Grid2X2, History, Layers3, LogOut, ShieldCheck, UploadCloud, Zap, ZapOff } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
+import { createClient } from '@/lib/supabase/client';
 
 const categoryIcons = {
   transformator_digunakan: Zap,
@@ -14,7 +16,25 @@ const categoryIcons = {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const [email, setEmail] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    if (pathname === '/login') return;
+    createClient().auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null));
+  }, [pathname]);
+
+  if (pathname === '/login') return null;
+
+  async function signOut() {
+    setSigningOut(true);
+    await createClient().auth.signOut();
+    setSigningOut(false);
+    router.replace('/login');
+    router.refresh();
+  }
 
   return (
     <aside className="sticky top-0 z-40 flex h-screen w-64 print:hidden shrink-0 flex-col border-r border-slate-200 bg-[#fbfcfa] px-4 py-5">
@@ -35,7 +55,13 @@ export default function Navbar() {
         <Link href="/upload/riwayat" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><History className="h-4 w-4" /> Riwayat upload</Link>
         <Link href="/companies" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/companies') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Building2 className="h-4 w-4" /> Perusahaan</Link>
       </nav>
-      <div className="mt-auto border-t border-slate-200 pt-4"><div className="flex items-center gap-2 px-2 text-xs text-slate-500"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">AD</span>Direktorat B3</div></div>
+      <div className="mt-auto border-t border-slate-200 pt-4">
+        <div className="flex items-center gap-2 px-2 text-xs text-slate-500">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">{email ? email[0].toUpperCase() : 'AD'}</span>
+          <span className="min-w-0 truncate" title={email ?? undefined}>{email ?? 'Direktorat B3'}</span>
+        </div>
+        <button type="button" onClick={signOut} disabled={signingOut} className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"><LogOut className="h-4 w-4" /> {signingOut ? 'Keluar...' : 'Keluar'}</button>
+      </div>
     </aside>
   );
 }
