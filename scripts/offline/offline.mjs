@@ -7,15 +7,19 @@
  *  3. point .env.local at the local Supabase
  *  4. pull the latest data from the data repo
  *  5. build (when the code changed) and start the app on http://localhost:3000
+ *  6. after Ctrl+C: send data changes made on this laptop (data:push)
  *
  * --dev runs "next dev" instead of a production build, for development.
+ * --no-browser skips opening the browser. PORT changes the port (default 3000).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { pull } from './data-pull.mjs';
+import { push } from './data-push.mjs';
 import { OfflineError, ROOT, ensureDocker, log, main, run, startSupabase, step, supabase, writeLocalEnv } from './lib.mjs';
 
-const APP_URL = 'http://localhost:3000';
+const PORT = process.env.PORT || '3000';
+const APP_URL = `http://localhost:${PORT}`;
 // Only this laptop: the browser talks to Supabase on 127.0.0.1, so other devices could not use it anyway.
 const HOST = '127.0.0.1';
 const BUILD_STAMP = path.join(ROOT, '.next', 'offline-build.txt');
@@ -79,7 +83,7 @@ async function buildIfNeeded() {
 async function openBrowserWhenReady() {
   for (let i = 0; i < 120; i++) {
     try {
-      await fetch(`http://${HOST}:3000`, { redirect: 'manual' });
+      await fetch(`http://${HOST}:${PORT}`, { redirect: 'manual' });
       const [command, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', APP_URL]]
         : process.platform === 'darwin' ? ['open', [APP_URL]] : ['xdg-open', [APP_URL]];
       run(command, args, { capture: true, allowFail: true }).catch(() => {});
@@ -99,7 +103,31 @@ main(async () => {
   await pullData();
   if (!dev) await buildIfNeeded();
 
-  step(`Aplikasi berjalan di ${APP_URL}  (tutup jendela ini atau tekan Ctrl+C untuk berhenti)`);
-  openBrowserWhenReady();
-  await run(process.execPath, [nextBin, dev ? 'dev' : 'start', '-p', '3000', '-H', HOST]);
+  step(`Aplikasi berjalan di ${APP_URL}`);
+  log('Untuk berhenti tekan Ctrl+C: perubahan data akan dikirim otomatis sebelum aplikasi ditutup.');
+  log('(Menutup jendela terminal langsung TIDAK mengirim data.)');
+  if (!process.argv.includes('--no-browser')) openBrowserWhenReady();
+
+  // Ctrl+C reaches Next.js too; keep this process alive until it exits, then push.
+  // npm forwards the same Ctrl+C a second time, so only a press more than two
+  // seconds after the first one counts as "skip the push".
+  let firstStop = 0;
+  process.on('SIGINT', () => {
+    const now = Date.now();
+    if (!firstStop) firstStop = now;
+    else if (now - firstStop > 2000) {
+      log('\nDihentikan tanpa mengirim data.');
+      process.exit(130);
+    }
+  });
+  await run(process.execPath, [nextBin, dev ? 'dev' : 'start', '-p', PORT, '-H', HOST], { allowFail: true });
+
+  step('Aplikasi ditutup. Mengirim perubahan data (Ctrl+C lagi untuk melewati)');
+  try {
+    await push();
+  } catch (error) {
+    if (!(error instanceof OfflineError)) throw error;
+    log(`\nData belum terkirim: ${error.message}\nKirim nanti dengan "npm run data:push".`);
+    process.exitCode = 1;
+  }
 });

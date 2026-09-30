@@ -53,16 +53,24 @@ Setelah itu jalankan perintah yang sama seperti di atas.
    - menyalakan database lokal,
    - **mengambil data terbaru**,
    - membuka http://localhost:3000 di browser.
-3. Selesai: tutup jendela terminal (atau Ctrl+C). Database tetap tersimpan;
-   `npm run db:stop` untuk mematikan container Docker-nya.
+3. Selesai: tekan **Ctrl+C** di terminal. Kalau ada perubahan data di laptop ini,
+   datanya **otomatis dikirim** ke repo sebelum aplikasi tertutup (tunggu sampai
+   muncul prompt lagi). Tekan Ctrl+C sekali lagi kalau ingin melewati pengiriman.
+   Menutup jendela terminal langsung **tidak** mengirim data.
+   Database tetap tersimpan; `npm run db:stop` untuk mematikan container Docker-nya.
 
 ## Khusus admin: membagikan perubahan data
 
-Setelah impor, hapus perusahaan, atau perubahan data lainnya:
+Perubahan data (impor, hapus perusahaan, dll.) dikirim otomatis saat aplikasi
+ditutup dengan Ctrl+C. Untuk mengirim lebih cepat tanpa menutup aplikasi, jalankan
+di terminal lain:
 
 ```bash
 npm run data:push
 ```
+
+Kalau pengiriman otomatis gagal (misalnya tidak ada internet), pesannya muncul di
+terminal; jalankan `npm run data:push` lagi nanti.
 
 Aturan agar data tidak saling menimpa:
 
@@ -89,6 +97,7 @@ Pendaftaran dari halaman login dimatikan, dan reset password lewat email tidak t
 | Perintah | Fungsi |
 |---|---|
 | `npm run offline -- --dev` | seperti `offline`, tetapi pakai `next dev` (untuk pengembangan) |
+| `npm run data:push` | kirim perubahan data sekarang |
 | `npm run data:pull` | ambil data terbaru saja |
 | `npm run db:start` / `npm run db:stop` | nyalakan / matikan Supabase lokal |
 | `npm run data:from-cloud -- "<connection string>"` | salin data dari Supabase Cloud (sekali, saat pindah) |

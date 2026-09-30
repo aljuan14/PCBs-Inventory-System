@@ -8,12 +8,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   DATA_BRANCH, DATA_REPO_DIR, OfflineError, ensureDataRepo, ensureDatabase, ensureDocker, exportData, fetchRemoteHead, fingerprint,
   git, log, main, readState, sameFingerprint, step, writeState,
 } from './lib.mjs';
 
-main(async () => {
+export async function push() {
   await ensureDocker();
   await ensureDatabase();
   await ensureDataRepo();
@@ -63,4 +64,8 @@ main(async () => {
   const { stdout } = await git(['rev-parse', 'HEAD'], { capture: true });
   writeState({ commit: stdout.trim(), fingerprint: current });
   log('Selesai: data terkirim. Laptop lain akan mendapatkannya saat aplikasi dijalankan.');
-});
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main(push);
+}
