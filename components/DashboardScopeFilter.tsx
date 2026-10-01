@@ -5,6 +5,8 @@ import { Building2, RotateCw, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ALL_SCOPE, fetchCompanyUnits, type DashboardScope, type UnitSummary } from '@/lib/inventory-query';
 import type { CompanyOption } from '@/components/DataTable';
+import CompanyPicker from '@/components/CompanyPicker';
+import type { CompanyStatus } from '@/lib/company-status';
 
 const SELECT_CLASS = 'min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none';
 
@@ -12,7 +14,7 @@ const SELECT_CLASS = 'min-w-0 rounded-xl border border-slate-200 bg-white px-3 p
  * Company › unit › sub-unit filter for a whole dashboard (PLN: Unit Induk ›
  * Unit Pelaksana). Units are listed once a company is chosen.
  */
-export default function DashboardScopeFilter({ companies, scope, onChange, reloadKey = 0 }: { companies: CompanyOption[]; scope: DashboardScope; onChange: (scope: DashboardScope) => void; reloadKey?: number }) {
+export default function DashboardScopeFilter({ companies, scope, onChange, reloadKey = 0, statuses = null }: { companies: CompanyOption[]; scope: DashboardScope; onChange: (scope: DashboardScope) => void; reloadKey?: number; statuses?: Map<string, CompanyStatus> | null }) {
   const supabase = useMemo(() => createClient(), []);
   const [units, setUnits] = useState<{ companyId: string; rows: UnitSummary[]; failed?: boolean } | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -40,10 +42,7 @@ export default function DashboardScopeFilter({ companies, scope, onChange, reloa
 
   return <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-4 py-3">
     <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-slate-500"><Building2 className="h-3.5 w-3.5" /><span>Tampilkan data:</span></div>
-    <select aria-label="Perusahaan" value={scope.companyId ?? 'all'} onChange={(e) => onChange({ companyId: e.target.value === 'all' ? null : e.target.value, unit: null, subUnit: null })} className={SELECT_CLASS}>
-      <option value="all">Semua perusahaan ({companies.length.toLocaleString('id-ID')})</option>
-      {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-    </select>
+    <CompanyPicker companies={companies} value={scope.companyId} statuses={statuses} onChange={(companyId) => onChange({ companyId, unit: null, subUnit: null })} />
     {unitOptions.length > 0 && (
       <select aria-label="Unit" value={scope.unit ?? 'all'} onChange={(e) => onChange({ ...scope, unit: e.target.value === 'all' ? null : e.target.value, subUnit: null })} className={SELECT_CLASS}>
         <option value="all">Semua unit ({unitOptions.length})</option>
