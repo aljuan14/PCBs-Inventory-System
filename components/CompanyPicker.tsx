@@ -8,14 +8,22 @@ import type { CompanyOption } from '@/components/DataTable';
 const ALL = '__all__';
 
 /**
- * Company dropdown with search and a coloured dot per company showing whether
- * its check results were sent (a native <select> cannot be coloured reliably).
+ * Company dropdown with search and, when `statuses` is given, a coloured dot
+ * per company showing whether its check results were sent (a native <select>
+ * cannot be coloured reliably). Companies are listed in the order given.
+ * `allLabel: null` drops the "all companies" option (a company must be picked);
+ * `describe` replaces the status text shown on the right of each company.
  */
-export default function CompanyPicker({ companies, value, onChange, statuses }: {
+export default function CompanyPicker({ companies, value, onChange, statuses = null, allLabel, describe, placeholder = 'Pilih perusahaan', className = 'w-72', disabled = false }: {
   companies: CompanyOption[];
   value: string | null;
   onChange: (companyId: string | null) => void;
-  statuses: Map<string, CompanyStatus> | null;
+  statuses?: Map<string, CompanyStatus> | null;
+  allLabel?: string | null;
+  describe?: (companyId: string) => string | null;
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -32,6 +40,8 @@ export default function CompanyPicker({ companies, value, onChange, statuses }: 
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
+  const allText = allLabel === undefined ? `Semua perusahaan (${companies.length.toLocaleString('id-ID')})` : allLabel;
+
   const counts = useMemo(() => {
     const result: Record<FeedbackStatus, number> = { pending: 0, new_data: 0, sent: 0, empty: 0 };
     for (const company of companies) result[statusOf(statuses, company.id)]++;
@@ -41,8 +51,8 @@ export default function CompanyPicker({ companies, value, onChange, statuses }: 
   const options = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const matches = companies.filter((company) => (!needle || company.name.toLowerCase().includes(needle)) && (!statusFilter || statusOf(statuses, company.id) === statusFilter));
-    return [...(!needle && !statusFilter ? [ALL] : []), ...matches.map((company) => company.id)];
-  }, [companies, statuses, query, statusFilter]);
+    return [...(allText !== null && !needle && !statusFilter ? [ALL] : []), ...matches.map((company) => company.id)];
+  }, [companies, statuses, query, statusFilter, allText]);
 
   const names = useMemo(() => new Map(companies.map((company) => [company.id, company.name])), [companies]);
   const selected = value ? names.get(value) : null;
@@ -78,9 +88,9 @@ export default function CompanyPicker({ companies, value, onChange, statuses }: 
 
   return (
     <div ref={rootRef} className="relative min-w-0">
-      <button type="button" onClick={toggle} aria-haspopup="listbox" aria-expanded={open} aria-label="Perusahaan" className="flex w-72 max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none">
+      <button type="button" onClick={toggle} disabled={disabled} aria-haspopup="listbox" aria-expanded={open} aria-label="Perusahaan" className={`flex ${className} max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none disabled:opacity-60`}>
         {value && statuses && <span className={`h-2 w-2 shrink-0 rounded-full ${dot(value)}`} />}
-        <span className="min-w-0 flex-1 truncate">{selected ?? `Semua perusahaan (${companies.length.toLocaleString('id-ID')})`}</span>
+        <span className={`min-w-0 flex-1 truncate ${selected || allText !== null ? '' : 'text-slate-400'}`}>{selected ?? allText ?? placeholder}</span>
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -107,11 +117,12 @@ export default function CompanyPicker({ companies, value, onChange, statuses }: 
               const isAll = id === ALL;
               const status = statuses?.get(id);
               const isSelected = isAll ? value === null : value === id;
+              const note = isAll ? null : describe ? describe(id) : statuses ? (status?.lastSentAt ? `dikirim ${formatDate(status.lastSentAt)}` : FEEDBACK_STATUSES[statusOf(statuses, id)].label) : null;
               return (
                 <li key={id} role="option" aria-selected={isSelected} onMouseEnter={() => setActive(index)} onClick={() => choose(id)} className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-xs ${index === active ? 'bg-slate-50' : ''}`}>
-                  {isAll ? <span className="h-2 w-2 shrink-0" /> : <span className={`h-2 w-2 shrink-0 rounded-full ${statuses ? dot(id) : 'bg-slate-200'}`} />}
-                  <span className={`min-w-0 flex-1 truncate ${isSelected ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>{isAll ? `Semua perusahaan (${companies.length.toLocaleString('id-ID')})` : names.get(id)}</span>
-                  {!isAll && statuses && <span className="shrink-0 text-[10px] text-slate-400">{status?.lastSentAt ? `dikirim ${formatDate(status.lastSentAt)}` : FEEDBACK_STATUSES[statusOf(statuses, id)].label}</span>}
+                  {(isAll || !statuses) ? <span className="h-2 w-2 shrink-0" /> : <span className={`h-2 w-2 shrink-0 rounded-full ${dot(id)}`} />}
+                  <span className={`min-w-0 flex-1 truncate ${isSelected ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>{isAll ? allText : names.get(id)}</span>
+                  {note && <span className="shrink-0 text-[10px] text-slate-400">{note}</span>}
                   {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />}
                 </li>
               );

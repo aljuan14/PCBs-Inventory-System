@@ -1,18 +1,47 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { UploadCloud, FileSpreadsheet, Building2, Layers, CheckCircle, ArrowRight, Loader2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 import { IMPORT_PROFILE_LABELS, type ImportProfile } from '@/lib/import-profiles';
 import { MAX_UPLOAD_BYTES } from '@/lib/upload-store';
+import CompanyPicker from '@/components/CompanyPicker';
 import ProgressPanel from '@/components/ProgressPanel';
 import { applyProgress, postWithProgress, startProgress, uploadWithProgress, type ProgressEvent, type ProgressState } from '@/lib/progress';
 
 interface CompanyOption {
   id: string;
   nama_perusahaan: string;
+  /** Latest upload for the company, or its creation when it has none: the list is sorted on it, newest first. */
+  lastActivity: string;
+  lastUploadAt: string | null;
+}
+
+const newestFirst = (a: CompanyOption, b: CompanyOption) => b.lastActivity.localeCompare(a.lastActivity) || a.nama_perusahaan.localeCompare(b.nama_perusahaan, 'id');
+const formatUploadTime = (value: string) => new Date(value).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+/**
+ * Companies with the one worked on most recently first, so the next file of
+ * the same company needs no selection. Upload times come from upload_sessions.
+ */
+async function loadCompanyOptions(supabase: ReturnType<typeof createClient>): Promise<CompanyOption[]> {
+  const { data: companies, error } = await supabase.from('companies').select('id, nama_perusahaan, created_at');
+  if (error) throw new Error(error.message);
+  const lastUpload = new Map<string, string>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error: uploadError } = await supabase.from('upload_sessions').select('company_id, created_at').order('created_at', { ascending: false }).range(from, from + 999);
+    if (uploadError) throw new Error(uploadError.message);
+    for (const row of data ?? []) if (!lastUpload.has(row.company_id)) lastUpload.set(row.company_id, row.created_at);
+    if (!data || data.length < 1000) break;
+  }
+  return (companies ?? []).map((company) => {
+    const uploadAt = lastUpload.get(company.id) ?? null;
+    const iso = (value: string) => new Date(value).toISOString();
+    const lastActivity = uploadAt && iso(uploadAt) > iso(company.created_at) ? iso(uploadAt) : iso(company.created_at);
+    return { id: company.id, nama_perusahaan: company.nama_perusahaan, lastActivity, lastUploadAt: uploadAt };
+  }).sort(newestFirst);
 }
 
 interface ScannedSheet {
@@ -75,6 +104,7 @@ export default function UploadPage() {
 
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const uploadTimes = useMemo(() => new Map(companies.map((c) => [c.id, c.lastUploadAt])), [companies]);
 
   // Form states
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
@@ -94,32 +124,19 @@ export default function UploadPage() {
   const [selection, setSelection] = useState<Record<string, { include: boolean; category: InventoryCategory | '' }>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Fetch daftar perusahaan dari Supabase
+  // Companies, newest activity first; the most recent one is preselected.
   useEffect(() => {
-    async function loadCompanies() {
-      try {
-        const { data, error } = await supabase
-          .from('companies')
-          .select('id, nama_perusahaan')
-          .order('nama_perusahaan', { ascending: true });
-
-        if (error) {
-          console.warn('Gagal memuat perusahaan (mungkin tabel belum dibuat):', error.message);
-        } else if (data) {
-          setCompanies(data);
-          if (data.length > 0) {
-            setSelectedCompanyId(data[0].id);
-          } else {
-            setIsNewCompany(true);
-          }
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingCompanies(false);
-      }
-    }
-    loadCompanies();
+    let active = true;
+    loadCompanyOptions(supabase)
+      .then((list) => {
+        if (!active) return;
+        setCompanies(list);
+        if (list.length > 0) setSelectedCompanyId(list[0].id);
+        else setIsNewCompany(true);
+      })
+      .catch((err: unknown) => console.warn('Gagal memuat perusahaan:', err))
+      .finally(() => { if (active) setLoadingCompanies(false); });
+    return () => { active = false; };
   }, [supabase]);
 
   // Handle submit upload: scan all sheets
@@ -169,8 +186,11 @@ export default function UploadPage() {
       // is not sent as "new company" again.
       if (isNewCompany) {
         const name = newCompanyName.trim();
-        setCompanies((prev) => (prev.some((c) => c.id === init.companyId) ? prev : [...prev, { id: init.companyId, nama_perusahaan: name }]
-          .sort((a, b) => a.nama_perusahaan.localeCompare(b.nama_perusahaan, 'id'))));
+        const now = new Date().toISOString();
+        setCompanies((prev) => [
+          { id: init.companyId, nama_perusahaan: prev.find((c) => c.id === init.companyId)?.nama_perusahaan ?? name, lastActivity: now, lastUploadAt: now },
+          ...prev.filter((c) => c.id !== init.companyId),
+        ]);
         setSelectedCompanyId(init.companyId);
         setIsNewCompany(false);
         setNewCompanyName('');
@@ -293,22 +313,19 @@ export default function UploadPage() {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/70 py-2.5 px-3.5 text-xs text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
                 />
               ) : (
-                <select
-                  value={selectedCompanyId}
-                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                <CompanyPicker
+                  companies={companies.map((c) => ({ id: c.id, name: c.nama_perusahaan }))}
+                  value={selectedCompanyId || null}
+                  onChange={(id) => setSelectedCompanyId(id ?? '')}
+                  allLabel={null}
+                  placeholder={loadingCompanies ? 'Memuat perusahaan…' : '(Belum ada perusahaan, klik tambah baru)'}
+                  describe={(id) => {
+                    const uploadAt = uploadTimes.get(id);
+                    return uploadAt ? `diunggah ${formatUploadTime(uploadAt)}` : 'belum ada unggahan';
+                  }}
+                  className="w-full"
                   disabled={loadingCompanies || companies.length === 0}
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-xs font-medium text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
-                >
-                  {companies.length === 0 ? (
-                    <option value="">(Belum ada perusahaan, klik tambah baru)</option>
-                  ) : (
-                    companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nama_perusahaan}
-                      </option>
-                    ))
-                  )}
-                </select>
+                />
               )}
             </div>
 
