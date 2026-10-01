@@ -41,7 +41,7 @@ export default function DashboardScopeFilter({ companies, scope, onChange, reloa
   return <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-4 py-3">
     <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-slate-500"><Building2 className="h-3.5 w-3.5" /><span>Tampilkan data:</span></div>
     <select aria-label="Perusahaan" value={scope.companyId ?? 'all'} onChange={(e) => onChange({ companyId: e.target.value === 'all' ? null : e.target.value, unit: null, subUnit: null })} className={SELECT_CLASS}>
-      <option value="all">Semua perusahaan</option>
+      <option value="all">Semua perusahaan ({companies.length.toLocaleString('id-ID')})</option>
       {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
     </select>
     {unitOptions.length > 0 && (
