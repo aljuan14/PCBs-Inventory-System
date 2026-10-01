@@ -165,6 +165,16 @@ export default function UploadPage() {
       if (!initRes.ok || !init.success) {
         throw new Error(init.error || 'Gagal menyiapkan unggahan.');
       }
+      // The company now exists: select it, so the next file of the same company
+      // is not sent as "new company" again.
+      if (isNewCompany) {
+        const name = newCompanyName.trim();
+        setCompanies((prev) => (prev.some((c) => c.id === init.companyId) ? prev : [...prev, { id: init.companyId, nama_perusahaan: name }]
+          .sort((a, b) => a.nama_perusahaan.localeCompare(b.nama_perusahaan, 'id'))));
+        setSelectedCompanyId(init.companyId);
+        setIsNewCompany(false);
+        setNewCompanyName('');
+      }
 
       await uploadWithProgress(init.signedUrl, file, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
         (sent, total) => trackUpload({ type: 'progress', done: sent, total, unit: 'bytes' }));

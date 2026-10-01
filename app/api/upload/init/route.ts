@@ -31,6 +31,19 @@ export async function POST(req: NextRequest) {
     let companyId = selectedCompanyId ?? null;
 
     if (!companyId && newCompanyName?.trim()) {
+      // Reuse a company of the same name (case-insensitive): the form keeps the
+      // typed name between uploads, and each upload used to add another copy.
+      const name = newCompanyName.trim();
+      const { data: existing } = await supabase
+        .from('companies')
+        .select('id')
+        .ilike('nama_perusahaan', name.replace(/[\\%_]/g, (ch) => `\\${ch}`))
+        .order('created_at', { ascending: true })
+        .limit(1);
+      companyId = (existing?.[0]?.id as string | undefined) ?? null;
+    }
+
+    if (!companyId && newCompanyName?.trim()) {
       const { data: newComp, error: compErr } = await supabase
         .from('companies')
         .insert({ nama_perusahaan: newCompanyName.trim() })
