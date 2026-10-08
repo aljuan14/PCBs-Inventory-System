@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
 import { INVENTORY_CATEGORIES, hasPcbConcentration } from '@/lib/inventory';
 import { ALL_SCOPE, PRE_1997_FILTER, TRAFO_CATEGORIES, mapPointFilter, pre1997RiskCounts, sumStats, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
-import DataTable, { type TablePreset } from '@/components/DataTable';
+import DataTable, { type EditableInventoryFields, type InventoryItem, type TablePreset } from '@/components/DataTable';
 import CompanyCheckCard from '@/components/CompanyCheckCard';
 import DashboardCharts, { type Pre1997Donut } from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
@@ -17,7 +17,7 @@ import TonnageCard from '@/components/TonnageCard';
 import MapNotice from '@/components/MapNotice';
 import { useDashboardData } from '@/components/useDashboardData';
 import { fetchCompanyStatuses, type CompanyStatus } from '@/lib/company-status';
-import { createClient } from '@/lib/supabase/client';
+import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
 
 const MapLeaflet = dynamic(() => import('@/components/MapLeaflet'), { ssr: false });
 
@@ -25,11 +25,19 @@ const MEASURED_CATEGORIES = INVENTORY_CATEGORIES.map((category) => category.key)
 
 export default function InventoryOverview() {
   const [scope, setScope] = useState<DashboardScope>(ALL_SCOPE);
-  const { stats, companies, points, pointTotal, loading, refreshing, error, reloadKey, reload } = useDashboardData(undefined, scope);
+  const { supabase, stats, companies, points, pointTotal, loading, refreshing, error, reloadKey, reload } = useDashboardData(undefined, scope);
   const companyName = companies.find((company) => company.id === scope.companyId)?.name;
 
+  const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
+    await updateInventoryItem(supabase, item, changes);
+    await reload();
+  };
+  const handleDelete = async (item: InventoryItem) => {
+    await deleteInventoryItem(supabase, item);
+    await reload();
+  };
+
   // Sent / not sent per company, for the dots in the company picker.
-  const supabase = useMemo(() => createClient(), []);
   const [statuses, setStatuses] = useState<Map<string, CompanyStatus> | null>(null);
   const [statusKey, setStatusKey] = useState(0);
   useEffect(() => {
@@ -86,7 +94,7 @@ export default function InventoryOverview() {
       onSelectYears={(filters) => showRows(filters, 'transformator')}
     />
     <DataQualityPanel scope={scope} scopeLabel={scopeLabel} companies={companies} reloadKey={reloadKey} onDrill={setScope} onShowRows={showRows} />
-    <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} /></div>
+    <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
 }

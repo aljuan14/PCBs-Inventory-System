@@ -10,6 +10,7 @@ import DashboardCharts from '@/components/DashboardCharts';
 import DistributionCharts from '@/components/DistributionCharts';
 import MapNotice from '@/components/MapNotice';
 import { useDashboardData } from '@/components/useDashboardData';
+import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
 
 const MapLeaflet = dynamic(() => import('@/components/MapLeaflet'), { ssr: false });
 
@@ -37,32 +38,12 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
   };
 
   const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
-    const payload: Record<string, string | number | null> = {};
-    if (category === 'minyak_dielektrik') {
-      payload.merek_minyak_dielektrik = changes.name.trim() || null;
-      payload.uji_konsentrasi_ppm = changes.pcbConcentration;
-      payload.lokasi_penyimpanan = changes.location.trim() || null;
-      payload.status_minyak = changes.status.trim() || null;
-    } else if (category === 'kapasitor') {
-      payload.nama_merek = changes.name.trim() || null;
-      payload.nomor_serial = changes.serialNumber.trim() || null;
-      payload.lokasi_peralatan = changes.location.trim() || null;
-      payload.status_alat = changes.status.trim() || null;
-    } else {
-      payload.nama_merek = changes.name.trim() || null;
-      payload.nomor_serial = changes.serialNumber.trim() || null;
-      payload.uji_konsentrasi_ppm = changes.pcbConcentration;
-      payload.lokasi_peralatan = changes.location.trim() || null;
-      if (category === 'transformator_tidak_digunakan') payload.status_kondisi = changes.status.trim() || null;
-    }
-    const { error: updateError } = await supabase.from(category).update(payload).eq('id', item.id);
-    if (updateError) throw updateError;
+    await updateInventoryItem(supabase, item, changes);
     await reload();
   };
 
   const handleDelete = async (item: InventoryItem) => {
-    const { error: deleteError } = await supabase.from(category).delete().eq('id', item.id);
-    if (deleteError) throw deleteError;
+    await deleteInventoryItem(supabase, item);
     await reload();
   };
 

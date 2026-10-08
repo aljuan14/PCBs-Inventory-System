@@ -285,6 +285,10 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<InventoryItem | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, Record<string, unknown>>>({});
 
@@ -800,6 +804,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                           aria-label={`Edit ${item.name || 'data'}`}
                           onClick={() => {
                             setEditingItem(item);
+                            setEditError(null);
                             setEditForm({
                               name: item.name || '',
                               serialNumber: item.serialNumber || '',
@@ -816,12 +821,9 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                           type="button"
                           title="Hapus data"
                           aria-label={`Hapus ${item.name || 'data'}`}
-                          onClick={async () => {
-                            if (onDelete && window.confirm(`Hapus data ${item.name || `nomor ${item.no ?? '-'}`}?`)) {
-                              await onDelete(item);
-                            }
-                          }}
-                          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                          disabled={!onDelete}
+                          onClick={() => { setDeleteError(null); setDeleting(item); }}
+                          className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -862,6 +864,53 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
         </div>
       )}
 
+      {deleting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="alertdialog" aria-modal="true" aria-labelledby="delete-inventory-title" aria-describedby="delete-inventory-desc">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600"><Trash2 className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <h4 id="delete-inventory-title" className="text-base font-bold text-slate-900">Hapus data ini?</h4>
+                <p id="delete-inventory-desc" className="mt-1 text-xs text-slate-500">Data akan dihapus permanen dari database dan tidak bisa dikembalikan, kecuali dengan mengimpor ulang berkas Excel-nya.</p>
+              </div>
+            </div>
+            <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+              <dt className="text-slate-500">Perusahaan</dt><dd className="font-semibold text-slate-800">{deleting.companyName}</dd>
+              <dt className="text-slate-500">Kategori</dt><dd className="font-semibold text-slate-800">{getCategoryLabel(deleting.type as InventoryCategory)}</dd>
+              <dt className="text-slate-500">Nama / merek</dt><dd className="font-semibold text-slate-800">{deleting.name || '–'}</dd>
+              <dt className="text-slate-500">Nomor serial</dt><dd className="font-semibold text-slate-800">{deleting.serialNumber || '–'}</dd>
+              {(deleting.unit || deleting.location) && <><dt className="text-slate-500">Lokasi</dt><dd className="font-semibold text-slate-800">{[deleting.unit, deleting.subUnit, deleting.location].filter(Boolean).join(' › ')}</dd></>}
+              {deleting.excelRow ? <><dt className="text-slate-500">Baris Excel</dt><dd className="font-semibold text-slate-800">{deleting.excelRow}</dd></> : null}
+            </dl>
+            {deleteError && <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {deleteError}</div>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" autoFocus onClick={() => setDeleting(null)} disabled={deleteBusy} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Batal</button>
+              <button
+                type="button"
+                disabled={deleteBusy || !onDelete}
+                onClick={async () => {
+                  if (!onDelete) return;
+                  setDeleteBusy(true);
+                  setDeleteError(null);
+                  try {
+                    await onDelete(deleting);
+                    setDeleting(null);
+                  } catch (err) {
+                    setDeleteError(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setDeleteBusy(false);
+                  }
+                }}
+                className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deleteBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                {deleteBusy ? 'Menghapus…' : 'Ya, hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingItem && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-inventory-title">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
@@ -898,6 +947,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
               </label>
             </div>
 
+            {editError && <div role="alert" className="mt-5 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {editError}</div>}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setEditingItem(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
               <button
@@ -906,9 +956,12 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
                 onClick={async () => {
                   if (!onEdit) return;
                   setSaving(true);
+                  setEditError(null);
                   try {
                     await onEdit(editingItem, editForm);
                     setEditingItem(null);
+                  } catch (err) {
+                    setEditError(err instanceof Error ? err.message : String(err));
                   } finally {
                     setSaving(false);
                   }
