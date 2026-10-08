@@ -3,7 +3,9 @@
  *
  * Export the local database to the data repo and push it, so the other laptops
  * get it on their next start. Refuses when the repo has data this laptop has
- * not pulled yet, so nobody overwrites someone else's changes.
+ * not pulled yet, so nobody overwrites someone else's changes. When the data
+ * changed, README.md and CHANGELOG.md in the data repo list the companies and
+ * what changed (see data-report.mjs).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -13,6 +15,7 @@ import {
   DATA_BRANCH, DATA_REPO_DIR, OfflineError, ensureDataRepo, ensureDatabase, ensureDocker, exportData, fetchRemoteHead, fingerprint,
   git, log, main, readState, sameFingerprint, step, writeState,
 } from './lib.mjs';
+import { commitMessage, companySummary, diffSummary, prependChangelog, readPreviousSummary, writeReadme, writeSummary } from './data-report.mjs';
 
 export async function push() {
   await ensureDocker();
@@ -29,8 +32,10 @@ export async function push() {
     );
   }
 
+  // A data repo from before the README existed gets one on the next push, even without data changes.
+  const hasReadme = remote ? (await git(['cat-file', '-e', `origin/${DATA_BRANCH}:README.md`], { capture: true, allowFail: true })).code === 0 : false;
   const current = await fingerprint();
-  if (state && sameFingerprint(current, state.fingerprint)) {
+  if (state && sameFingerprint(current, state.fingerprint) && hasReadme) {
     log('Tidak ada perubahan data sejak sinkronisasi terakhir.');
     return;
   }
@@ -42,22 +47,35 @@ export async function push() {
     await git(['checkout', '--quiet', '-B', DATA_BRANCH]);
   }
 
+  // Read before the export replaces data/, to tell what changed.
+  const previous = readPreviousSummary();
+
   step('Mengekspor database');
   await exportData();
+  const companies = await companySummary();
+  writeSummary(companies);
 
   // CSV must reach every laptop byte for byte (no CRLF conversion on Windows).
   fs.writeFileSync(path.join(DATA_REPO_DIR, '.gitattributes'), '* -text\n');
 
-  await git(['add', '-A']);
+  await git(['add', '-A', 'data', '.gitattributes']);
   const { code } = await git(['diff', '--cached', '--quiet'], { allowFail: true });
-  if (code === 0) {
+  if (code === 0 && hasReadme) {
     log('Isi data sama dengan versi di repo, tidak ada yang dikirim.');
     writeState({ commit: remote, fingerprint: current });
     return;
   }
 
-  const stamp = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
-  await git(['commit', '--quiet', '-m', `data: ${stamp} dari ${os.hostname()}`]);
+  // Only now: the README carries the time of the push, so writing it for
+  // unchanged data would make an empty-looking commit.
+  const diff = diffSummary(previous, companies);
+  const when = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  writeReadme(companies, diff, when);
+  prependChangelog(diff, when);
+  await git(['add', 'README.md', 'CHANGELOG.md']);
+  const message = commitMessage(diff);
+  await git(['commit', '--quiet', '-m', message, '-m', `Dikirim ${when} dari ${os.hostname()}.`]);
+  log(message);
   step('Mengirim ke GitHub');
   await git(['push', '--quiet', 'origin', `${DATA_BRANCH}:${DATA_BRANCH}`]);
 

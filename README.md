@@ -25,14 +25,15 @@ Di mode offline, data dibagikan antar-laptop lewat repo GitHub **private** terpi
 
 1. [Latar Belakang](#latar-belakang)
 2. [Fitur](#fitur)
-3. [Memulai](#memulai)
-4. [Alur Impor Data](#alur-impor-data)
-5. [Impor Massal & Impor Ulang](#impor-massal--impor-ulang)
-6. [Deploy ke Vercel](#deploy-ke-vercel)
-7. [Pengujian](#pengujian)
-8. [Skema Database](#skema-database)
-9. [Struktur Direktori](#struktur-direktori)
-10. [Roadmap](#roadmap)
+3. [Tech Stack](#tech-stack)
+4. [Memulai](#memulai)
+5. [Alur Impor Data](#alur-impor-data)
+6. [Impor Massal & Impor Ulang](#impor-massal--impor-ulang)
+7. [Deploy ke Vercel](#deploy-ke-vercel)
+8. [Pengujian](#pengujian)
+9. [Skema Database](#skema-database)
+10. [Struktur Direktori](#struktur-direktori)
+11. [Roadmap](#roadmap)
 
 ---
 
@@ -95,6 +96,21 @@ Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan
 |---|---|
 | Daftar & tambah perusahaan | Dikelola dari halaman `/companies`. Setiap perusahaan menampilkan isi datanya (jumlah baris dan berkas, atau "Kosong") serta status pengiriman hasil pemeriksaan dengan tanggal terakhir. Daftar bisa disaring: Semua, Belum dikirim, Ada data baru, Sudah dikirim, Kosong. |
 | Hapus perusahaan | Sebelum menghapus, ditampilkan data apa saja yang ikut terhapus. Penghapusan berjalan bertahap dengan indikator progres, termasuk berkas di Storage. |
+
+---
+
+## Tech Stack
+
+| Lapisan | Teknologi |
+|---|---|
+| Frontend | [Next.js](https://nextjs.org) 16.3 (App Router, Turbopack), React 19.2, TypeScript 5, Tailwind CSS 4, lucide-react (ikon) |
+| Grafik & peta | Recharts 3, Leaflet 1.9 |
+| Pembacaan Excel | SheetJS (`xlsx`) |
+| Backend & database | [Supabase](https://supabase.com): PostgreSQL 17, Auth (login), Storage (berkas Excel), Row Level Security, fungsi RPC untuk statistik dashboard |
+| Mode web | Vercel (aplikasi) + Supabase Cloud (database) |
+| Mode offline | Docker + Supabase CLI (Supabase lokal), script Node.js di `scripts/offline/` |
+| Sinkronisasi data offline | Git: repo private `PCBs-Inventory-Data` berisi ekspor CSV per tabel |
+| Skrip impor massal | `tsx` (TypeScript di Node.js) di `scripts/` |
 
 ---
 
