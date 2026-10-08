@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
-import { getCategoryColor, getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
+import { categoryTint, getCategoryColor, getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
 import { PRE_1997_FILTER, TRAFO_CATEGORIES, pre1997RiskCounts, type CategoryFilter, type InventoryFilters, type InventoryStats } from '@/lib/inventory-query';
 import { RISK_CLASSES, formatPercent, type RiskCounts } from '@/components/DashboardCharts';
 
@@ -187,7 +187,7 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
   }));
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3 rounded-2xl border p-3" style={categoryTint(category)}>
       <button
         type="button"
         disabled={!onSelect}

@@ -23,7 +23,7 @@ export const INVENTORY_CATEGORIES: Array<{
   color: string;
 }> = [
   { key: 'transformator_digunakan', label: 'Transformator Masih Digunakan', shortLabel: 'Trafo digunakan', description: 'Peralatan yang masih beroperasi dan digunakan.', color: '#2a78d6' },
-  { key: 'transformator_tidak_digunakan', label: 'Transformator Tidak Digunakan', shortLabel: 'Trafo tidak digunakan', description: 'Peralatan yang sudah tidak beroperasi atau rusak.', color: '#b45309' },
+  { key: 'transformator_tidak_digunakan', label: 'Transformator Tidak Digunakan', shortLabel: 'Trafo tidak digunakan', description: 'Peralatan yang sudah tidak beroperasi atau rusak.', color: '#0f766e' },
   { key: 'kapasitor', label: 'Kapasitor', shortLabel: 'Kapasitor', description: 'Inventaris kapasitor beserta status penggunaannya.', color: '#4a3aa7' },
   { key: 'minyak_dielektrik', label: 'Minyak Dielektrik', shortLabel: 'Minyak dielektrik', description: 'Wadah dan sampel minyak dielektrik yang tersimpan.', color: '#e87ba4' },
 ];
@@ -190,3 +190,12 @@ export function getCategoryLabel(category: InventoryCategory) {
 }
 
 export const getCategoryColor = (category: InventoryCategory) => INVENTORY_CATEGORIES.find((item) => item.key === category)?.color ?? INVENTORY_CATEGORIES[0].color;
+
+/**
+ * Soft background and top accent in a category's colour, so used and not
+ * used transformers read apart at a glance. White charts sit on it.
+ */
+export const categoryTint = (category: InventoryCategory) => {
+  const color = getCategoryColor(category);
+  return { backgroundColor: `color-mix(in srgb, ${color} 7%, white)`, borderColor: `color-mix(in srgb, ${color} 22%, white)`, borderTop: `4px solid ${color}` };
+};

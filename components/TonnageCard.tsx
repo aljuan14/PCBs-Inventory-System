@@ -1,7 +1,7 @@
 'use client';
 
 import { Scale } from 'lucide-react';
-import type { InventoryCategory } from '@/lib/inventory';
+import { categoryTint, type InventoryCategory } from '@/lib/inventory';
 import { PRE_1997_FILTER, sumStats, TRAFO_CATEGORIES, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats } from '@/lib/inventory-query';
 import { formatPercent } from '@/components/DashboardCharts';
 
@@ -48,7 +48,7 @@ function TonnageColumns({ stats, category, title, bands, onSelect }: { stats: In
   const gridlines = Array.from({ length: top + 1 }, (_, power) => top - power);
 
   return (
-    <div className="flex min-w-0 flex-col rounded-xl border border-slate-200 p-5">
+    <div className="flex min-w-0 flex-col rounded-xl border p-5" style={categoryTint(category)}>
       <h4 className="text-sm font-bold text-slate-900">{title}</h4>
       <p className="mb-6 text-[11px] text-slate-500">
         {groups.map((group) => `${BANDS[group.band].label.toLowerCase()} ${formatTons(group.kg)} t`).join(' · ')}
