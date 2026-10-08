@@ -50,6 +50,13 @@ const formatNumber = (value: number) => value.toLocaleString('id-ID');
 // A non-zero share too small for one decimal (e.g. 37 of 113.047) must not read as 0%.
 export const formatPercent = (value: number) => (value > 0 && value < 0.05 ? '< 0,1%' : `${value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`);
 
+/** Top of the value axis: the next 1, 2 or 5 × 10ⁿ at or above the largest bar. */
+export function niceMax(value: number) {
+  if (value <= 0) return 1;
+  const power = 10 ** Math.floor(Math.log10(value));
+  return ([1, 2, 5, 10].find((step) => step * power >= value) ?? 10) * power;
+}
+
 interface RiskProportionProps {
   title: string;
   subtitle: string;

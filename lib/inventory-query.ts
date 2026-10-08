@@ -48,6 +48,16 @@ export interface CategoryStats {
   pre1997_quick_safe: number;
   pre1997_quick_moderate: number;
   pre1997_quick_high: number;
+  /** Total weight per production year band (from 1997, before 1997, unknown) and PCBs class (> 50, <= 50 ppm, untested), migration 20261008000001. */
+  weight_from1997_high_kg: number;
+  weight_from1997_low_kg: number;
+  weight_from1997_untested_kg: number;
+  weight_pre1997_high_kg: number;
+  weight_pre1997_low_kg: number;
+  weight_pre1997_untested_kg: number;
+  weight_noyear_high_kg: number;
+  weight_noyear_low_kg: number;
+  weight_noyear_untested_kg: number;
 }
 
 export type InventoryStats = Record<InventoryCategory, CategoryStats>;
@@ -59,6 +69,8 @@ const EMPTY_STATS: CategoryStats = {
   weight_kg: 0, weight_dry_kg: 0, weight_oil_kg: 0, weight_safe_kg: 0, weight_moderate_kg: 0, weight_high_kg: 0,
   weight_untested_kg: 0, pre1997_weight_kg: 0, pre1997_weight_untested_kg: 0, pre1997_lab_safe: 0, pre1997_lab_moderate: 0,
   pre1997_lab_high: 0, pre1997_quick_safe: 0, pre1997_quick_moderate: 0, pre1997_quick_high: 0,
+  weight_from1997_high_kg: 0, weight_from1997_low_kg: 0, weight_from1997_untested_kg: 0, weight_pre1997_high_kg: 0,
+  weight_pre1997_low_kg: 0, weight_pre1997_untested_kg: 0, weight_noyear_high_kg: 0, weight_noyear_low_kg: 0, weight_noyear_untested_kg: 0,
 };
 
 /** Company, unit and sub-unit a dashboard is narrowed to; null means all. */
@@ -143,7 +155,7 @@ export interface ImportNoteRow {
 }
 
 export type CategoryFilter = InventoryCategory | 'transformator' | 'all';
-export type PcbRange = 'all' | 'safe' | 'moderate' | 'high' | 'untested';
+export type PcbRange = 'all' | 'safe' | 'moderate' | 'upto50' | 'high' | 'untested';
 export type TestFilter = 'all' | 'lab' | 'cepat' | 'none';
 export type YearRange = 'all' | 'pre1985' | '1985_1996' | 'from1997' | 'unknown' | 'custom';
 export type CoordinateFilter = 'all' | 'with' | 'without' | 'empty' | 'unreadable' | 'fixed';
@@ -254,6 +266,7 @@ function applyFilters(request: InventoryRequest, category: CategoryFilter, filte
   // Bounds of PCB_CLASSES in lib/inventory.ts.
   if (filters.pcbRange === 'safe') request = request.lt('ppm', 2);
   else if (filters.pcbRange === 'moderate') request = request.gte('ppm', 2).lte('ppm', 50);
+  else if (filters.pcbRange === 'upto50') request = request.lte('ppm', 50);
   else if (filters.pcbRange === 'high') request = request.gt('ppm', 50);
   else if (filters.pcbRange === 'untested') request = request.is('ppm', null);
 

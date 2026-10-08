@@ -182,7 +182,7 @@ const PAGE_SIZE = 10;
 const SELECT_CLASS = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none';
 const FIELD_LABEL_CLASS = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500';
 
-const PCB_LABELS: Record<InventoryFilters['pcbRange'], string> = { all: 'Semua kadar PCBs', safe: pcbClassLabel('safe'), moderate: pcbClassLabel('moderate'), high: pcbClassLabel('high'), untested: 'Belum diuji' };
+const PCB_LABELS: Record<InventoryFilters['pcbRange'], string> = { all: 'Semua kadar PCBs', safe: pcbClassLabel('safe'), moderate: pcbClassLabel('moderate'), upto50: 'Di bawah ambang (≤ 50 ppm)', high: pcbClassLabel('high'), untested: 'Belum diuji' };
 const TEST_LABELS: Record<InventoryFilters['test'], string> = { all: 'Semua jenis uji', lab: 'Uji lab (GC)', cepat: 'Uji cepat (Dexil)', none: 'Belum diuji' };
 const YEAR_LABELS: Record<InventoryFilters['yearRange'], string> = { all: 'Semua tahun', pre1985: 'Sebelum 1985', '1985_1996': '1985 – 1996', from1997: '1997 ke atas', unknown: 'Tahun tidak diketahui', custom: 'Rentang tertentu' };
 const COORDINATE_LABELS: Record<InventoryFilters['coordinates'], string> = {

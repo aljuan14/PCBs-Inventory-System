@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { GROUP_LEVEL_LABELS, unitLabel } from '@/lib/data-quality';
 import type { InventoryCategory } from '@/lib/inventory';
 import { fetchInventoryCharts, type ChartFigures, type ChartGroup, type ChartYearBand, type DashboardScope, type InventoryCharts, type InventoryFilters, type PcbRange } from '@/lib/inventory-query';
-import { RISK_CLASSES, formatPercent, type RiskCounts } from '@/components/DashboardCharts';
+import { RISK_CLASSES, formatPercent, niceMax, type RiskCounts } from '@/components/DashboardCharts';
 import { formatTons } from '@/components/TonnageCard';
 
 type Measure = 'count' | 'weight';
@@ -19,13 +19,6 @@ const formatNumber = (value: number) => value.toLocaleString('id-ID');
 const valueOf = (figures: ChartFigures, risk: RiskKey, measure: Measure) => (measure === 'count' ? figures[risk] : figures[`${risk}_kg`]);
 const totalOf = (figures: ChartFigures, measure: Measure) => RISK_CLASSES.reduce((sum, risk) => sum + valueOf(figures, risk.key, measure), 0);
 const formatValue = (value: number, measure: Measure) => (measure === 'count' ? `${formatNumber(value)} unit` : `${formatTons(value)} t`);
-
-/** Top of the value axis: the next 1, 2 or 5 × 10ⁿ at or above the largest bar. */
-function niceMax(value: number) {
-  if (value <= 0) return 1;
-  const power = 10 ** Math.floor(Math.log10(value));
-  return ([1, 2, 5, 10].find((step) => step * power >= value) ?? 10) * power;
-}
 
 const sumFigures = (rows: ChartFigures[]) =>
   rows.reduce<ChartFigures>(
