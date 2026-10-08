@@ -37,7 +37,6 @@ const NEWER_COLOR = '#2a9d8f';
 const UNKNOWN_COLOR = '#b4b2a9';
 
 const CARD_CLASS = 'rounded-2xl border border-slate-200 bg-white p-5';
-const TRAFO_LABEL: Record<string, string> = { transformator_digunakan: 'Masih digunakan', transformator_tidak_digunakan: 'Tidak digunakan' };
 
 function CardTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -47,9 +46,6 @@ function CardTitle({ title, subtitle }: { title: string; subtitle?: string }) {
     </div>
   );
 }
-
-/** The thin line joining a card to the one it breaks down. */
-const Connector = () => <div aria-hidden className="mx-auto h-4 w-px bg-slate-300" />;
 
 const Skeleton = ({ className }: { className: string }) => <div className={`animate-pulse rounded-xl bg-slate-100 ${className}`} />;
 
@@ -83,27 +79,6 @@ function Legend({ segments, total, active, setActive, onSelect }: { segments: Se
         );
       })}
     </ul>
-  );
-}
-
-/** A part-to-whole bar with its legend. */
-function CompositionBar({ total, segments, onSelect }: { total: number; segments: Segment[]; onSelect?: (filters: Partial<InventoryFilters>, key: string) => void }) {
-  const [active, setActive] = useState<string | null>(null);
-  return (
-    <div>
-      <div className="flex h-3 w-full gap-0.5 overflow-hidden rounded bg-slate-50" onMouseLeave={() => setActive(null)}>
-        {segments.filter((segment) => segment.value > 0).map((segment) => (
-          <div
-            key={segment.key}
-            title={`${segment.label}: ${formatNumber(segment.value)} (${formatPercent(share(segment.value, total))})`}
-            onMouseEnter={() => setActive(segment.key)}
-            className="h-full min-w-[3px] transition-opacity"
-            style={{ flexGrow: segment.value, flexBasis: 0, backgroundColor: segment.color, opacity: active && active !== segment.key ? 0.35 : 1 }}
-          />
-        ))}
-      </div>
-      <div className="mt-2"><Legend segments={segments} total={total} active={active} setActive={setActive} onSelect={onSelect} /></div>
-    </div>
   );
 }
 
@@ -212,7 +187,7 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
   }));
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-3">
       <button
         type="button"
         disabled={!onSelect}
@@ -231,8 +206,6 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
         </span>
       </button>
 
-      <Connector />
-
       <div className={CARD_CLASS}>
         <CardTitle title="Menurut tahun produksi" subtitle="Klik untuk melihat datanya di tabel" />
         <div className="mt-4">
@@ -241,8 +214,6 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
             : <Donut total={total} segments={years} center={{ value: formatNumber(total), label: 'trafo' }} onSelect={select} />}
         </div>
       </div>
-
-      <Connector />
 
       <div className={CARD_CLASS}>
         <div className="flex items-start justify-between gap-3">
@@ -267,8 +238,8 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
   );
 }
 
-/** A category with one figure (kapasitor, minyak dielektrik), opening its rows in the table. */
-function FigureTile({ category, value, unit, note, loading, onSelect }: { category: InventoryCategory; value: string; unit: string; note?: string; loading: boolean; onSelect?: SelectRows }) {
+/** One headline figure (all transformers, kapasitor, minyak dielektrik), opening its rows in the table. */
+function FigureTile({ category, label, color, value, unit, note, loading, onSelect }: { category: CategoryFilter; label: string; color?: string; value: string; unit: string; note?: string; loading: boolean; onSelect?: SelectRows }) {
   return (
     <button
       type="button"
@@ -277,12 +248,12 @@ function FigureTile({ category, value, unit, note, loading, onSelect }: { catego
       className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 text-left transition-colors enabled:cursor-pointer enabled:hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-emerald-500"
     >
       <span className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: getCategoryColor(category) }} />
-        <span className="text-sm font-semibold text-slate-900">{getCategoryLabel(category)}</span>
+        {color && <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />}
+        <span className="text-sm font-semibold text-slate-900">{label}</span>
         {onSelect && <ChevronRight className="ml-auto h-3.5 w-3.5 text-slate-300 group-hover:text-slate-500" />}
       </span>
       <span className="mt-3 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tracking-tight text-slate-900">{loading ? '…' : value}</span>
+        <span className="text-3xl font-semibold tracking-tight text-slate-900">{loading ? '…' : value}</span>
         <span className="text-xs text-slate-500">{unit}</span>
       </span>
       {note && !loading && <span className="mt-1 text-[11px] text-slate-400">{note}</span>}
@@ -293,50 +264,25 @@ function FigureTile({ category, value, unit, note, loading, onSelect }: { catego
 /**
  * The transformers read top to bottom: all of them, used / not used, their
  * production years, then their Status PCBs. Each card breaks down the one
- * above it. Kapasitor and minyak dielektrik sit beside the total.
+ * above it. Kapasitor and minyak dielektrik sit beside the total as figures.
  */
 export default function InventorySummary({ stats, loading, onSelect }: { stats: InventoryStats | null; loading: boolean; onSelect?: SelectRows }) {
   // One switch for both columns, so their Status PCBs always compare the same transformers.
   const [statusScope, setStatusScope] = useState<StatusScope>('pre1997');
   const oil = stats?.minyak_dielektrik;
   const grandTotal = TRAFO_CATEGORIES.reduce((sum, category) => sum + (stats?.[category].total ?? 0), 0);
-  const split: Segment[] = TRAFO_CATEGORIES.map((category) => ({
-    key: category,
-    label: TRAFO_LABEL[category],
-    value: stats?.[category].total ?? 0,
-    color: getCategoryColor(category),
-    filters: {},
-  }));
 
   return (
     <section>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_13rem]">
-        <div className={CARD_CLASS}>
-          <CardTitle title="Total Transformator" subtitle="Masih digunakan dan tidak digunakan" />
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-4xl font-semibold tracking-tight text-slate-900">{loading ? '…' : formatNumber(grandTotal)}</span>
-            <span className="text-xs text-slate-500">trafo</span>
-          </div>
-          <div className="mt-4">
-            {loading ? <Skeleton className="h-20" /> : (
-              <CompositionBar
-                total={grandTotal}
-                segments={split}
-                onSelect={onSelect && ((filters, key) => onSelect(filters, key as InventoryCategory))}
-              />
-            )}
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <FigureTile category="kapasitor" value={formatNumber(stats?.kapasitor.total ?? 0)} unit="unit" loading={loading} onSelect={onSelect} />
-          <FigureTile category="minyak_dielektrik" value={formatNumber(oil?.volume_l ?? 0)} unit="liter" note={`${formatNumber(oil?.total ?? 0)} data wadah/sampel`} loading={loading} onSelect={onSelect} />
-        </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <FigureTile category="transformator" label="Total Transformator" value={formatNumber(grandTotal)} unit="trafo" note="Masih digunakan dan tidak digunakan" loading={loading} onSelect={onSelect} />
+        <FigureTile category="kapasitor" label={getCategoryLabel('kapasitor')} color={getCategoryColor('kapasitor')} value={formatNumber(stats?.kapasitor.total ?? 0)} unit="unit" loading={loading} onSelect={onSelect} />
+        <FigureTile category="minyak_dielektrik" label={getCategoryLabel('minyak_dielektrik')} color={getCategoryColor('minyak_dielektrik')} value={formatNumber(oil?.volume_l ?? 0)} unit="liter" note={`${formatNumber(oil?.total ?? 0)} data wadah/sampel`} loading={loading} onSelect={onSelect} />
       </div>
 
-      <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         {TRAFO_CATEGORIES.map((category) => (
           <div key={category}>
-            <Connector />
             <TransformerColumn
               category={category}
               stats={stats}

@@ -9,7 +9,6 @@ import DataTable, { type EditableInventoryFields, type InventoryItem, type Table
 import CompanyCheckCard from '@/components/CompanyCheckCard';
 import DashboardCharts, { type Pre1997Donut } from '@/components/DashboardCharts';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
-import DataQualityPanel from '@/components/DataQualityPanel';
 import DistributionCharts from '@/components/DistributionCharts';
 import InventorySummary from '@/components/InventorySummary';
 import TestMethodCard from '@/components/TestMethodCard';
@@ -93,7 +92,6 @@ export default function InventoryOverview() {
       onSelectGroup={(target, pcbRange) => { setScope(target); showRows({ pcbRange }, 'transformator'); }}
       onSelectYears={(filters) => showRows(filters, 'transformator')}
     />
-    <DataQualityPanel scope={scope} scopeLabel={scopeLabel} companies={companies} reloadKey={reloadKey} onDrill={setScope} onShowRows={showRows} />
     <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
