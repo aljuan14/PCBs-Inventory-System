@@ -43,7 +43,7 @@ export const RISK_CLASSES: { key: keyof RiskCounts; label: string; range: string
   { key: 'safe', ...PCB_CLASSES.safe, color: '#059669', icon: ShieldCheck, iconClass: 'text-emerald-600' },
   { key: 'moderate', ...PCB_CLASSES.moderate, color: '#f59e0b', icon: TriangleAlert, iconClass: 'text-amber-600' },
   { key: 'high', ...PCB_CLASSES.high, color: '#e11d48', icon: OctagonAlert, iconClass: 'text-rose-600' },
-  { key: 'untested', label: 'Belum diuji', range: 'konsentrasi kosong', color: '#cbd5e1', icon: CircleDashed, iconClass: 'text-slate-400' },
+  { key: 'untested', label: 'Belum diuji', range: 'konsentrasi kosong', color: '#b4b2a9', icon: CircleDashed, iconClass: 'text-slate-400' },
 ];
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
