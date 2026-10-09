@@ -14,7 +14,7 @@ const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100
 type SelectRows = (filters: Partial<InventoryFilters>, category: CategoryFilter) => void;
 
 /** Status PCBs over the transformers made before 1997, or over all of them. */
-type StatusScope = 'pre1997' | 'all';
+export type StatusScope = 'pre1997' | 'all';
 
 interface Segment {
   key: string;
@@ -129,7 +129,7 @@ function Donut({ total, segments, center, onSelect }: { total: number; segments:
   );
 }
 
-function ScopeToggle({ value, onChange }: { value: StatusScope; onChange: (value: StatusScope) => void }) {
+export function ScopeToggle({ value, onChange }: { value: StatusScope; onChange: (value: StatusScope) => void }) {
   const options: { key: StatusScope; label: string }[] = [{ key: 'pre1997', label: '< 1997' }, { key: 'all', label: 'Semua' }];
   return (
     <div role="group" aria-label="Cakupan status PCBs" className="flex shrink-0 rounded-lg bg-slate-100 p-0.5">
