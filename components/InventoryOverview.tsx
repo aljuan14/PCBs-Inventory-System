@@ -9,7 +9,6 @@ import CompanyCheckCard from '@/components/CompanyCheckCard';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import InventorySummary from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
-import MapNotice from '@/components/MapNotice';
 import { useDashboardData } from '@/components/useDashboardData';
 import { fetchCompanyStatuses, type CompanyStatus } from '@/lib/company-status';
 import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
@@ -18,7 +17,7 @@ const MapLeaflet = dynamic(() => import('@/components/MapLeaflet'), { ssr: false
 
 export default function InventoryOverview() {
   const [scope, setScope] = useState<DashboardScope>(ALL_SCOPE);
-  const { supabase, stats, companies, points, pointTotal, loading, refreshing, error, reloadKey, reload } = useDashboardData(undefined, scope);
+  const { supabase, stats, companies, loading, refreshing, error, reloadKey, reload } = useDashboardData(scope);
   const companyName = companies.find((company) => company.id === scope.companyId)?.name;
 
   const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
@@ -56,6 +55,6 @@ export default function InventoryOverview() {
     <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
     <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
-    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-3 text-base font-semibold">Peta sebaran inventaris</h2><MapLeaflet supabase={supabase} companies={companies} scope={scope} onScopeChange={setScope} reloadKey={reloadKey} height="520px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
 }

@@ -519,33 +519,71 @@ export async function fetchInventoryDetails(supabase: SupabaseClient, category: 
   return data as Record<string, unknown>;
 }
 
-/**
- * Points for the map, capped: drawing hundreds of thousands of markers would
- * freeze the browser. Returns the points loaded and how many exist in total.
- */
-export async function fetchMapPoints(supabase: SupabaseClient, category: CategoryFilter, scope: DashboardScope = ALL_SCOPE, limit = 5000) {
-  const pageSize = 1000;
-  const rows: InventoryRow[] = [];
-  let total = 0;
-  for (let from = 0; from < limit; from += pageSize) {
-    let request = supabase
-      .from('inventory_items')
-      .select('id, category, company_id, name, serial, location, lat, lng, ppm, status', { count: from === 0 ? 'estimated' : undefined })
-      .not('lat', 'is', null)
-      .not('lng', 'is', null);
-    if (category === 'transformator') request = request.in('category', TRAFO_CATEGORIES);
-    else if (category !== 'all') request = request.eq('category', category);
-    if (scope.companyId) request = request.eq('company_id', scope.companyId);
-    if (scope.unit) request = request.eq('unit', scope.unit);
-    if (scope.subUnit) request = request.eq('sub_unit', scope.subUnit);
-    const { data, error, count } = await request.order('id').range(from, Math.min(from + pageSize, limit) - 1);
-    if (error) throw new Error(`Gagal memuat titik peta: ${error.message}`);
-    if (from === 0) total = count ?? 0;
-    rows.push(...((data ?? []) as InventoryRow[]));
-    if (!data || data.length < pageSize) break;
-  }
-  // Estimated as in fetchInventoryPage; exact when every point fit under the cap.
-  return { rows, total: rows.length < limit ? rows.length : Math.max(total, rows.length) };
+/** What the map shows: a category, a PCBs class and a production year band, within a dashboard scope. */
+export interface MapFilters {
+  category: CategoryFilter;
+  pcbRange: PcbRange;
+  year: 'all' | 'pre1997' | 'from1997' | 'unknown';
+}
+
+export const DEFAULT_MAP_FILTERS: MapFilters = { category: 'all', pcbRange: 'all', year: 'all' };
+
+/** West, south, east, north in degrees. */
+export type MapBounds = [number, number, number, number];
+
+/** Points of one grid cell of the map (map_clusters, migration 20261010000002). */
+export interface MapCell {
+  lat: number;
+  lng: number;
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+  total: number;
+  high: number;
+  moderate: number;
+  safe: number;
+  untested: number;
+  trafo_used: number;
+  trafo_unused: number;
+  kapasitor: number;
+  minyak: number;
+}
+
+/** The points within `bounds` summed per cell of `cell` degrees. */
+export async function fetchMapCells(supabase: SupabaseClient, filters: MapFilters, scope: DashboardScope, bounds: MapBounds, cell: number) {
+  const [west, south, east, north] = bounds;
+  const { data, error } = await supabase.rpc('map_clusters', {
+    p_cell: cell, p_west: west, p_south: south, p_east: east, p_north: north,
+    p_category: filters.category === 'all' ? null : filters.category,
+    p_company_id: scope.companyId, p_unit: scope.unit, p_sub_unit: scope.subUnit,
+    p_pcb: filters.pcbRange === 'all' ? null : filters.pcbRange,
+    p_year: filters.year === 'all' ? null : filters.year,
+  });
+  if (error) throw new Error(`Gagal memuat peta: ${error.message}`);
+  return ((data ?? []) as Array<Record<keyof MapCell, number | string>>).map((row) =>
+    Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)])) as unknown as MapCell);
+}
+
+const MAP_YEAR_FILTERS: Record<MapFilters['year'], Partial<InventoryFilters>> = {
+  all: {},
+  pre1997: PRE_1997_FILTER,
+  from1997: { yearRange: 'from1997' },
+  unknown: { yearRange: 'unknown' },
+};
+
+/** The single points within `bounds`, at most `limit` of them; the map asks only once the cells say few enough are in view. */
+export async function fetchMapPointsIn(supabase: SupabaseClient, filters: MapFilters, scope: DashboardScope, bounds: MapBounds, limit: number) {
+  const [west, south, east, north] = bounds;
+  const tableFilters: InventoryFilters = { ...DEFAULT_FILTERS, companyId: scope.companyId, unit: scope.unit, subUnit: scope.subUnit, pcbRange: filters.pcbRange, ...MAP_YEAR_FILTERS[filters.year] };
+  const request = applyFilters(
+    supabase.from('inventory_items').select('id, category, company_id, name, serial, location, lat, lng, ppm, status, tahun_pembuatan'),
+    filters.category,
+    tableFilters,
+  ).gte('lat', south).lte('lat', north).gte('lng', west).lte('lng', east);
+  const { data, error } = await request.limit(limit);
+  if (error) throw new Error(`Gagal memuat titik peta: ${error.message}`);
+  return (data ?? []) as InventoryRow[];
 }
 
 /** Transformers of one bar of the dashboard charts per PCBs risk class: count, and total weight in kg. */

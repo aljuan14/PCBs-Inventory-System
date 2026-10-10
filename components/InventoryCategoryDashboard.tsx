@@ -8,7 +8,6 @@ import { ALL_SCOPE, PRE_1997_FILTER, TRAFO_CATEGORIES, issueTableFilter, mapPoin
 import DataTable, { type EditableInventoryFields, type InventoryItem } from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
 import DistributionCharts from '@/components/DistributionCharts';
-import MapNotice from '@/components/MapNotice';
 import PcbCapacitorBrands from '@/components/PcbCapacitorBrands';
 import PcbOilBrands from '@/components/PcbOilBrands';
 import { useDashboardData } from '@/components/useDashboardData';
@@ -24,7 +23,7 @@ const formatNumber = (value: number) => value.toLocaleString('id-ID');
 
 export default function InventoryCategoryDashboard({ category, issue }: { category: InventoryCategory; issue?: IssueLink }) {
   const config = getCategory(category);
-  const { supabase, stats, companies, points, pointTotal, loading, refreshing, error, reloadKey, reload } = useDashboardData(category);
+  const { supabase, stats, companies, loading, refreshing, error, reloadKey, reload } = useDashboardData();
 
   // Clicking a risk class filters the table and brings it into view; a link
   // from the upload history opens with the rows of one finding.
@@ -79,6 +78,6 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
     {category === 'kapasitor' && <PcbCapacitorBrands supabase={supabase} reloadKey={reloadKey} onShowRows={showRows} />}
     <PcbOilBrands supabase={supabase} category={category} reloadKey={reloadKey} onShowRows={showRows} />
     <div ref={tableRef} className="scroll-mt-6"><DataTable category={category} companies={companies} reloadKey={reloadKey} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
-    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta sebaran {config.shortLabel}</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="360px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-3 text-base font-semibold">Peta sebaran {config.shortLabel}</h2><MapLeaflet supabase={supabase} companies={companies} scope={ALL_SCOPE} category={category} reloadKey={reloadKey} height="460px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
 }
