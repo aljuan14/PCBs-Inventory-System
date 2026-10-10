@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { DivIcon, LayerGroup, Map as LeafletMap, TileLayer } from 'leaflet';
+import type { DivIcon, LayerGroup, Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { House, Loader2, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { INVENTORY_CATEGORIES, PCB_CLASSES, getCategoryColor, getCategoryLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
@@ -50,10 +50,15 @@ const POINT_LIMIT = 1500;
 // Grid cell of about 60 px at a zoom level.
 const cellSize = (zoom: number) => Math.min(5, Math.max(0.0005, 84 / 2 ** zoom));
 
+// Esri tiles need no API key (CARTO's now do and draw "API key required").
+// The light gray canvas comes as a base and a labels layer; tiles beyond
+// the native zoom are scaled up rather than shown as "no data".
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
 const BASEMAPS = {
-  map: { label: 'Peta', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' },
-  satellite: { label: 'Satelit', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles &copy; Esri' },
+  map: { label: 'Peta', layers: [`${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`, `${ESRI}/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`], maxNativeZoom: 16 },
+  satellite: { label: 'Satelit', layers: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`], maxNativeZoom: 18 },
 } as const;
+const BASEMAP_ATTRIBUTION = 'Tiles &copy; Esri';
 type Basemap = keyof typeof BASEMAPS;
 
 const CATEGORY_OPTIONS: Array<{ key: CategoryFilter; label: string }> = [
@@ -160,7 +165,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   const mapRef = useRef<LeafletMap | null>(null);
   const leafletRef = useRef<typeof import('leaflet') | null>(null);
   const layerRef = useRef<LayerGroup | null>(null);
-  const basemapLayers = useRef<Partial<Record<Basemap, TileLayer>>>({});
+  const basemapLayers = useRef<Partial<Record<Basemap, LayerGroup>>>({});
   const requestRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSelectRef = useRef(onSelectPoint);
@@ -195,7 +200,8 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
       const map = L.map(containerRef.current, { zoomControl: true, minZoom: 3, worldCopyJump: true });
       map.fitBounds(INDONESIA);
       for (const key of Object.keys(BASEMAPS) as Basemap[]) {
-        basemapLayers.current[key] = L.tileLayer(BASEMAPS[key].url, { attribution: BASEMAPS[key].attribution, maxZoom: 19, subdomains: 'abcd' });
+        const { layers, maxNativeZoom } = BASEMAPS[key];
+        basemapLayers.current[key] = L.layerGroup(layers.map((url) => L.tileLayer(url, { attribution: BASEMAP_ATTRIBUTION, maxZoom: 19, maxNativeZoom })));
       }
       basemapLayers.current.map!.addTo(map);
       layerRef.current = L.layerGroup().addTo(map);
@@ -213,7 +219,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    for (const [key, layer] of Object.entries(basemapLayers.current) as Array<[Basemap, TileLayer]>) {
+    for (const [key, layer] of Object.entries(basemapLayers.current) as Array<[Basemap, LayerGroup]>) {
       if (key === basemap) { if (!map.hasLayer(layer)) layer.addTo(map); } else map.removeLayer(layer);
     }
   }, [basemap, ready]);
