@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, ClipboardCheck, Droplets, Grid2X2, History, Layers3, LogOut, ShieldCheck, UploadCloud, Zap, ZapOff } from 'lucide-react';
+import { Building2, ClipboardCheck, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
 
@@ -39,7 +40,7 @@ export default function Navbar() {
   return (
     <aside className="sticky top-0 z-40 flex h-screen w-64 print:hidden shrink-0 flex-col border-r border-slate-200 bg-[#fbfcfa] px-4 py-5">
       <Link href="/dashboard" className="flex items-center gap-3 px-2 pb-7">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-700 text-white"><ShieldCheck className="h-5 w-5" /></div>
+        <Image src="/logo-klh.jpg" alt="Logo Kementerian Lingkungan Hidup" width={40} height={40} loading="eager" className="h-10 w-10 shrink-0 rounded-full" />
         <div><div className="text-sm font-bold tracking-tight text-slate-900">PCBs inventory</div><div className="text-[10px] font-medium text-slate-500">Direktorat B3</div></div>
       </Link>
       <nav className="space-y-1 text-sm font-medium">
