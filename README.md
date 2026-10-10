@@ -1,381 +1,179 @@
-# PCBs Inventory & Management System
+# Sistem Inventarisasi PCBs
 
-Web dashboard untuk inventarisasi **Polychlorinated Biphenyls (PCBs)** dari banyak perusahaan: unggah laporan Excel, petakan ke format baku KLHK, periksa kualitas datanya, lalu pantau hasilnya lewat dashboard, peta, dan tabel.
+Aplikasi inventarisasi **Polychlorinated Biphenyls (PCBs)** milik Direktorat B3, Kementerian Lingkungan Hidup. Laporan Excel dari banyak perusahaan diunggah, dipetakan ke formulir baku KLHK, diperiksa kualitasnya, lalu dirangkum di dashboard, peta, dan tabel.
 
-**Teknologi:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Supabase (PostgreSQL & Storage) · SheetJS · Leaflet · Recharts
+## Tech Stack
 
-**Aplikasi web:** https://pcbs-inventory-system.vercel.app (Vercel)
-
-Semua halaman wajib login. Akun dibuat oleh admin (pendaftaran dari halaman login ditutup), dan Row Level Security hanya mengizinkan pengguna yang sudah login membaca atau mengubah data.
-
-### Dua mode: web dan offline
-
-Satu kode yang sama berjalan di dua tempat. Yang menentukan modenya hanya isi `.env.local`:
-
-| Mode | Database | Cara menjalankan |
-|---|---|---|
-| **Web** | Supabase Cloud | Vercel, otomatis dari branch `main` |
-| **Offline** | Supabase lokal di Docker, per laptop | `npm run offline` (lihat **[OFFLINE.md](OFFLINE.md)**) |
-
-Di mode offline, data dibagikan antar-laptop lewat repo GitHub **private** terpisah (`PCBs-Inventory-Data`), bukan lewat repo kode ini. Saat ini data terbaru ada di mode offline. Data di versi web akan diselaraskan kembali saat pindah ke Supabase Pro.
+| Bagian | Teknologi |
+|---|---|
+| Aplikasi | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4, ikon lucide-react |
+| Grafik & peta | Recharts 3, Leaflet 1.9 (peta dasar Esri: abu-abu terang dan satelit) |
+| Baca Excel | SheetJS (`xlsx`) |
+| Database & login | Supabase: PostgreSQL 17, Auth, Storage, Row Level Security, fungsi RPC untuk statistik |
+| Offline | Docker + Supabase CLI (Supabase lokal per laptop), script Node.js di `scripts/offline/` |
+| Web | Vercel + Supabase Cloud, hanya berisi ringkasan |
+| Sinkronisasi data | Repo GitHub private `PCBs-Inventory-Data` (CSV per tabel) |
 
 ---
 
-## Daftar Isi
+## Cara kerja: offline dan web
 
-1. [Latar Belakang](#latar-belakang)
-2. [Fitur](#fitur)
-3. [Tech Stack](#tech-stack)
-4. [Memulai](#memulai)
-5. [Alur Impor Data](#alur-impor-data)
-6. [Impor Massal & Impor Ulang](#impor-massal--impor-ulang)
-7. [Deploy ke Vercel](#deploy-ke-vercel)
-8. [Pengujian](#pengujian)
-9. [Skema Database](#skema-database)
-10. [Struktur Direktori](#struktur-direktori)
-11. [Roadmap](#roadmap)
+Satu kode yang sama berjalan di dua tempat.
 
----
+```text
+Laptop (offline, data lengkap)                         Web (Vercel, hanya ringkasan)
+┌──────────────────────────────┐   npm run data:push   ┌──────────────────────────────┐
+│ Supabase lokal di Docker     │──► repo data private  │ Supabase Cloud               │
+│ unggah, periksa, edit, tabel │──► ringkasan (±5 MB) ─►│ dashboard, tonase, peta      │
+└──────────────────────────────┘                       └──────────────────────────────┘
+```
 
-## Latar Belakang
-
-PCBs adalah senyawa B3 dan *Persistent Organic Pollutant* (POP) yang diatur dalam **Konvensi Stockholm** dan regulasi KLHK. Inventarisasinya mengikuti empat formulir resmi KLHK:
-
-| No | Formulir | Tabel |
+| | **Offline** | **Web** |
 |---|---|---|
-| 1.1 | Transformator yang masih digunakan | `transformator_digunakan` |
-| 1.2 | Transformator yang sudah tidak digunakan | `transformator_tidak_digunakan` |
-| 1.3 | Kapasitor | `kapasitor` |
-| 1.4 | Minyak dielektrik | `minyak_dielektrik` |
+| Untuk | Admin yang mengolah data | Pimpinan yang memantau hasil |
+| Isi database | Semua baris data (±356 ribu) | Ringkasan saja: angka, sel peta, jumlah merek |
+| Fitur | Semua | Dashboard, tonase, peta, daftar Lampiran I/II. Tanpa tabel, unggah, edit |
+| Cara menjalankan | `npm run offline`, lihat **[OFFLINE.md](OFFLINE.md)** | https://pcbs-inventory-system.vercel.app |
 
-Tantangan utamanya adalah laporan dari tiap perusahaan **tidak seragam**. Urutan dan nama kolomnya berbeda, ada judul bertingkat di atas tabel, satu workbook bisa berisi banyak sheet, dan datanya besar (PLN lebih dari 350 ribu baris). Laporan dari lapangan juga sering memuat data yang ditempel dua kali atau sisa tempelan di bawah formulir. Aplikasi ini dirancang untuk menangani semua kondisi itu.
+Keduanya wajib login. Akun dibuat oleh admin, dan pendaftaran dari halaman login ditutup. Web diperbarui otomatis setiap `npm run data:push` dari laptop admin (lihat [Memperbarui web](#memperbarui-web)).
 
 ---
 
 ## Fitur
 
-### Unggah & Impor
+### Dashboard nasional
 
-| Fitur | Keterangan |
+| Bagian | Isi |
 |---|---|
-| Unggah workbook multi-sheet | Berkas hingga 50 MB diunggah langsung dari browser ke Supabase Storage, sehingga tidak terkena batas ukuran request server. |
-| Deteksi format otomatis | Setiap sheet dipindai, baris header ditemukan meskipun ada judul bertingkat, lalu dikenali sebagai **Template KLHK** atau **Format PLN** beserta kategorinya. Template KLHK tetap dikenali walau kolom koordinat dihapus, kategori diambil dari nama sheet bila header tidak cukup, sheet bernama "Sheet1" tetap dibaca, dan akhiran "(2)" hanya dianggap salinan bila sheet aslinya ada. Sheet yang header-nya tersalin ke ribuan kolom tetap diproses dalam hitungan detik. |
-| Perusahaan baru tanpa dobel | Mengunggah beberapa berkas untuk perusahaan baru memakai perusahaan yang sama: nama yang sudah ada (tanpa membedakan huruf besar/kecil) dipakai ulang. |
-| Pemetaan kolom | Kolom dipetakan otomatis sesuai profil format. Admin cukup mengonfirmasi, atau memetakan manual bila perlu. |
-| Pemeriksaan sebelum impor | Menampilkan koordinat tidak terbaca, angka atau tanggal tidak valid, field penting yang kosong, dan duplikat. Setiap temuan disertai nomor baris Excel dan contoh nilainya. |
-| Cek duplikat di database | Setiap baris punya *fingerprint* (kolom terindeks) dari unit, sub-unit, kode alat, No, merek, seri, tahun, daya, volume, koordinat, dan lokasi. Baris yang sudah tersimpan untuk perusahaan yang sama dikenali dalam satu query per 2.000 baris, tanpa mengunduh seluruh data. |
-| Ganti data unggahan sebelumnya | Berkas revisi dapat menggantikan seluruh baris dari unggahan lama (disarankan otomatis bila nama berkas dan sheet sama) dalam satu transaksi. Unggahan lama tetap tercatat di riwayat sebagai "diganti". |
-| Progres bertahap | Unggah (MB terkirim), pindai (per sheet), pemeriksaan, dan impor (per baris) menampilkan langkah yang berjalan, durasinya, dan perkiraan sisa waktu. |
-| Berat transformator | Berat kering peralatan, berat minyak/cairan, dan berat total (kg) dari formulir PLN disimpan. Nilai 0 dianggap kosong, nilai di atas 1.000 ton dikosongkan, total yang tertulis dalam ton dikoreksi, dan total yang kosong dihitung dari kering + minyak. |
-| Perbaikan koordinat | Membaca format DMS, desimal koma, dan urutan lintang-bujur yang tertukar. Pola rusak yang umum (titik desimal hilang, lintang dan bujur tergabung) diperbaiki bila hasilnya jatuh di wilayah Indonesia. |
-| Penyaringan baris | Baris formulir kosong, baris CONTOH dari template PLN, sisa tempelan di luar formulir (tanpa Unit Induk, Unit Pelaksana, dan No), serta baris yang ditempel dua kali dilewati. Semuanya dicatat di laporan pemeriksaan. |
-| Pembersihan sel | Karakter kontrol tak terlihat (misalnya NUL dari ekspor sistem lain) dibuang dari setiap sel sebelum diproses. |
-| Normalisasi unit | Penulisan Unit Induk PLN yang beragam (`UIWRKR`, `UIW RKR`, `WRKR`, ...) dipetakan ke 28 nama baku. Awalan perusahaan pada sub-unit ("PLN UP3 Ketapang") dibuang. |
-| Riwayat unggah | Setiap impor menyimpan laporan pemeriksaannya, sehingga bisa ditinjau kembali di `/upload/riwayat`. |
+| Filter | Perusahaan › Unit Induk › Unit Pelaksana. Pemilih perusahaan bisa dicari dan berlaku untuk seluruh halaman. |
+| Ringkasan | Total transformator, kapasitor, dan minyak dielektrik. Di bawahnya satu kolom per jenis trafo (digunakan dan tidak digunakan, masing-masing dengan latar warnanya): tahun produksi, lalu Status PCBs (< 2, 2–50, > 50 ppm, belum diuji) dengan tombol **< 1997 / Semua**. |
+| Tonase transformator | Tombol **< 1997 / Semua**. Total tonase, lalu grafik kolom per kadar PCBs (> 50 ppm, ≤ 50 ppm, belum diuji) untuk tiap jenis trafo, dan baris terpisah untuk trafo yang tahun pembuatannya kosong. Skala logaritmik agar angka kecil tetap terlihat. |
+| Tabel data | Semua kolom, pencarian, filter, edit dan hapus. Baris dimuat 50 per langkah saat tabel di-scroll. *(offline)* |
+| Peta sebaran | Filter kategori, perusahaan, Status PCBs, dan tahun. Titik dikelompokkan per wilayah (lingkaran berangka dengan cincin warna per status), lalu tampil satuan saat diperbesar. Warna per Status PCBs atau kategori, pilihan peta atau satelit, dan layar penuh. |
 
-### Dashboard & Analisis
+Hampir semua angka bisa diklik untuk membuka datanya di tabel *(offline)*.
 
-| Fitur | Keterangan |
+### Halaman per kategori
+
+Trafo digunakan, trafo tidak digunakan, kapasitor, dan minyak dielektrik, masing-masing dengan kartu angka, grafik, tabel, dan peta.
+
+- **Kapasitor:** daftar 72 nama dagang kapasitor yang mengandung PCBs (**Lampiran II** Permen LHK No. P.29/2020), dicocokkan dengan merek dan tahun di data: *berpotensi PCBs*, *perlu dicek* (tahun kosong), atau *di luar batas tahun*.
+- **Semua kategori:** daftar 110 nama dagang minyak dielektrik yang mengandung PCBs (**Lampiran I**), dicocokkan dengan merek minyak di data. Tulisan seperti "non pcb oil" tidak dihitung.
+
+### Impor data *(offline)*
+
+| Langkah | Keterangan |
 |---|---|
-| Dashboard nasional & per kategori | Statistik dibaca dari tabel ringkasan yang diperbarui otomatis oleh trigger setiap ada impor, edit, atau hapus, jadi tetap cepat dan akurat untuk ratusan ribu baris. Jumlah baris tabel dan titik peta di atas 1.000 ditampilkan sebagai perkiraan. |
-| Filter bertingkat | Filter Perusahaan › Unit Induk › Unit Pelaksana berlaku untuk kartu ringkasan, grafik, peta, dan tabel sekaligus. Pilihan perusahaan bisa dicari, menampilkan jumlah perusahaan, dan memberi titik warna status pengiriman hasil pemeriksaan (belum dikirim, sudah dikirim, ada data baru, kosong) beserta filter per status. |
-| Hasil pemeriksaan per perusahaan | Muncul saat satu perusahaan dipilih: temuan dari semua impornya per berkas, ditulis sebagai permintaan perbaikan untuk perusahaan (kolom, jumlah baris, dan nomor baris Excel). **Salin pesan** menyalin email siap kirim, dan **Tandai sudah dikirim** mencatat tanggal, akun, dan jumlah temuan saat itu (bisa dibatalkan). Bila perusahaan mengirim data lagi setelah pesan terakhir, statusnya menjadi "Ada data baru". |
-| Kartu ringkasan | Per jenis trafo: bilah tahun produksi (< 1997, ≥ 1997, tidak diketahui) dan hasil uji PCBs. Kapasitor dan minyak dielektrik sebagai kartu kecil. Setiap baris membuka datanya di tabel. |
-| Tonase transformator | Total tonase dari berat total di formulir, tonase per jenis trafo, dan tonase trafo buatan sebelum 1997. |
-| Sebaran transformator | Dua grafik batang bertumpuk per kelas risiko PCBs, dalam jumlah unit atau tonase. Grafik pertama per perusahaan, Unit Induk, atau Unit Pelaksana (mengikuti filter, 12 terbesar dan sisanya digabung ke "Lainnya"). Grafik kedua per rentang lima tahun produksi, dengan batas 1997 ditandai. Klik nama untuk menelusuri, atau klik batang untuk membuka datanya di tabel. |
-| Proporsi risiko PCBs | Diagram donut keseluruhan, ditambah satu donut per jenis trafo (masih digunakan dan tidak digunakan) khusus tahun produksi sebelum 1997, per kelas: < 2 ppm, 2–50 ppm, > 50 ppm, dan belum diuji. Klik salah satu kelas untuk menyaring tabel ke rentang tersebut. |
-| Temuan PCBs | Khusus trafo buatan sebelum 1997, per jenis trafo: tingkat temuan ≥ 2 ppm dihitung dari yang sudah diuji (bukan dari semua trafo), dirinci 2–50 dan > 50 ppm. Setiap angka membuka datanya di tabel. Persentase yang sudah diuji tampil di tengah donut per jenis trafo. |
-| Hasil uji per metode | Khusus trafo buatan sebelum 1997: jumlah hasil **uji lab** dan **uji cepat**, masing-masing dirinci < 2, 2–50, dan > 50 ppm, per jenis trafo. Setiap baris membuka datanya di tabel (filter jenis uji, kelas ppm, dan tahun). |
-| Peta sebaran | Peta Leaflet dengan warna yang aman bagi buta warna. Klik titik untuk menampilkan semua data di koordinat itu di tabel. |
-| Tabel inventaris | Semua kolom tampil (termasuk koordinat, tahun, dan berat kering/minyak/total) dan tabel bisa digeser ke samping, dengan kolom merek dan aksi yang menempel. Kolom yang terkait filter aktif disorot. Tersedia paginasi server, pencarian, edit dan hapus per baris, filter lanjutan (jenis uji, tahun, daya, kelengkapan, batch impor), dan pengurutan. |
-| Kualitas data | Menyediakan skor kelengkapan, perbandingan per unit, dan laporan temuan (`/laporan/kualitas`) yang bisa diekspor ke Excel atau PDF. |
+| Unggah | Workbook multi-sheet hingga 50 MB langsung ke Storage. |
+| Deteksi format | Header dicari otomatis (termasuk judul bertingkat) dan dikenali sebagai Template KLHK atau format PLN beserta kategorinya. |
+| Pemetaan kolom | Otomatis sesuai format. Admin cukup mengonfirmasi. |
+| Pemeriksaan | Koordinat tidak terbaca, angka atau tanggal tidak valid, kolom penting kosong, dan duplikat, lengkap dengan nomor baris Excel. |
+| Impor | Baris yang sudah ada dilewati. Berkas revisi bisa **mengganti** unggahan lama dalam satu transaksi. |
+| Perbaikan otomatis | Koordinat DMS, koma desimal, dan lintang-bujur tertukar. Nama unit PLN diseragamkan. Berat trafo dalam ton dikoreksi. Baris contoh, kosong, dan tempelan ganda dilewati. |
 
-### Manajemen Perusahaan
+### Perusahaan & kualitas data *(offline)*
 
-| Fitur | Keterangan |
-|---|---|
-| Daftar & tambah perusahaan | Dikelola dari halaman `/companies`. Setiap perusahaan menampilkan isi datanya (jumlah baris dan berkas, atau "Kosong") serta status pengiriman hasil pemeriksaan dengan tanggal terakhir. Daftar bisa disaring: Semua, Belum dikirim, Ada data baru, Sudah dikirim, Kosong. |
-| Hapus perusahaan | Sebelum menghapus, ditampilkan data apa saja yang ikut terhapus. Penghapusan berjalan bertahap dengan indikator progres, termasuk berkas di Storage. |
-
----
-
-## Tech Stack
-
-| Lapisan | Teknologi |
-|---|---|
-| Frontend | [Next.js](https://nextjs.org) 16.3 (App Router, Turbopack), React 19.2, TypeScript 5, Tailwind CSS 4, lucide-react (ikon) |
-| Grafik & peta | Recharts 3, Leaflet 1.9 |
-| Pembacaan Excel | SheetJS (`xlsx`) |
-| Backend & database | [Supabase](https://supabase.com): PostgreSQL 17, Auth (login), Storage (berkas Excel), Row Level Security, fungsi RPC untuk statistik dashboard |
-| Mode web | Vercel (aplikasi) + Supabase Cloud (database) |
-| Mode offline | Docker + Supabase CLI (Supabase lokal), script Node.js di `scripts/offline/` |
-| Sinkronisasi data offline | Git: repo private `PCBs-Inventory-Data` berisi ekspor CSV per tabel |
-| Skrip impor massal | `tsx` (TypeScript di Node.js) di `scripts/` |
+- **Perusahaan:** isi data per perusahaan, hasil pemeriksaan siap dikirim lewat email, dan status pengiriman (belum dikirim, sudah dikirim, ada data baru, kosong).
+- **Kualitas data:** skor kelengkapan per perusahaan dan unit, plus laporan temuan yang bisa diekspor ke Excel atau PDF.
 
 ---
 
 ## Memulai
 
-### Prasyarat
+### Pengguna (mode offline)
 
-- Node.js 20 atau lebih baru
-- Proyek aktif di [Supabase](https://supabase.com)
+Ikuti **[OFFLINE.md](OFFLINE.md)**: pasang Docker dan Node.js, lalu jalankan `npm run offline`. Perintah ini menyalakan Supabase lokal, mengambil data terbaru, dan membuka aplikasi di http://localhost:3000.
 
-### Instalasi
+### Pengembang
 
 ```bash
 git clone https://github.com/aljuan14/PCBs-Inventory-System.git
 cd PCBs-Inventory-System
 npm install
+npm run offline -- --dev   # Supabase lokal + next dev
 ```
 
-### Variabel Lingkungan
+`.env.local` ditulis otomatis oleh `npm run offline`. Untuk memakai Supabase Cloud, salin `.env.example` menjadi `.env.local` lalu isi URL dan anon key dari **Supabase → Project Settings → API**.
 
-Salin `.env.example` menjadi `.env.local`, lalu isi dengan kredensial dari **Supabase → Project Settings → API**:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key-here
-
-# Wajib untuk skrip di scripts/ (impor massal, purge, isi ulang berat):
-# sejak login diwajibkan, anon key tidak bisa menulis. Rahasia: jangan beri
-# awalan NEXT_PUBLIC_ dan jangan dimasukkan ke Vercel.
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-URL tidak boleh diakhiri `/rest/v1/`. Jangan commit `.env.local`.
-
-Untuk mode offline, `.env.local` ditulis otomatis oleh `npm run offline` (salinan konfigurasi cloud disimpan sebagai `.env.cloud`).
-
-### Migrasi Database
-
-Jalankan semua berkas di `supabase/migrations/` **secara berurutan** lewat SQL Editor Supabase, atau dengan `supabase db push`. Setelah itu jalankan `supabase/seed.sql`. Mode offline menjalankan migrasi dan seed otomatis.
-
-| Migrasi | Isi |
+| Perintah | Fungsi |
 |---|---|
-| `20260922000001_initial_schema` | Skema awal |
-| `20260922000002_fix_schema_nullable` | Penyesuaian kolom nullable |
-| `20260923000001_split_inventory_tables` | Tabel per kategori formulir KLHK |
-| `20260923000002_official_field_constraints` | Batasan field resmi |
-| `20260926000001_relax_required_fields` | Melonggarkan field wajib untuk data riil |
-| `20260926000002_inventory_stats` | View `inventory_items` dan fungsi `inventory_stats` |
-| `20260927000001_upload_storage` | Bucket `pcbs-files` dan tabel `upload_sessions` |
-| `20260927000002_inventory_filters` | Indeks untuk filter tabel |
-| `20260928000001_units_and_asset_code` | Kolom `unit`, `sub_unit`, `kode_alat` dan fungsi `inventory_units` |
-| `20260928000002_stats_by_unit` | Statistik per unit untuk filter dashboard |
-| `20260928000003_data_quality` | Catatan impor per baris, laporan pemeriksaan, fungsi `inventory_quality` |
-| `20260928000004_dashboard_timeout` | Batas waktu query `anon` dan `authenticated` dinaikkan ke 15 detik |
-| `20260929000001_risk_bands` | Kelas risiko PCBs < 2, 2–50, > 50 ppm dan statistik trafo < 1997 |
-| `20260929000002_import_replace` | Cek duplikat di database (kolom `fingerprint`) dan mode ganti data unggahan sebelumnya |
-| `20260929000003_existing_rows_array` | Perbaikan cek duplikat: hasil tidak lagi terpotong di 1.000 baris per permintaan |
-| `20260929000004_transformer_weights` | Kolom berat kering, minyak, dan total (kg) pada tabel trafo, statistik tonase, fungsi `inventory_set_weights` |
-| `20260929000005_weight_parts` | Berat kering dan minyak dijumlahkan hanya dari trafo yang mencatat keduanya |
-| `20260929000006_dashboard_charts` | Fungsi `inventory_charts` untuk grafik sebaran trafo per unit dan per tahun produksi |
-| `20260929000007_stats_summary` | Tabel ringkasan `inventory_stats_parts` yang dijaga trigger, sehingga angka dashboard tidak lagi menghitung ulang seluruh baris (fungsi lama tetap ada sebagai `inventory_stats_scan`) |
-| `20260929000008_test_methods` | Jumlah hasil uji lab dan uji cepat per kelas ppm di tabel ringkasan, untuk kartu hasil uji per metode |
-| `20260929000009_units_from_summary` | Daftar unit dan sub-unit untuk filter dibaca dari tabel ringkasan, sehingga tidak lagi timeout |
-| `20260930000001_authenticated_only` | Semua tabel, bucket `pcbs-files`, dan fungsi RPC hanya untuk pengguna yang sudah login |
-| `20261001000001_company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
-
-### Menjalankan Aplikasi
-
-```bash
-npm run dev       # server pengembangan di http://localhost:3000
-npm run lint      # ESLint
-npm run build     # build produksi (termasuk pemeriksaan TypeScript)
-npm run offline   # mode offline: Supabase lokal, data terbaru, lalu aplikasi (lihat OFFLINE.md)
-```
+| `npm run dev` | Server pengembangan |
+| `npm run lint` | ESLint |
+| `npm run build` | Build produksi (termasuk pemeriksaan TypeScript) |
+| `npm run offline` | Mode offline lengkap |
+| `npm run data:push` / `data:pull` | Kirim / ambil data lewat repo private |
+| `npm run web:publish` | Kirim ringkasan ke web sekarang |
+| `npm run offline:user -- email password` | Buat akun atau ganti password (offline) |
 
 ---
 
-## Alur Impor Data
+## Memperbarui web
 
-```text
-1. Unggah workbook   ──►  2. Review sheet     ──►  3. Pemetaan kolom   ──►  4. Pemeriksaan   ──►  5. Impor
-   (/upload)              pilih sheet & kategori    (/upload/[batchId]/      temuan per baris       per 1.000 baris
-                          satu batch per sheet       mapping)                 & duplikat             ke tabel kategori
-```
+Web tidak menyimpan baris data. Isinya ringkasan yang dihitung di laptop admin, lalu dikirim ke Supabase Cloud.
 
-- Tidak ada berkas yang disimpan di disk server. Workbook disimpan di Supabase Storage, hasil pemindaian di `upload_sessions`, dan konteks pemetaan di `import_batches`, jadi alur ini berjalan di platform serverless.
-- Baris yang sudah ada di database dilewati secara default. Baris kembar di dalam berkas yang sama cukup diimpor sekali.
-- **Mode ganti:** berkas revisi dapat menggantikan unggahan sebelumnya. Baris baru disimpan dulu, lalu baris lama dihapus dan batch lamanya ditandai "diganti" dalam satu transaksi. Bila langkah itu gagal, baris baru dihapus lagi.
-- Bila impor gagal di tengah, baris dari batch tersebut dibatalkan.
-- Proses panjang mengirim progresnya secara bertahap (NDJSON) bila diminta browser (`Accept: application/x-ndjson`). Halaman lama yang belum dimuat ulang tetap menerima JSON biasa.
-- Unggahan yang tidak pernah dijadikan batch dihapus otomatis setelah 7 hari.
+1. **Sekali saja:** buat file `.env.web` (tidak ikut git) berisi connection string *Session pooler* dari Supabase:
+   ```
+   WEB_DATABASE_URL=postgresql://postgres.<ref>:<password>@<host>:5432/postgres
+   ```
+2. **Setiap ada data baru:** `npm run data:push`. Ringkasan ikut terkirim otomatis. Bisa juga dijalankan sendiri dengan `npm run web:publish`.
+3. **Pengaturan Vercel:** `NEXT_PUBLIC_DATA_MODE=summary` (sudah terpasang). Variabel ini menyembunyikan tabel, unggah, dan edit, dan halaman yang membutuhkan baris data ditutup.
 
-> **Catatan deploy:** workbook PLN terbesar (sekitar 12 MB) membutuhkan ratusan MB memori dan beberapa detik untuk diproses. Pastikan konfigurasi fungsi di Vercel mengizinkan durasi hingga 300 detik untuk impor.
+Detailnya ada di [OFFLINE.md](OFFLINE.md#khusus-admin-ringkasan-di-web).
 
 ---
 
-## Impor Massal & Impor Ulang
+## Database
 
-### Impor satu folder
-
-Untuk memuat banyak berkas milik satu perusahaan sekaligus:
-
-```bash
-# Dry run: hanya menampilkan apa yang akan diimpor
-npx tsx scripts/import-folder.ts "<folder>" --company "PT PLN (Persero)"
-
-# Uji dengan satu unit dulu
-npx tsx scripts/import-folder.ts "<folder>" --company "PT PLN (Persero)" --only Bali --commit
-
-# Impor semuanya, dengan laporan JSON
-npx tsx scripts/import-folder.ts "<folder>" --company "PT PLN (Persero)" --commit --report hasil-import.json
-```
-
-Langkah yang dipakai sama dengan unggah lewat web. Skrip ini aman dijalankan ulang, karena berkas yang identik dan baris yang sudah ada otomatis dilewati.
-
-### Mengisi ulang berat transformator
-
-Kolom berat ditambahkan setelah data PLN diimpor. Skrip ini mengisinya dari berkas asli tiap batch di Storage tanpa impor ulang. Hanya kolom berat yang diperbarui, dicocokkan lewat nomor baris Excel.
-
-```bash
-npx tsx scripts/backfill-weights.ts                # dry run
-npx tsx scripts/backfill-weights.ts --only Jabar   # batch yang nama berkasnya memuat teks tertentu
-npx tsx scripts/backfill-weights.ts --commit       # simpan
-```
-
-Batch yang barisnya tidak punya nomor baris Excel (diimpor sebelum migrasi `20260928000003`) perlu diunggah ulang dengan mode ganti.
-
-### Mengosongkan data perusahaan
-
-```bash
-npx tsx scripts/purge-company.ts --company "PT PLN (Persero)"            # dry run
-npx tsx scripts/purge-company.ts --company "PT PLN (Persero)" --commit   # hapus
-```
-
-Perintah ini menghapus baris inventaris, batch impor, berkas di Storage, dan sesi unggah. Data perusahaannya sendiri tetap ada.
-
----
-
-## Deploy ke Vercel
-
-Aplikasi berjalan di Vercel karena rute impor (`/api/import`) memproses sheet besar dalam satu request hingga 300 detik (`maxDuration`) sambil mengirim progres bertahap. Batas fungsi di Netlify terlalu pendek untuk itu.
-
-1. **Import repositori** di [vercel.com/new](https://vercel.com/new). Next.js terdeteksi otomatis, jadi pengaturan build tidak perlu diubah.
-2. **Isi Environment Variables** sesuai `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, dan `SUPABASE_ANON_KEY`. Jangan masukkan `SUPABASE_SERVICE_ROLE_KEY`, karena kunci itu hanya untuk skrip di komputer lokal.
-3. **Samakan region fungsi** (Settings → Functions) dengan region proyek Supabase, misalnya Singapore `sin1`, agar impor tidak lambat karena jarak ke database.
-4. **Deploy.** Setiap push ke `main` akan ter-deploy otomatis, dan branch lain mendapat URL preview.
-5. **Migrasi baru:** bila sebuah perubahan menambah berkas di `supabase/migrations/`, jalankan berkas itu di SQL Editor Supabase Cloud **sebelum** menggabungkannya ke `main`.
-
-Nilai `NEXT_PUBLIC_*` ditanam ke kode saat build. Setelah mengubahnya di Vercel, lakukan **Redeploy**. Bila dashboard online menampilkan galat 401 dari Supabase, periksa apakah anon key tersalin utuh (diawali `eyJ`).
-
-Workbook yang sangat besar (ratusan ribu baris) lebih aman diimpor dengan `scripts/import-folder.ts` dari komputer lokal, karena satu fungsi Vercel dibatasi memorinya.
-
----
-
-## Pengujian
-
-| Perintah | Menguji |
-|---|---|
-| `npx tsx scripts/test-dms.ts` | Parser koordinat, termasuk pola yang harus ditolak |
-| `npx tsx scripts/test-units.ts` | Normalisasi nama Unit Induk dan sub-unit PLN |
-| `npx tsx scripts/check-import.ts "<folder>"` | Dry run seluruh pipeline impor tanpa database: jumlah baris, temuan validasi, dan duplikat per sheet |
-
-**Data PLN terimpor (29 September 2026):** 28 berkas UID/UIT/UIP3B/UIW, dengan UID Jaya yang semula 17 berkas digabung menjadi satu. Isi database dicocokkan dengan hasil baca ulang semua berkas, per sheet dan per angka dashboard:
-- 320.966 trafo digunakan
-- 32.552 trafo tidak digunakan
-- 176 kapasitor
-- 103 data minyak dielektrik (29.029 L)
-- 230.391 ton berat trafo, dari 145.280 trafo yang beratnya tercatat
-
----
-
-## Skema Database
+Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menjalankannya otomatis. Di Supabase Cloud, jalankan lewat SQL Editor sebelum kodenya di-push.
 
 | Objek | Fungsi |
 |---|---|
-| `companies` | Profil perusahaan pemilik peralatan |
-| `upload_sessions` | Satu baris per workbook yang diunggah (lokasi berkas, hasil pindai, sidik SHA-256) |
-| `import_batches` | Satu baris per sheet yang diimpor, berisi status (`imported`, `replaced`, ...), konteks pemetaan, dan laporan pemeriksaan |
-| `transformator_digunakan`, `transformator_tidak_digunakan`, `kapasitor`, `minyak_dielektrik` | Data inventaris per formulir KLHK, termasuk unit, kode alat, catatan impor, nomor baris Excel, dan `fingerprint` per baris. Tabel trafo juga menyimpan berat kering, minyak, dan total (kg) |
-| `field_definitions` | Kamus field baku untuk pemetaan |
-| `inventory_stats_parts` | Tabel ringkasan statistik yang dijaga trigger, sumber angka dashboard dan isi data per perusahaan |
-| `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan: tanggal, akun, jumlah temuan dan baris saat itu |
-| `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta dashboard |
-| `inventory_stats()`, `inventory_units()`, `inventory_quality()` | Statistik dashboard (termasuk tonase), rekap per unit, dan skor kualitas data yang dihitung di server |
-| `inventory_existing_rows()`, `replace_import_batch()`, `inventory_set_weights()` | Cek duplikat per potongan baris, penggantian batch dalam satu transaksi, dan pengisian berat per batch |
-| Storage `pcbs-files` | Bucket privat untuk workbook yang diunggah |
+| `transformator_digunakan`, `transformator_tidak_digunakan`, `kapasitor`, `minyak_dielektrik` | Data inventaris per formulir KLHK (1.1–1.4) |
+| `companies`, `import_batches`, `upload_sessions` | Perusahaan, satu baris per sheet yang diimpor, satu baris per workbook yang diunggah |
+| `inventory_stats_parts` | Ringkasan statistik yang dijaga trigger, sumber semua angka dashboard |
+| `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta |
+| `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
+| `summary_map_cells`, `summary_brand_counts`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, waktu kirim |
+| RPC `inventory_stats`, `inventory_charts`, `inventory_units`, `inventory_quality` | Statistik, grafik, daftar unit, dan kualitas data |
+| RPC `map_clusters`, `oil_brand_counts`, `summary_build`, `summary_cells` | Peta per wilayah, merek minyak, serta pembuatan dan pembacaan ringkasan web |
+| Storage `pcbs-files` | Workbook yang diunggah (privat) |
+
+Semua tabel, fungsi, dan bucket hanya bisa diakses pengguna yang sudah login.
 
 ---
 
 ## Struktur Direktori
 
 ```text
-proxy.ts                 Wajib login untuk semua halaman dan API (Next.js 16: pengganti middleware)
-app/
-  login/                 Halaman login
-  api/upload/            Inisialisasi unggahan, pemindaian sheet, konfirmasi batch
-  api/mapping/[batchId]/ Info batch, saran pemetaan, pemeriksaan data
-  api/import/            Transformasi dan penyimpanan ke tabel kategori
-  dashboard/             Dashboard nasional dan per kategori
-  upload/                Unggah, pemetaan, dan riwayat unggah
-  laporan/kualitas/      Laporan kualitas data
-  companies/             Manajemen perusahaan
-components/              Dashboard, grafik, peta, tabel, filter, laporan kualitas
-lib/
-  excel.ts               Parser Excel dan pendeteksi header
-  import-profiles.ts     Profil format (KLHK, PLN), pemetaan otomatis, penyaringan baris
-  import-scan.ts         Pemindaian sheet (dipakai web dan skrip)
-  import-transform.ts    Transformasi, validasi, berat, deteksi duplikat, penyimpanan
-  progress.ts            Progres bertahap (NDJSON) untuk pindai, periksa, dan impor
-  timing.ts              Log durasi per langkah di server
-  units.ts               Normalisasi unit dan sub-unit
-  dms.ts                 Parser koordinat
-  company-purge.ts       Penghapusan data perusahaan
-  data-quality.ts        Perhitungan kualitas data
-  inventory-query.ts     Akses data dashboard: statistik, grafik, tabel, dan peta
-  company-feedback.ts    Temuan per perusahaan dan teks email hasil pemeriksaan
-  company-status.ts      Status pengiriman dan isi data per perusahaan
-scripts/                 Impor massal, isi ulang berat, purge, dry run, dan pengujian
-scripts/offline/         Mode offline: Supabase lokal, sinkronisasi data, akun (lihat OFFLINE.md)
-supabase/                Migrasi SQL, seed, dan config.toml untuk Supabase lokal
+app/                 Halaman: login, dashboard (nasional & per kategori), upload, companies,
+                     kualitas-data, laporan; API unggah, pemetaan, impor
+components/          Dashboard, tonase, peta, tabel, filter, daftar Lampiran I/II
+lib/                 Parser Excel, profil format, impor, kueri dashboard, daftar Lampiran,
+                     mode data (offline / ringkasan web)
+proxy.ts             Wajib login, dan menutup halaman berbasis baris di web
+scripts/             Impor massal satu folder, isi ulang berat, hapus data perusahaan, pengujian
+scripts/offline/     Mode offline, sinkronisasi data, kirim ringkasan ke web
+supabase/            Migrasi SQL, seed, konfigurasi Supabase lokal
 ```
 
-Data inventaris (`Data-inventaris/`), termasuk template formulir KLHK dan data riil perusahaan, tidak disimpan di repositori. Simpan secara lokal bila diperlukan untuk dry run.
+Data inventaris asli (`Data-inventaris/`) tidak disimpan di repositori.
 
 ---
 
 ## Roadmap
 
-**Selesai**
-- [x] Unggah multi-sheet dengan profil Template KLHK dan PLN
-- [x] Validasi, perbaikan koordinat, dan deteksi duplikat
-- [x] Penyaringan sisa tempelan dan data yang ditempel dua kali
-- [x] Statistik server untuk data besar
-- [x] Struktur unit (Unit Induk › Unit Pelaksana) dan filter bertingkat di dashboard
-- [x] Impor massal satu folder dan skrip purge
-- [x] Kualitas data: skor kelengkapan, laporan temuan (Excel/PDF), riwayat unggah
-- [x] Donut risiko, kartu cakupan uji, dan peta yang terhubung ke tabel
-- [x] Hapus perusahaan beserta seluruh datanya
-- [x] Kelas risiko < 2 / 2–50 / > 50 ppm dan fokus pada trafo buatan sebelum 1997
-- [x] Cek duplikat di database dan mode ganti data unggahan sebelumnya
-- [x] Progres bertahap untuk unggah, pindai, periksa, dan impor
-- [x] Berat trafo (kering, minyak, total) dan kartu tonase
-- [x] Grafik sebaran trafo per unit dan per tahun produksi (jumlah unit atau tonase)
-- [x] Tabel ringkasan berbasis trigger, sehingga dashboard tidak lagi timeout
-- [x] Deploy ke Vercel
-- [x] Kartu hasil uji per metode (uji lab vs uji cepat) untuk trafo < 1997 dan label kartu ringkasan yang lebih jelas
-- [x] Autentikasi (login) dan Row Level Security khusus pengguna terdaftar
-- [x] Mode offline: Supabase lokal di Docker dan sinkronisasi data antar-laptop lewat repo private
-- [x] Hasil pemeriksaan per perusahaan, email siap salin, dan riwayat pengiriman
-- [x] Pemilih perusahaan dengan pencarian dan status, serta rekap di halaman Perusahaan
+**Sudah**
+- [x] Impor multi-sheet (Template KLHK & PLN) dengan pemeriksaan, perbaikan koordinat, dan cek duplikat
+- [x] Dashboard berbasis ringkasan trigger untuk ratusan ribu baris
+- [x] Tonase transformator per kadar PCBs, < 1997 / semua
+- [x] Peta dengan filter dan pengelompokan per wilayah untuk semua titik
+- [x] Daftar Lampiran I & II Permen LHK 29/2020 yang dicocokkan dengan data
+- [x] Login, Row Level Security, mode offline, dan sinkronisasi antar-laptop
+- [x] Web hanya-ringkasan yang diperbarui dari laptop admin
 
 **Berikutnya**
-- [ ] Konverter PDF ke Excel (berbasis aturan) untuk laporan yang hanya dikirim sebagai PDF digital
-- [ ] Pindah data dari mode offline ke Supabase Cloud (kebalikan `data:from-cloud`) saat berlangganan Supabase Pro
+- [ ] Judul hasil uji ppm sesuai arahan pimpinan ("hasil pengujian minyak dielektrik")
+- [ ] Konverter PDF ke Excel untuk laporan yang hanya dikirim sebagai PDF
 - [ ] Uji mode offline di laptop Windows
-- [ ] Unggah banyak berkas sekaligus lewat web
-- [ ] Pembaruan per baris (berdasarkan kode alat) dan riwayat perubahan
-- [ ] Tampilan ponsel (sidebar yang bisa dilipat)
-- [ ] Peran admin/viewer
-- [ ] Histogram konsentrasi PCBs (ppm) dengan batas 2 dan 50 ppm
+- [ ] Tampilan ponsel dan peran admin/viewer
 - [ ] Tabel ringkasan untuk kualitas data (`inventory_quality` masih membaca seluruh baris)
-
----
-
-Dikembangkan untuk keperluan inventarisasi dan pengelolaan PCBs nasional.
