@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PCBs Inventory Dashboard | Prototipe Inventarisasi & Pengolahan",
+  title: "Sistem Inventarisasi PCBs | Direktorat B3",
   description: "Sistem Inventarisasi Polychlorinated Biphenyls (PCBs) dari berkas Excel multi-perusahaan dengan pemetaan kolom dan peta spasial GIS.",
 };
 
