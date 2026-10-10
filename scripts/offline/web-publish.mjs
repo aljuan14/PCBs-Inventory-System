@@ -39,9 +39,17 @@ export function webDatabaseUrl() {
   return value || null;
 }
 
-/** psql (or pg_dump) in the local DB container against the cloud, the URL passed by environment. */
-function cloud(url, command, { input, capture = true } = {}) {
-  return run('docker', ['exec', '-i', '-e', 'WEB_DATABASE_URL', DB_CONTAINER, 'sh', '-c', command], { env: { WEB_DATABASE_URL: url }, input, capture });
+let dbImage;
+
+/**
+ * psql (or pg_dump) against the cloud, the URL passed by environment. It runs
+ * in a throwaway container of the local DB image on the host network: the DB
+ * container itself has no DNS for internet names (its network resolves only
+ * the Supabase services).
+ */
+async function cloud(url, command, { input, capture = true } = {}) {
+  dbImage ??= (await run('docker', ['inspect', '-f', '{{.Config.Image}}', DB_CONTAINER], { capture: true })).stdout.trim();
+  return run('docker', ['run', '--rm', '-i', '--network', 'host', '-e', 'WEB_DATABASE_URL', '--entrypoint', 'sh', dbImage, '-c', command], { env: { WEB_DATABASE_URL: url }, input, capture });
 }
 
 /** A query on the cloud, rows split on "|". */
