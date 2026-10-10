@@ -6,8 +6,9 @@ import type { DivIcon, LayerGroup, Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { House, Loader2, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { INVENTORY_CATEGORIES, PCB_CLASSES, getCategoryColor, getCategoryLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
-import { DEFAULT_MAP_FILTERS, fetchMapCells, fetchMapPointsIn, type CategoryFilter, type DashboardScope, type MapBounds, type MapCell, type MapFilters } from '@/lib/inventory-query';
+import { DEFAULT_MAP_FILTERS, fetchMapCells, fetchMapPointsIn, fetchSummaryCells, type CategoryFilter, type DashboardScope, type MapBounds, type MapCell, type MapFilters } from '@/lib/inventory-query';
 import CompanyPicker from '@/components/CompanyPicker';
+import { SUMMARY_MODE } from '@/lib/data-mode';
 import type { CompanyOption } from '@/components/DataTable';
 
 export interface MapPoint {
@@ -49,6 +50,8 @@ const FIT_BOX = { south: -15, west: 90, north: 10, east: 145 };
 const POINT_LIMIT = 1500;
 // Grid cell of about 60 px at a zoom level.
 const cellSize = (zoom: number) => Math.min(5, Math.max(0.0005, 84 / 2 ** zoom));
+// Summary mode: the levels prepared by summary_build (migration 20261010000003).
+const summaryLevel = (zoom: number) => Math.min(11, Math.max(4, Math.round(zoom)));
 
 // Esri tiles need no API key (CARTO's now do and draw "API key required").
 // The light gray canvas comes as a base and a labels layer; tiles beyond
@@ -189,7 +192,8 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   );
   const companyNames = useMemo(() => new Map(companies.map((company) => [company.id, company.name])), [companies]);
   const hasPcb = filters.category !== 'kapasitor';
-  const hasYear = filters.category !== 'minyak_dielektrik';
+  // The web's summary has no production years.
+  const hasYear = filters.category !== 'minyak_dielektrik' && !SUMMARY_MODE;
 
   // Leaflet once; it is loaded in the browser only.
   useEffect(() => {
@@ -235,10 +239,13 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
     const bounds: MapBounds = [Math.max(-180, padded.getWest()), Math.max(-90, padded.getSouth()), Math.min(180, padded.getEast()), Math.min(90, padded.getNorth())];
     setLoading(true);
     try {
-      const cells = await fetchMapCells(supabase, filters, effectiveScope, bounds, cellSize(map.getZoom()));
+      const cells = SUMMARY_MODE
+        ? await fetchSummaryCells(supabase, filters, effectiveScope, bounds, summaryLevel(map.getZoom()))
+        : await fetchMapCells(supabase, filters, effectiveScope, bounds, cellSize(map.getZoom()));
       const total = cells.reduce((sum, cell) => sum + cell.total, 0);
       let next: Shown = { mode: 'cells', cells, total };
-      if (total <= POINT_LIMIT || map.getZoom() >= 16) {
+      // The web has the cells only, never the single points.
+      if (!SUMMARY_MODE && (total <= POINT_LIMIT || map.getZoom() >= 16)) {
         const rows = await fetchMapPointsIn(supabase, filters, effectiveScope, bounds, POINT_LIMIT);
         next = {
           mode: 'points',
@@ -284,7 +291,8 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
     const map = mapRef.current;
     if (!map) return;
     try {
-      const cells = await fetchMapCells(supabase, filters, effectiveScope, [FIT_BOX.west, FIT_BOX.south, FIT_BOX.east, FIT_BOX.north], 2);
+      const box: MapBounds = [FIT_BOX.west, FIT_BOX.south, FIT_BOX.east, FIT_BOX.north];
+      const cells = SUMMARY_MODE ? await fetchSummaryCells(supabase, filters, effectiveScope, box, 6) : await fetchMapCells(supabase, filters, effectiveScope, box, 2);
       if (!mapRef.current) return;
       if (cells.length === 0 || (!effectiveScope.companyId && filters.category === 'all')) map.fitBounds(INDONESIA);
       else {
@@ -435,10 +443,10 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
 
       <p className={`text-xs ${error ? 'text-rose-700' : 'text-slate-500'}`}>
         {error
-          ? `${error}. Pastikan migrasi 20261010000002_map_clusters sudah dijalankan.`
+          ? `${error}. Pastikan migrasi ${SUMMARY_MODE ? '20261010000003_web_summary' : '20261010000002_map_clusters'} sudah dijalankan.`
           : !shown ? 'Memuat peta…'
             : shown.mode === 'cells'
-              ? `${formatNumber(shown.total)} data berkoordinat di area ini, dikelompokkan per wilayah · perbesar peta untuk melihat titik satuan.`
+              ? `${formatNumber(shown.total)} data berkoordinat di area ini, dikelompokkan per wilayah${SUMMARY_MODE ? '' : ' · perbesar peta untuk melihat titik satuan'}.`
               : shown.points.length === 0
                 ? 'Tidak ada data berkoordinat di area ini untuk filter yang dipilih.'
                 : `Menampilkan ${formatNumber(shown.points.length)} titik di area ini${shown.truncated ? ' (dibatasi; perbesar peta untuk melihat semuanya)' : ''}${onSelectPoint ? ' · klik titik untuk melihat datanya di tabel' : ''}.`}

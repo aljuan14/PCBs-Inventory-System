@@ -81,6 +81,37 @@ Aturan agar data tidak saling menimpa:
   perubahan itu akan hilang. Gunakan `npm run data:pull -- --force` hanya kalau
   perubahan lokal memang boleh dibuang.
 
+## Khusus admin: ringkasan di web
+
+Web di Vercel hanya menampilkan **ringkasan** (angka dashboard, tonase, peta per
+wilayah, daftar Lampiran I/II), bukan baris data. Ringkasannya dikirim dari laptop
+admin ke Supabase Cloud, jadi baris data tetap hanya ada di laptop.
+
+Persiapan (sekali, di laptop admin saja):
+
+1. Jalankan migrasi `supabase/migrations/20261010000003_web_summary.sql` di SQL
+   Editor Supabase Cloud.
+2. Buat file `.env.web` di folder proyek (tidak ikut ke git) berisi connection
+   string "Session pooler" dari dashboard Supabase (tombol *Connect*):
+
+   ```
+   WEB_DATABASE_URL=postgresql://postgres.<ref>:<password>@<host>:5432/postgres
+   ```
+
+3. Kirim pertama kali. Data lama di cloud dicadangkan dulu ke
+   `Data-inventaris/backup-cloud/`, lalu dikosongkan:
+
+   ```bash
+   npm run web:publish -- --reset
+   ```
+
+4. Di Vercel (*Settings → Environment Variables*), tambahkan
+   `NEXT_PUBLIC_DATA_MODE` = `summary`, lalu *Redeploy*.
+
+Setelah itu ringkasan web ikut diperbarui setiap `npm run data:push` (termasuk
+saat aplikasi ditutup dengan Ctrl+C). Kalau gagal, data tetap terkirim ke repo;
+jalankan `npm run web:publish` lagi nanti.
+
 ## Akun login
 
 Akun ikut tersinkron bersama data, jadi sama di semua laptop.
@@ -99,6 +130,7 @@ Pendaftaran dari halaman login dimatikan, dan reset password lewat email tidak t
 | `npm run offline -- --dev` | seperti `offline`, tetapi pakai `next dev` (untuk pengembangan) |
 | `npm run data:push` | kirim perubahan data sekarang |
 | `npm run data:pull` | ambil data terbaru saja |
+| `npm run web:publish` | kirim ringkasan ke web sekarang (perlu `.env.web`) |
 | `npm run db:start` / `npm run db:stop` | nyalakan / matikan Supabase lokal |
 | `npm run data:from-cloud -- "<connection string>"` | salin data dari Supabase Cloud (sekali, saat pindah) |
 

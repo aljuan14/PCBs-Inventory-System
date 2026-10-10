@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { CircleAlert, CircleHelp, CircleCheck, FileText } from 'lucide-react';
 import { MATCH_STATUS_LABELS, PCB_CAPACITOR_BRANDS, matchCapacitor, type CapacitorMatchStatus } from '@/lib/pcb-capacitor-brands';
 import type { InventoryFilters } from '@/lib/inventory-query';
+import { SUMMARY_MODE } from '@/lib/data-mode';
 
 const PAGE = 1000;
 // The table filters these rows by id in the request URL; past this many ids
@@ -17,16 +18,28 @@ const STATUSES: Array<{ key: CapacitorMatchStatus; icon: typeof CircleAlert; bad
   { key: 'after', icon: CircleCheck, badge: 'border-slate-200 bg-slate-50 text-slate-600' },
 ];
 
-type Found = Record<CapacitorMatchStatus, string[]>;
-const emptyFound = (): Found => ({ potential: [], check: [], after: [] });
+/** Units per status, and their ids when the rows are at hand (not on the web). */
+type Hit = { n: number; ids: string[] };
+type Found = Record<CapacitorMatchStatus, Hit>;
+const emptyFound = (): Found => ({ potential: { n: 0, ids: [] }, check: { n: 0, ids: [] }, after: { n: 0, ids: [] } });
 
-/** Every capacitor's id, brand and production year, a page at a time. */
-async function fetchCapacitors(supabase: SupabaseClient) {
-  const rows: Array<{ id: string; nama_merek: string | null; tahun_pembuatan: number | null }> = [];
+type BrandRow = { id: string | null; brand: string | null; year: number | null; count: number };
+
+/**
+ * Every capacitor's id, brand and production year, a page at a time; on the
+ * web the units per brand and year from the summary (summary_brand_counts).
+ */
+async function fetchCapacitors(supabase: SupabaseClient): Promise<BrandRow[]> {
+  if (SUMMARY_MODE) {
+    const { data, error } = await supabase.from('summary_brand_counts').select('brand, year, total').eq('category', 'kapasitor').eq('field', 'nama_merek');
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => ({ id: null, brand: row.brand as string | null, year: row.year as number | null, count: Number(row.total) }));
+  }
+  const rows: BrandRow[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase.from('kapasitor').select('id, nama_merek, tahun_pembuatan').order('id').range(from, from + PAGE - 1);
     if (error) throw new Error(error.message);
-    rows.push(...(data ?? []));
+    rows.push(...(data ?? []).map((row) => ({ id: row.id as string, brand: row.nama_merek as string | null, year: row.tahun_pembuatan as number | null, count: 1 })));
     if (!data || data.length < PAGE) return rows;
   }
 }
@@ -50,10 +63,12 @@ export default function PcbCapacitorBrands({ supabase, reloadKey, onShowRows }: 
         const next = PCB_CAPACITOR_BRANDS.map(emptyFound);
         const names = PCB_CAPACITOR_BRANDS.map(() => new Set<string>());
         for (const row of rows) {
-          const match = matchCapacitor(row.nama_merek, row.tahun_pembuatan);
+          const match = matchCapacitor(row.brand, row.year);
           if (!match) continue;
-          next[match.index][match.status].push(row.id);
-          names[match.index].add(row.nama_merek!.trim());
+          const hit = next[match.index][match.status];
+          hit.n += row.count;
+          if (row.id) hit.ids.push(row.id);
+          names[match.index].add(row.brand!.trim());
         }
         setFound(next);
         setBrands(names);
@@ -65,22 +80,24 @@ export default function PcbCapacitorBrands({ supabase, reloadKey, onShowRows }: 
 
   const totals = useMemo(() => {
     const sum = emptyFound();
-    for (const entry of found ?? []) for (const { key } of STATUSES) sum[key].push(...entry[key]);
+    for (const entry of found ?? []) for (const { key } of STATUSES) { sum[key].n += entry[key].n; sum[key].ids.push(...entry[key].ids); }
     return sum;
   }, [found]);
-  const matchedBrands = (found ?? []).filter((entry) => STATUSES.some(({ key }) => entry[key].length > 0)).length;
+  const matchedBrands = (found ?? []).filter((entry) => STATUSES.some(({ key }) => entry[key].n > 0)).length;
 
   const show = (ids: string[], label: string) => onShowRows({ mapPoint: { ids, label } });
-  const countLink = (ids: string[], status: CapacitorMatchStatus, label: string, className: string) => {
+  // A count opens its rows when they are at hand and few enough for the URL.
+  const linkable = (hit: Hit) => !SUMMARY_MODE && hit.n > 0 && hit.n <= MAX_LINK_IDS;
+  const countLink = (hit: Hit, status: CapacitorMatchStatus, label: string, className: string) => {
     const { icon: Icon } = STATUSES.find((entry) => entry.key === status)!;
-    const content = <><Icon className="h-3 w-3 shrink-0" />{ids.length.toLocaleString('id-ID')}</>;
-    return ids.length > 0 && ids.length <= MAX_LINK_IDS
-      ? <button type="button" onClick={() => show(ids, label)} title={`${MATCH_STATUS_LABELS[status]}: lihat datanya di tabel`} className={`${className} cursor-pointer hover:brightness-95 focus-visible:outline-2 focus-visible:outline-emerald-500`}>{content}</button>
+    const content = <><Icon className="h-3 w-3 shrink-0" />{hit.n.toLocaleString('id-ID')}</>;
+    return linkable(hit)
+      ? <button type="button" onClick={() => show(hit.ids, label)} title={`${MATCH_STATUS_LABELS[status]}: lihat datanya di tabel`} className={`${className} cursor-pointer hover:brightness-95 focus-visible:outline-2 focus-visible:outline-emerald-500`}>{content}</button>
       : <span title={MATCH_STATUS_LABELS[status]} className={className}>{content}</span>;
   };
 
   const rows = PCB_CAPACITOR_BRANDS.map((entry, index) => ({ entry, index, found: found?.[index] ?? emptyFound() }))
-    .filter((row) => !onlyFound || STATUSES.some(({ key }) => row.found[key].length > 0));
+    .filter((row) => !onlyFound || STATUSES.some(({ key }) => row.found[key].n > 0));
 
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
@@ -113,19 +130,19 @@ export default function PcbCapacitorBrands({ supabase, reloadKey, onShowRows }: 
         <>
           <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
             {STATUSES.map(({ key, icon: Icon, badge }) => {
-              const ids = totals[key];
-              const clickable = found !== null && ids.length > 0 && ids.length <= MAX_LINK_IDS;
+              const hit = totals[key];
+              const clickable = found !== null && linkable(hit);
               return (
                 <button
                   key={key}
                   type="button"
                   disabled={!clickable}
-                  onClick={() => show(ids, `Lampiran II: ${MATCH_STATUS_LABELS[key].toLowerCase()}`)}
+                  onClick={() => show(hit.ids, `Lampiran II: ${MATCH_STATUS_LABELS[key].toLowerCase()}`)}
                   className={`rounded-xl border px-4 py-3 text-left transition-colors enabled:cursor-pointer enabled:hover:brightness-95 focus-visible:outline-2 focus-visible:outline-emerald-500 ${badge}`}
                 >
                   <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"><Icon className="h-3.5 w-3.5" /> {MATCH_STATUS_LABELS[key]}</span>
                   <span className="mt-1 flex items-baseline gap-1.5">
-                    <span className="text-2xl font-semibold tracking-tight">{found ? ids.length.toLocaleString('id-ID') : '…'}</span>
+                    <span className="text-2xl font-semibold tracking-tight">{found ? hit.n.toLocaleString('id-ID') : '…'}</span>
                     <span className="text-sm opacity-80">unit</span>
                   </span>
                 </button>
@@ -145,7 +162,7 @@ export default function PcbCapacitorBrands({ supabase, reloadKey, onShowRows }: 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.map(({ entry, index, found: hits }) => {
-                  const any = STATUSES.some(({ key }) => hits[key].length > 0);
+                  const any = STATUSES.some(({ key }) => hits[key].n > 0);
                   return (
                     <tr key={index} className={any ? 'bg-amber-50/30' : ''}>
                       <td className="px-3 py-2.5 align-top tabular-nums text-slate-400">{index + 1}</td>
@@ -158,7 +175,7 @@ export default function PcbCapacitorBrands({ supabase, reloadKey, onShowRows }: 
                         {found === null ? <span className="text-slate-400">…</span> : !any ? <span className="text-slate-400">–</span> : (
                           <>
                             <div className="flex flex-wrap gap-1.5">
-                              {STATUSES.filter(({ key }) => hits[key].length > 0).map(({ key, badge }) =>
+                              {STATUSES.filter(({ key }) => hits[key].n > 0).map(({ key, badge }) =>
                                 <span key={key}>{countLink(hits[key], key, `Lampiran II: ${entry.name} · ${MATCH_STATUS_LABELS[key].toLowerCase()}`, `inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${badge}`)}</span>)}
                             </div>
                             <div className="mt-1 text-[11px] text-slate-400" title={[...brands[index]].join(', ')}>
@@ -175,7 +192,7 @@ export default function PcbCapacitorBrands({ supabase, reloadKey, onShowRows }: 
           </div>
           <p className="mt-3 text-[11px] text-slate-400">
             Dicocokkan dari kata pada nama merek, lalu tahun pembuatan dibandingkan dengan batas tahun di lampiran. Merek ABB tidak dicocokkan dengan BICC karena merek ABB baru ada sejak 1988.
-            Klik angka untuk melihat datanya di tabel (hingga {MAX_LINK_IDS} unit).
+            {!SUMMARY_MODE && `Klik angka untuk melihat datanya di tabel (hingga ${MAX_LINK_IDS} unit).`}
           </p>
         </>
       )}

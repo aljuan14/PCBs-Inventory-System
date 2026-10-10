@@ -6,6 +6,7 @@ import { CircleAlert, CircleDashed, FileText, Loader2 } from 'lucide-react';
 import type { InventoryCategory } from '@/lib/inventory';
 import { PCB_OIL_BRANDS, matchOil } from '@/lib/pcb-oil-brands';
 import type { InventoryFilters } from '@/lib/inventory-query';
+import { SUMMARY_MODE } from '@/lib/data-mode';
 
 // The table filters these rows by id in the request URL; past this many ids
 // the URL grows beyond what the API gateway accepts, so the count is not a link.
@@ -41,7 +42,11 @@ export default function PcbOilBrands({ supabase, category, reloadKey, onShowRows
 
   useEffect(() => {
     let cancelled = false;
-    supabase.rpc('oil_brand_counts', { p_table: category }).then(({ data, error: rpcError }) => {
+    // On the web the brands come from the summary, counted the same way.
+    const request = SUMMARY_MODE
+      ? supabase.from('summary_brand_counts').select('merek:brand, total').eq('category', category).eq('field', 'merek_minyak')
+      : supabase.rpc('oil_brand_counts', { p_table: category });
+    request.then(({ data, error: rpcError }) => {
       if (cancelled) return;
       if (rpcError) { setError(rpcError.message); return; }
       const next: Found = { counts: PCB_OIL_BRANDS.map(() => 0), brands: PCB_OIL_BRANDS.map(() => []), noBrand: 0 };
@@ -71,7 +76,7 @@ export default function PcbOilBrands({ supabase, category, reloadKey, onShowRows
   const allBrands = found ? found.brands.flat() : [];
   const matchedNames = found ? found.counts.filter((count) => count > 0).length : 0;
   const names = PCB_OIL_BRANDS.map((name, index) => ({ name, index, count: found?.counts[index] ?? 0 })).filter((entry) => !onlyFound || entry.count > 0);
-  const linkable = (count: number) => count > 0 && count <= MAX_LINK_IDS;
+  const linkable = (count: number) => !SUMMARY_MODE && count > 0 && count <= MAX_LINK_IDS;
 
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
@@ -99,7 +104,7 @@ export default function PcbOilBrands({ supabase, category, reloadKey, onShowRows
       </div>
 
       {error ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">Gagal mencocokkan merek minyak: {error}. Pastikan migrasi 20261010000001_oil_brand_counts sudah dijalankan.</p>
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">Gagal mencocokkan merek minyak: {error}. Pastikan migrasi {SUMMARY_MODE ? '20261010000003_web_summary' : '20261010000001_oil_brand_counts'} sudah dijalankan.</p>
       ) : (
         <>
           <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -151,7 +156,7 @@ export default function PcbOilBrands({ supabase, category, reloadKey, onShowRows
           )}
           <p className="mt-3 text-[11px] text-slate-400">
             Nama dagang dicocokkan sebagai kata utuh pada merek minyak. Tulisan yang menyatakan bebas PCBs (misalnya &quot;non pcb oil&quot;) tidak dihitung sebagai nama &quot;PCB&quot;.
-            Arahkan kursor ke nama yang ditemukan untuk melihat merek aslinya, dan klik angkanya untuk melihat datanya di tabel (hingga {MAX_LINK_IDS} {unit}).
+            Arahkan kursor ke nama yang ditemukan untuk melihat merek aslinya{SUMMARY_MODE ? '.' : `, dan klik angkanya untuk melihat datanya di tabel (hingga ${MAX_LINK_IDS} ${unit}).`}
           </p>
         </>
       )}

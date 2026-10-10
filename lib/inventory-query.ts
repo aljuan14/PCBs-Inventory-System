@@ -565,6 +565,24 @@ export async function fetchMapCells(supabase: SupabaseClient, filters: MapFilter
     Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)])) as unknown as MapCell);
 }
 
+/**
+ * Summary mode (the web): the cells of one zoom level (4-11) prepared by
+ * "npm run web:publish" (summary_cells, migration 20261010000003). Year is
+ * not part of the summary.
+ */
+export async function fetchSummaryCells(supabase: SupabaseClient, filters: MapFilters, scope: DashboardScope, bounds: MapBounds, level: number) {
+  const [west, south, east, north] = bounds;
+  const categories = filters.category === 'all' ? null : filters.category === 'transformator' ? TRAFO_CATEGORIES : [filters.category];
+  const { data, error } = await supabase.rpc('summary_cells', {
+    p_level: level, p_west: west, p_south: south, p_east: east, p_north: north,
+    p_categories: categories, p_company_id: scope.companyId,
+    p_pcb: filters.pcbRange === 'all' ? null : filters.pcbRange,
+  });
+  if (error) throw new Error(`Gagal memuat peta: ${error.message}`);
+  return ((data ?? []) as Array<Record<keyof MapCell, number | string | null>>).map((row) =>
+    Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value ?? 0)])) as unknown as MapCell);
+}
+
 const MAP_YEAR_FILTERS: Record<MapFilters['year'], Partial<InventoryFilters>> = {
   all: {},
   pre1997: PRE_1997_FILTER,

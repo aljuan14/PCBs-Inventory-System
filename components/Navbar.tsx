@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Building2, ClipboardCheck, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
+import { SUMMARY_MODE } from '@/lib/data-mode';
 
 const categoryIcons = {
   transformator_digunakan: Zap,
@@ -51,11 +52,14 @@ export default function Navbar() {
           const href = `/dashboard/${category.key.replaceAll('_', '-')}`;
           return <Link key={category.key} href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive(href) ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Icon className="h-4 w-4" /> {category.shortLabel}</Link>;
         })}
-        <div className="px-3 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Lainnya</div>
-        <Link href="/upload" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload') && !isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><UploadCloud className="h-4 w-4" /> Upload data</Link>
-        <Link href="/upload/riwayat" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><History className="h-4 w-4" /> Riwayat upload</Link>
-        <Link href="/companies" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/companies') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Building2 className="h-4 w-4" /> Perusahaan</Link>
-        <Link href="/kualitas-data" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/kualitas-data') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><ClipboardCheck className="h-4 w-4" /> Kualitas data</Link>
+        {/* Upload, riwayat, perusahaan dan kualitas data butuh baris data: tidak ada di web (mode ringkasan). */}
+        {!SUMMARY_MODE && <>
+          <div className="px-3 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Lainnya</div>
+          <Link href="/upload" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload') && !isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><UploadCloud className="h-4 w-4" /> Upload data</Link>
+          <Link href="/upload/riwayat" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><History className="h-4 w-4" /> Riwayat upload</Link>
+          <Link href="/companies" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/companies') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Building2 className="h-4 w-4" /> Perusahaan</Link>
+          <Link href="/kualitas-data" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/kualitas-data') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><ClipboardCheck className="h-4 w-4" /> Kualitas data</Link>
+        </>}
       </nav>
       <div className="mt-auto border-t border-slate-200 pt-4">
         <div className="flex items-center gap-2 px-2 text-xs text-slate-500">

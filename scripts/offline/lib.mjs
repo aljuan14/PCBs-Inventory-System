@@ -25,8 +25,11 @@ export const DB_CONTAINER = 'supabase_db_pcbs-inventory';
 const NETWORK = 'supabase_network_pcbs-inventory';
 const LOOPBACK_OPTION = 'com.docker.network.bridge.host_binding_ipv4';
 
-/** Filled by supabase/seed.sql, not by the sync. */
-const SKIP_TABLES = new Set(['public.field_definitions']);
+/**
+ * Not synced: field_definitions is filled by supabase/seed.sql, and the
+ * summary_* tables are rebuilt from the data (summary_build) for the web.
+ */
+const SKIP_TABLES = new Set(['public.field_definitions', 'public.summary_map_cells', 'public.summary_brand_counts', 'public.summary_meta']);
 /** Login accounts travel with the data so every laptop has the same users. */
 const AUTH_TABLES = ['auth.users', 'auth.identities'];
 /** Tables large enough to split per import batch. */
@@ -194,6 +197,12 @@ function psqlArgs(url) {
 export async function query(sql, { url } = {}) {
   const { stdout } = await run('docker', [...psqlArgs(url), '-A', '-t', '-F', '\t', '-c', sql], { capture: true });
   return stdout.split('\n').filter((line) => line !== '').map((line) => line.split('\t'));
+}
+
+/** The result of a SELECT on the local database as CSV, header included. */
+export async function copyOut(select) {
+  const { stdout } = await run('docker', [...PSQL, '-c', `COPY (${select}) TO STDOUT WITH (FORMAT csv, HEADER)`], { capture: true });
+  return stdout;
 }
 
 export async function ensureDatabase() {

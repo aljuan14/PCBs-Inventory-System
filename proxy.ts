@@ -1,9 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { ROW_ONLY_PATHS, SUMMARY_MODE } from '@/lib/data-mode';
 
 /**
  * Semua halaman dan API wajib login, kecuali /login.
  * Proxy juga memperbarui token sesi Supabase di cookie sebelum halaman dirender.
+ * Di mode ringkasan (web), halaman dan API yang butuh baris data ditutup.
  */
 export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -45,6 +47,15 @@ export async function proxy(request: NextRequest) {
     const loginUrl = new URL('/login', request.url);
     if (pathname !== '/') loginUrl.searchParams.set('next', pathname + search);
     return withCookies(NextResponse.redirect(loginUrl), response);
+  }
+
+  if (SUMMARY_MODE) {
+    if (pathname.startsWith('/api/')) {
+      return withCookies(NextResponse.json({ error: 'Web hanya menampilkan ringkasan; olah data di aplikasi offline.' }, { status: 403 }), response);
+    }
+    if (ROW_ONLY_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
+      return withCookies(NextResponse.redirect(new URL('/dashboard', request.url)), response);
+    }
   }
 
   return response;

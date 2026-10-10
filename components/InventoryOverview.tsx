@@ -9,7 +9,9 @@ import CompanyCheckCard from '@/components/CompanyCheckCard';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import InventorySummary from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
+import SummaryStamp from '@/components/SummaryStamp';
 import { useDashboardData } from '@/components/useDashboardData';
+import { SUMMARY_MODE } from '@/lib/data-mode';
 import { fetchCompanyStatuses, type CompanyStatus } from '@/lib/company-status';
 import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
 
@@ -34,6 +36,7 @@ export default function InventoryOverview() {
   const [statusKey, setStatusKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    if (SUMMARY_MODE) return;
     fetchCompanyStatuses(supabase).then((result) => { if (!cancelled) setStatuses(result); }, () => { if (!cancelled) setStatuses(null); });
     return () => { cancelled = true; };
   }, [supabase, reloadKey, statusKey]);
@@ -46,15 +49,17 @@ export default function InventoryOverview() {
     setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters, type }));
     tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  // The web has no table, so figures and map points open nothing there.
 
   return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8">
-    <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Ringkasan nasional</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Dashboard nasional</h1><p className="mt-2 text-sm text-slate-500">Ringkasan inventarisasi PCBs seluruh kategori{scopeLabel ? <> untuk <span className="font-semibold text-slate-700">{scopeLabel}</span></> : ''}.</p></div><div className="flex gap-2"><button type="button" onClick={reload} disabled={refreshing} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Segarkan</button><a href="/upload" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><UploadCloud className="h-4 w-4" /> Upload data</a></div></header>
+    <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Ringkasan nasional</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Dashboard nasional</h1><p className="mt-2 text-sm text-slate-500">Ringkasan inventarisasi PCBs seluruh kategori{scopeLabel ? <> untuk <span className="font-semibold text-slate-700">{scopeLabel}</span></> : ''}.</p></div><div className="flex gap-2"><button type="button" onClick={reload} disabled={refreshing} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Segarkan</button>{!SUMMARY_MODE && <a href="/upload" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><UploadCloud className="h-4 w-4" /> Upload data</a>}</div></header>
+    {SUMMARY_MODE && <SummaryStamp supabase={supabase} />}
     {error && <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" /> {error}</div>}
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} statuses={statuses} />
-    {scope.companyId && companyName && <CompanyCheckCard companyId={scope.companyId} companyName={companyName} reloadKey={reloadKey} onSendsChange={() => setStatusKey((key) => key + 1)} />}
-    <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
-    <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
-    <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
-    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-3 text-base font-semibold">Peta sebaran inventaris</h2><MapLeaflet supabase={supabase} companies={companies} scope={scope} onScopeChange={setScope} reloadKey={reloadKey} height="520px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
+    {!SUMMARY_MODE && scope.companyId && companyName && <CompanyCheckCard companyId={scope.companyId} companyName={companyName} reloadKey={reloadKey} onSendsChange={() => setStatusKey((key) => key + 1)} />}
+    <InventorySummary stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
+    <TonnageCard stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} />
+    {!SUMMARY_MODE && <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>}
+    <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-3 text-base font-semibold">Peta sebaran inventaris</h2><MapLeaflet supabase={supabase} companies={companies} scope={scope} onScopeChange={setScope} reloadKey={reloadKey} height="520px" onSelectPoint={SUMMARY_MODE ? undefined : (selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
 }

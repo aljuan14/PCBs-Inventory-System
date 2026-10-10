@@ -5,7 +5,8 @@
  * get it on their next start. Refuses when the repo has data this laptop has
  * not pulled yet, so nobody overwrites someone else's changes. When the data
  * changed, README.md and CHANGELOG.md in the data repo list the companies and
- * what changed (see data-report.mjs).
+ * what changed (see data-report.mjs). With WEB_DATABASE_URL set (.env.web),
+ * the dashboard summary then goes to the web too (see web-publish.mjs).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -16,6 +17,7 @@ import {
   git, log, main, readState, sameFingerprint, step, writeState,
 } from './lib.mjs';
 import { commitMessage, companySummary, diffSummary, prependChangelog, readPreviousSummary, writeReadme, writeSummary } from './data-report.mjs';
+import { publish, webDatabaseUrl } from './web-publish.mjs';
 
 export async function push() {
   await ensureDocker();
@@ -82,6 +84,18 @@ export async function push() {
   const { stdout } = await git(['rev-parse', 'HEAD'], { capture: true });
   writeState({ commit: stdout.trim(), fingerprint: current });
   log('Selesai: data terkirim. Laptop lain akan mendapatkannya saat aplikasi dijalankan.');
+  await publishToWeb();
+}
+
+/** Update the web's summary after a push; a failure there does not undo the push. */
+async function publishToWeb() {
+  if (!webDatabaseUrl()) return;
+  try {
+    await publish();
+  } catch (error) {
+    log(`\nData sudah terkirim ke repo, tetapi ringkasan web belum diperbarui: ${error.message}`);
+    log('Coba lagi nanti dengan "npm run web:publish".');
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

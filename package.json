@@ -12,6 +12,7 @@
     "data:pull": "node scripts/offline/data-pull.mjs",
     "data:push": "node scripts/offline/data-push.mjs",
     "data:from-cloud": "node scripts/offline/data-from-cloud.mjs",
+    "web:publish": "node scripts/offline/web-publish.mjs",
     "db:start": "node scripts/offline/db-start.mjs",
     "db:stop": "supabase stop"
   },
