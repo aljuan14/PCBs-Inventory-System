@@ -10,6 +10,7 @@ import DashboardCharts from '@/components/DashboardCharts';
 import DistributionCharts from '@/components/DistributionCharts';
 import MapNotice from '@/components/MapNotice';
 import PcbCapacitorBrands from '@/components/PcbCapacitorBrands';
+import PcbOilBrands from '@/components/PcbOilBrands';
 import { useDashboardData } from '@/components/useDashboardData';
 import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
 
@@ -76,6 +77,7 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
       />
     )}
     {category === 'kapasitor' && <PcbCapacitorBrands supabase={supabase} reloadKey={reloadKey} onShowRows={showRows} />}
+    {category === 'minyak_dielektrik' && <PcbOilBrands supabase={supabase} reloadKey={reloadKey} onShowRows={showRows} />}
     <div ref={tableRef} className="scroll-mt-6"><DataTable category={category} companies={companies} reloadKey={reloadKey} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta sebaran {config.shortLabel}</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="360px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
