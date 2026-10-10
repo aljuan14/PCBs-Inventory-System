@@ -1,8 +1,9 @@
 'use client';
 
-import { Fragment, useState, useEffect, useMemo } from 'react';
+import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import CompanyPicker from '@/components/CompanyPicker';
 import { PCB_CLASSES, getCategoryLabel, pcbClassLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
 import {
   DEFAULT_FILTERS,
@@ -69,6 +70,8 @@ interface DataTableProps {
   reloadKey?: number;
   /** Company and unit chosen by the dashboard's own filter; replaces the table's company and unit selectors. */
   scope?: DashboardScope;
+  /** With `scope`: the table's company picker changes the dashboard's scope, so both stay in step. */
+  onScopeChange?: (scope: DashboardScope) => void;
   /** Filters set from outside (e.g. the data quality panel), applied whenever `key` changes. */
   preset?: TablePreset;
   onEdit?: (item: InventoryItem, changes: EditableInventoryFields) => Promise<void> | void;
@@ -177,7 +180,11 @@ const formatCoordinate = (item: InventoryItem) =>
     ? `${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}`
     : null;
 
-const PAGE_SIZE = 10;
+// Rows fetched per step: the table starts with one step and loads the next
+// when its end scrolls into view (or "Muat lebih banyak" is clicked).
+const PAGE_SIZE = 50;
+// PostgREST returns at most this many rows per request.
+const MAX_ROWS = 1000;
 
 const SELECT_CLASS = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none';
 const FIELD_LABEL_CLASS = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500';
@@ -270,7 +277,7 @@ function NumberFilter({ value, onCommit, placeholder, label }: { value: number |
   );
 }
 
-export default function DataTable({ category, companies, reloadKey = 0, scope, preset, onEdit, onDelete }: DataTableProps) {
+export default function DataTable({ category, companies, reloadKey = 0, scope, onScopeChange, preset, onEdit, onDelete }: DataTableProps) {
   const supabase = useMemo(() => createClient(), []);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -281,6 +288,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [batches, setBatches] = useState<Awaited<ReturnType<typeof fetchImportedBatches>>>([]);
   const [units, setUnits] = useState<{ companyId: string; rows: UnitSummary[] } | null>(null);
+  /** Steps of PAGE_SIZE rows loaded so far; back to 1 when the filters change. */
   const [currentPage, setCurrentPage] = useState(1);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
@@ -296,6 +304,12 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
   const [totalItems, setTotalItems] = useState(0);
   const [totalEstimated, setTotalEstimated] = useState(false);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [loadedBase, setLoadedBase] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  // What the shown rows were fetched for, so the next step can be appended.
+  const loaded = useRef<{ baseKey: string; pages: number } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const companyNames = useMemo(() => new Map(companies.map((company) => [company.id, company.name])), [companies]);
@@ -428,19 +442,37 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
     filters.addedWithin !== 'all' ? { key: 'added', label: `Diinput ${ADDED_LABELS[filters.addedWithin].toLowerCase()}`, clear: () => updateFilter('addedWithin', 'all') } : null,
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
   const advancedCount = activeChips.filter((chip) => !['type', 'company', 'unit', 'subUnit', 'pcb', 'mapPoint', 'note'].includes(chip.key)).length;
-  const queryKey = `${JSON.stringify(query)}#${reloadKey}`;
+  const baseKey = `${JSON.stringify({ ...query, page: 0 })}#${reloadKey}`;
+  const queryKey = `${baseKey}|${currentPage}`;
   const loading = loadedKey !== queryKey;
+  // Dim the rows only when they are about to be replaced, not while more are appended.
+  const resetting = loading && loadedBase !== baseKey;
 
   useEffect(() => {
     let cancelled = false;
-    fetchInventoryPage(supabase, query)
-      .then(({ rows, total, estimated }) => {
+    // One more step for the same query is appended; anything else (new
+    // filters, or a reload after an edit) refetches every loaded row at once.
+    const append = loaded.current?.baseKey === baseKey && currentPage === loaded.current.pages + 1;
+    const wanted = append ? PAGE_SIZE : currentPage * PAGE_SIZE;
+    const request = append
+      ? fetchInventoryPage(supabase, { ...query, pageSize: PAGE_SIZE }).then((result) => [result])
+      : Promise.all(Array.from({ length: Math.ceil(wanted / MAX_ROWS) }, (_, index) =>
+        fetchInventoryPage(supabase, { ...query, page: index + 1, pageSize: Math.min(wanted, MAX_ROWS) })));
+    request
+      .then((results) => {
         if (cancelled) return;
-        setPaginatedItems(rows.map((row) => toInventoryItem(row, companyNames)));
-        setDetails({});
-        setTotalItems(total);
-        setTotalEstimated(estimated);
+        const rows = results.flatMap((result) => result.rows).slice(0, wanted).map((row) => toInventoryItem(row, companyNames));
+        const last = results[results.length - 1];
+        setPaginatedItems((prev) => (append ? [...prev, ...rows] : rows));
+        // New filters start the scrolled table from its first row again.
+        if (!append && currentPage === 1) scrollRef.current?.scrollTo({ top: 0 });
+        if (!append) setDetails({});
+        setTotalItems(last.total);
+        setTotalEstimated(last.estimated);
+        setHasMore(rows.length === wanted && last.rows.length > 0);
         setLoadError(null);
+        loaded.current = { baseKey, pages: currentPage };
+        setLoadedBase(baseKey);
       })
       .catch((err: Error) => {
         if (!cancelled) setLoadError(err.message);
@@ -449,7 +481,18 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
         if (!cancelled) setLoadedKey(queryKey);
       });
     return () => { cancelled = true; };
-  }, [supabase, query, queryKey, companyNames]);
+  }, [supabase, query, baseKey, queryKey, currentPage, companyNames]);
+
+  // Load the next step when the end of the table scrolls into view.
+  useEffect(() => {
+    const end = endRef.current;
+    if (!end || !hasMore || loading) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setCurrentPage((page) => page + 1);
+    }, { root: scrollRef.current, rootMargin: '200px' });
+    observer.observe(end);
+    return () => observer.disconnect();
+  }, [hasMore, loading]);
 
   const toggleDetails = async (item: InventoryItem) => {
     const next = expandedItemId === item.id ? null : item.id;
@@ -464,7 +507,6 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
     }
   };
 
-  const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
   const focus = focusColumns(appliedFilters);
   const focused = (column: FocusColumn) => focus.has(column);
   // Every column is shown and the table scrolls sideways; the import findings
@@ -529,11 +571,10 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
           </select>
         )}
 
-        {!scoped && (
-          <select aria-label="Perusahaan" value={filters.companyId ?? 'all'} onChange={(e) => selectCompany(e.target.value === 'all' ? null : e.target.value)} className={SELECT_CLASS}>
-            <option value="all">Semua perusahaan</option>
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+        {!scoped ? (
+          <CompanyPicker companies={companies} value={filters.companyId} onChange={selectCompany} allLabel="Semua perusahaan" className="w-64" />
+        ) : onScopeChange && (
+          <CompanyPicker companies={companies} value={scope.companyId} onChange={(companyId) => onScopeChange({ companyId, unit: null, subUnit: null })} allLabel="Semua perusahaan" className="w-64" />
         )}
 
         {/* Unit dan sub-unit perusahaan terpilih (PLN: Unit Induk › Unit Pelaksana) */}
@@ -679,10 +720,10 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
 
       {/* Table */}
       <p className="mb-2 text-[11px] text-slate-400">Geser tabel ke samping untuk melihat semua kolom.</p>
-      <div className={`relative overflow-x-auto rounded-xl border border-slate-200/80 ${loading ? 'opacity-60' : ''}`}>
-        {loading && <Loader2 className="absolute right-3 top-3 z-20 h-4 w-4 animate-spin text-slate-400" />}
+      <div ref={scrollRef} className={`relative max-h-[70vh] overflow-auto rounded-xl border border-slate-200/80 ${resetting ? 'opacity-60' : ''}`}>
+        {resetting && <Loader2 className="absolute right-3 top-3 z-30 h-4 w-4 animate-spin text-slate-400" />}
         <table className="w-full min-w-[1700px] text-left text-xs">
-          <thead className="border-b border-slate-200 bg-slate-50 font-bold text-slate-700">
+          <thead className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50 font-bold text-slate-700 shadow-[0_1px_0_0_var(--color-slate-200)]">
             <tr>
               <th className={`${th()} ${STICKY_NO} bg-slate-50`}>No.</th>
               <th className={`${th(focused('kode') ? 'kode' : 'merek')} ${STICKY_NAME} ${focused('kode') || focused('merek') ? '' : 'bg-slate-50'}`}>Merek / Seri</th>
@@ -837,30 +878,30 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, p
             )}
           </tbody>
         </table>
+        {/* Watched by the observer above: reaching it loads the next step. */}
+        <div ref={endRef} aria-hidden className="h-px" />
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-          <div className="text-xs text-slate-500 font-medium">
-            Halaman {currentPage.toLocaleString('id-ID')} dari {totalPages.toLocaleString('id-ID')}
+      {/* Load more */}
+      {paginatedItems.length > 0 && (
+        <div className="mt-4 flex flex-col items-center justify-between gap-2 border-t border-slate-100 pt-4 sm:flex-row">
+          <div className="text-xs font-medium text-slate-500">
+            Menampilkan {paginatedItems.length.toLocaleString('id-ID')} dari {totalEstimated ? 'sekitar ' : ''}{totalItems.toLocaleString('id-ID')} data
+            {hasMore && ' · scroll tabel ke bawah untuk memuat lebih banyak'}
           </div>
-          <div className="flex gap-2">
+          {hasMore ? (
             <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition-colors"
+              type="button"
+              onClick={() => setCurrentPage((page) => page + 1)}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:opacity-60"
             >
-              Sebelumnya
+              {loading && !resetting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {loading && !resetting ? 'Memuat…' : `Muat ${PAGE_SIZE} lagi`}
             </button>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition-colors"
-            >
-              Selanjutnya
-            </button>
-          </div>
+          ) : (
+            <span className="text-xs font-medium text-slate-400">Semua data sudah ditampilkan</span>
+          )}
         </div>
       )}
 

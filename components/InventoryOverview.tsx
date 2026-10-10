@@ -55,7 +55,7 @@ export default function InventoryOverview() {
     {scope.companyId && companyName && <CompanyCheckCard companyId={scope.companyId} companyName={companyName} reloadKey={reloadKey} onSendsChange={() => setStatusKey((key) => key + 1)} />}
     <InventorySummary stats={stats} loading={loading} onSelect={(filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={(filters, type) => showRows(filters, type)} />
-    <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
+    <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta gabungan sebaran inventaris</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="400px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
 }
