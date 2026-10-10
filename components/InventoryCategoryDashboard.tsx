@@ -9,6 +9,7 @@ import DataTable, { type EditableInventoryFields, type InventoryItem } from '@/c
 import DashboardCharts from '@/components/DashboardCharts';
 import DistributionCharts from '@/components/DistributionCharts';
 import MapNotice from '@/components/MapNotice';
+import PcbCapacitorBrands from '@/components/PcbCapacitorBrands';
 import { useDashboardData } from '@/components/useDashboardData';
 import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
 
@@ -64,7 +65,7 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
     </header>
     {error && <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800"><AlertCircle className="h-4 w-4" /> {error}</div>}
     <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Total data</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(total)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Sudah diuji</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(tested)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{PCB_CLASSES.moderate.label} ({PCB_CLASSES.moderate.range})</div><div className="mt-2 text-3xl font-semibold text-amber-700">{loading ? '...' : formatNumber(moderate)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{PCB_CLASSES.high.label} ({PCB_CLASSES.high.range})</div><div className="mt-2 text-3xl font-semibold text-rose-700">{loading ? '...' : formatNumber(high)}</div></div></section>
-    <DashboardCharts riskCounts={riskCounts} loading={loading} onSelectRisk={(pcbRange) => showRows({ pcbRange })} pre1997={pre1997} />
+    {riskCounts && <DashboardCharts riskCounts={riskCounts} loading={loading} onSelectRisk={(pcbRange) => showRows({ pcbRange })} pre1997={pre1997} />}
     {TRAFO_CATEGORIES.includes(category) && (
       <DistributionCharts
         scope={ALL_SCOPE}
@@ -74,6 +75,7 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
         onSelectYears={showRows}
       />
     )}
+    {category === 'kapasitor' && <PcbCapacitorBrands supabase={supabase} reloadKey={reloadKey} onShowRows={showRows} />}
     <div ref={tableRef} className="scroll-mt-6"><DataTable category={category} companies={companies} reloadKey={reloadKey} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-1 text-base font-semibold">Peta sebaran {config.shortLabel}</h2><MapNotice shown={points.length} total={pointTotal} /><MapLeaflet points={points} height="360px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
