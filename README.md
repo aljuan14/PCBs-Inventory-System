@@ -74,6 +74,7 @@ Trafo digunakan, trafo tidak digunakan, kapasitor, dan minyak dielektrik, masing
 ### Perusahaan & kualitas data *(offline)*
 
 - **Perusahaan:** isi data per perusahaan, hasil pemeriksaan siap dikirim lewat email, dan status pengiriman (belum dikirim, sudah dikirim, ada data baru, kosong).
+- **ID SIMPEL:** setiap perusahaan dihubungkan dengan datanya di PILAR. Kandidat disarankan dari kemiripan nama, nama yang cocok persis bisa dihubungkan sekaligus, sisanya dipilih admin atau dicari lewat nama, NPWP, NIB, atau ID SIMPEL.
 - **Kualitas data:** skor kelengkapan per perusahaan dan unit, plus laporan temuan yang bisa diekspor ke Excel atau PDF.
 
 ---
@@ -103,6 +104,7 @@ npm run offline -- --dev   # Supabase lokal + next dev
 | `npm run offline` | Mode offline lengkap |
 | `npm run data:push` / `data:pull` | Kirim / ambil data lewat repo private |
 | `npm run web:publish` | Kirim ringkasan ke web sekarang |
+| `npm run simpel:load` | Muat daftar perusahaan PILAR (CSV terbaru di `Data-inventaris/id_simpel/`) |
 | `npm run offline:user -- email password` | Buat akun atau ganti password (offline) |
 
 ---
@@ -133,6 +135,7 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | `inventory_stats_parts` | Ringkasan statistik yang dijaga trigger, sumber semua angka dashboard |
 | `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta |
 | `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
+| `simpel_companies` | Daftar perusahaan PILAR dengan ID SIMPEL; `companies.pilar_company_id` dan `companies.id_simpel` menyimpan pilihan admin |
 | `summary_map_cells`, `summary_brand_counts`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, waktu kirim |
 | RPC `inventory_stats`, `inventory_charts`, `inventory_units`, `inventory_quality` | Statistik, grafik, daftar unit, dan kualitas data |
 | RPC `map_clusters`, `oil_brand_counts`, `summary_build`, `summary_cells` | Peta per wilayah, merek minyak, serta pembuatan dan pembacaan ringkasan web |
