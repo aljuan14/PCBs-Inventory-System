@@ -5,11 +5,13 @@ import { INVENTORY_FIELDS, WEIGHT_FIELDS, suggestInventoryField, type InventoryC
  * fingerprint and brings a ready-made column mapping, so an admin only has to
  * confirm it instead of mapping every column by hand.
  */
-export type ImportProfile = 'template_klhk' | 'pln';
+// 'formulir': rows typed into the reporting form (app/formulir), not a file.
+export type ImportProfile = 'template_klhk' | 'pln' | 'formulir';
 
 export const IMPORT_PROFILE_LABELS: Record<ImportProfile, string> = {
   template_klhk: 'Template KLHK',
   pln: 'Format PLN',
+  formulir: 'Formulir web',
 };
 
 export const IGNORE = '__ignore__';

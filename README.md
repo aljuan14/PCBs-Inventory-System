@@ -60,6 +60,14 @@ Trafo digunakan, trafo tidak digunakan, kapasitor, dan minyak dielektrik, masing
 - **Kapasitor:** daftar 72 nama dagang kapasitor yang mengandung PCBs (**Lampiran II** Permen LHK No. P.29/2020), dicocokkan dengan merek dan tahun di data: *berpotensi PCBs*, *perlu dicek* (tahun kosong), atau *di luar batas tahun*.
 - **Semua kategori:** daftar 110 nama dagang minyak dielektrik yang mengandung PCBs (**Lampiran I**), dicocokkan dengan merek minyak di data. Tulisan seperti "non pcb oil" tidak dihitung.
 
+### Formulir pelaporan *(offline)*
+
+Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi formulir**.
+
+- **Pernyataan perusahaan:** tidak memiliki transformator, atau memiliki trafo buatan sebelum 1997 dan/atau 1997 ke atas. Untuk trafo 1997 ke atas cukup jumlah dan tonasenya.
+- **Formulir 1.1–1.4** sesuai template KLHK, dengan bagian dan urutan kolom yang sama. Isian wajib ditandai, pilihan berupa dropdown, dan koordinat langsung terbaca beserta tautan ke peta. Formulir 1.1/1.2 hanya untuk trafo buatan sebelum 1997 (atau tahunnya tidak diketahui).
+- Isian tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
+
 ### Impor data *(offline)*
 
 | Langkah | Keterangan |
@@ -135,6 +143,7 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | `inventory_stats_parts` | Ringkasan statistik yang dijaga trigger, sumber semua angka dashboard |
 | `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta |
 | `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
+| `company_statements` | Pernyataan perusahaan (riwayat; yang terbaru berlaku), termasuk jumlah dan tonase trafo 1997 ke atas |
 | `simpel_companies` | Daftar perusahaan PILAR dengan ID SIMPEL; `companies.pilar_company_id` dan `companies.id_simpel` menyimpan pilihan admin |
 | `summary_map_cells`, `summary_brand_counts`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, waktu kirim |
 | RPC `inventory_stats`, `inventory_charts`, `inventory_units`, `inventory_quality` | Statistik, grafik, daftar unit, dan kualitas data |
