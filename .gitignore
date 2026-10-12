@@ -55,4 +55,5 @@ next-env.d.ts
 /.offline-state.json
 
 # reports with company data (this repo is public)
+/laporan/
 /laporan-*.pdf
