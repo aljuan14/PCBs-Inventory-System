@@ -54,11 +54,12 @@ async function deleteAll(supabase: SupabaseClient, table: string, companyId: str
     if (error) throw new Error(`Gagal membaca ${table}: ${error.message}`);
     const ids = (data ?? []).map((row) => row.id as string);
     if (ids.length === 0) break;
-    const chunks: string[][] = [];
-    for (let i = 0; i < ids.length; i += DELETE_CHUNK) chunks.push(ids.slice(i, i + DELETE_CHUNK));
-    const results = await Promise.all(chunks.map((chunk) => supabase.from(table).delete().in('id', chunk)));
-    const failed = results.find((result) => result.error);
-    if (failed?.error) throw new Error(`Gagal menghapus ${table}: ${failed.error.message}`);
+    // One chunk at a time: every delete updates the same inventory_stats_parts
+    // rows through its trigger, so parallel deletes deadlock on them.
+    for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
+      const { error: deleteError } = await supabase.from(table).delete().in('id', ids.slice(i, i + DELETE_CHUNK));
+      if (deleteError) throw new Error(`Gagal menghapus ${table}: ${deleteError.message}`);
+    }
     deleted += ids.length;
     onProgress?.(table, deleted, total);
   }
