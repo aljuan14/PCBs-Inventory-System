@@ -105,10 +105,10 @@ export default function TemplateUpload({ supabase, companyId, kind, onImported }
 
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <FileSpreadsheet className="h-5 w-5 shrink-0 text-emerald-700" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <FileSpreadsheet className="hidden h-5 w-5 shrink-0 text-emerald-700 sm:block" />
         <p className="min-w-0 flex-1 text-xs text-slate-600">Sudah mengisi template Excel <span className="font-semibold text-slate-800">{TEMPLATE_TITLES[kind]}</span>? Unggah di sini, isinya diperiksa dan ditampilkan dulu sebelum disimpan.</p>
-        <label className={`flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+        <label className={`flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 ${busy ? 'pointer-events-none opacity-50' : ''}`}>
           {busy === 'read' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Unggah template
           <input type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) choose(file); }} />
         </label>

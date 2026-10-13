@@ -70,7 +70,7 @@ export type StatusMessage = { tone: StatusColor; text: string; admin?: boolean }
 
 export const STATUS_COLORS: Record<StatusColor, { label: string; dot: string; card: string; text: string }> = {
   red: { label: 'Perlu tindakan', dot: 'bg-rose-600', card: 'border-rose-200 bg-rose-50', text: 'text-rose-800' },
-  yellow: { label: 'Dalam rencana', dot: 'bg-amber-500', card: 'border-amber-200 bg-amber-50', text: 'text-amber-900' },
+  yellow: { label: 'Perlu perhatian', dot: 'bg-amber-500', card: 'border-amber-200 bg-amber-50', text: 'text-amber-900' },
   green: { label: 'Aman', dot: 'bg-emerald-600', card: 'border-emerald-200 bg-emerald-50', text: 'text-emerald-800' },
 };
 
