@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ArrowRight, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { ArrowRight, Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import FormEditor from '@/components/FormEditor';
 import { newId } from '@/components/InventoryFormPanel';
 import { parseDMSCoordinate } from '@/lib/dms';
@@ -126,7 +126,8 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
   const [logs, setLogs] = useState<{ key: number; rows: Log[] } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [step, setStep] = useState<'list' | 'pick' | 'edit'>('list');
-  const [editing, setEditing] = useState<{ entry: FormEntry; trafo: Trafo | null } | null>(null);
+  // logId: a stored log being revised; otherwise a new one.
+  const [editing, setEditing] = useState<{ entry: FormEntry; trafo: Trafo | null; logId?: string } | null>(null);
   const [updateTrafo, setUpdateTrafo] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +152,9 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
     setSaving(true);
     setError(null);
     const record = recordOf(entry, companyId, editing?.trafo?.id ?? null);
-    const { error: insertError } = await supabase.from('pengurangan_pcbs').insert(record);
+    const { error: insertError } = editing?.logId
+      ? await supabase.from('pengurangan_pcbs').update(record).eq('id', editing.logId)
+      : await supabase.from('pengurangan_pcbs').insert(record);
     if (insertError) {
       setSaving(false);
       return setError(`Gagal menyimpan log: ${insertError.message}`);
@@ -163,11 +166,25 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
       else updated = true;
     }
     setSaving(false);
-    setMessage(`Log perawatan tersimpan${updated ? ', dan data trafo diperbarui' : ''}.`);
+    setMessage(`Log perawatan ${editing?.logId ? 'diperbarui' : 'tersimpan'}${updated ? ', dan data trafo diperbarui' : ''}.`);
     setEditing(null);
     setStep('list');
     setReloadKey((value) => value + 1);
     onSaved();
+  };
+
+  // A stored log opens in the editor with all its columns; its transformer stays the one it was made for.
+  const edit = async (log: Log) => {
+    const { data } = await supabase.from('pengurangan_pcbs').select('*').eq('id', log.id).single();
+    if (!data) return;
+    const values = Object.fromEntries(REDUCTION_FIELDS.map((field) => [field.key, field.input === 'date' ? text(data[field.key]).slice(0, 10) : text(data[field.key])]));
+    const trafo = log.item_id ? ({ id: log.item_id, nama_merek: data.nama_merek, nomor_serial: data.nomor_serial } as Trafo) : null;
+    setEditing({ entry: { id: newId(), values, unknownYear: data.tahun_pembuatan === null }, trafo, logId: log.id });
+    // Revising the record does not rewrite the transformer unless asked.
+    setUpdateTrafo(false);
+    setError(null);
+    setMessage(null);
+    setStep('edit');
   };
 
   const remove = async (log: Log) => {
@@ -203,7 +220,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
           sections={REDUCTION_SECTIONS}
           initial={editing.entry}
           validate={(entry) => fieldErrors(REDUCTION_FIELDS, entry)}
-          title={editing.trafo ? `Log perawatan: ${editing.trafo.nama_merek ?? ''} ${editing.trafo.nomor_serial ?? ''}` : 'Log perawatan (trafo belum terdaftar)'}
+          title={`${editing.logId ? 'Ubah log' : 'Log perawatan'}${editing.trafo ? `: ${editing.trafo.nama_merek ?? ''} ${editing.trafo.nomor_serial ?? ''}` : ' (trafo belum terdaftar)'}`}
           saveLabel="Simpan log"
           saving={saving}
           onSave={save}
@@ -223,7 +240,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="w-full min-w-[680px] text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <tr><th className="px-3 py-2.5">Waktu</th><th className="px-3 py-2.5">Trafo</th><th className="px-3 py-2.5">Perawatan</th><th className="px-3 py-2.5">PCBs sebelum → sesudah</th><th className="px-3 py-2.5">Limbah B3</th><th className="w-10 px-3 py-2.5" /></tr>
+                <tr><th className="px-3 py-2.5">Waktu</th><th className="px-3 py-2.5">Trafo</th><th className="px-3 py-2.5">Perawatan</th><th className="px-3 py-2.5">PCBs sebelum → sesudah</th><th className="px-3 py-2.5">Limbah B3</th><th className="w-20 px-3 py-2.5" /></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.map((log) => (
@@ -233,7 +250,12 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
                     <td className="px-3 py-2.5 text-slate-700">{log.perawatan_jenis}</td>
                     <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-700">{ppm(log.uji_sebelum_ppm)} <ArrowRight className="inline h-3 w-3 text-slate-400" /> <span className={log.uji_sesudah_ppm !== null && log.uji_sesudah_ppm <= 50 ? 'font-semibold text-emerald-700' : log.uji_sesudah_ppm !== null ? 'font-semibold text-rose-700' : ''}>{ppm(log.uji_sesudah_ppm)}</span></td>
                     <td className="max-w-56 px-3 py-2.5 text-slate-600"><span className="line-clamp-2">{log.pengelolaan_limbah_b3 || '–'}</span></td>
-                    <td className="px-3 py-2.5"><button type="button" onClick={() => remove(log)} aria-label="Hapus log" className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" /></button></td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex justify-end gap-1">
+                        <button type="button" onClick={() => edit(log)} aria-label="Ubah log" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => remove(log)} aria-label="Hapus log" className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import EvidencePanel from '@/components/EvidencePanel';
+import StoredEntriesPanel from '@/components/StoredEntriesPanel';
 import FormEditor from '@/components/FormEditor';
 import { MAX_FORM_ROWS, entryErrors, formSpec, isTrafo, TRAFO_FOCUS_YEAR, type EntryCheck, type FormEntry } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
@@ -46,6 +47,8 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
   const spec = formSpec(category);
   const key = draftKey(companyId, category);
   // The parent keys this panel by company and form, so the draft is read once per pair.
+  // Bumped when entries are sent, so the stored list below loads them.
+  const [sentKey, setSentKey] = useState(0);
   const [entries, setEntries] = useState<FormEntry[]>(() => readDraft(key));
   const [editing, setEditing] = useState<FormEntry | null>(null);
   const [checks, setChecks] = useState<Map<string, EntryCheck>>(new Map());
@@ -76,6 +79,7 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
       if (body.saved) {
         update([]);
         setMessage({ tone: 'ok', text: `${body.savedRows} isian tersimpan ke database.` });
+        setSentKey((value) => value + 1);
         onSaved();
         return;
       }
@@ -172,6 +176,7 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
           </button>
         </div>
       )}
+      <StoredEntriesPanel companyId={companyId} category={category} refreshKey={sentKey} onChanged={onSaved} />
       <EvidencePanel companyId={companyId} category={category} />
     </div>
   );

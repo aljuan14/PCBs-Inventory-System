@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 import { buildCheckReport, insertBatchRows, transformRows } from '@/lib/import-transform';
-import { MAX_FORM_ROWS, entryErrors, entryRow, formFields, formSpec, type EntryCheck, type FormEntry } from '@/lib/form-fields';
+import { MAX_FORM_ROWS, entryErrors, entryRow, fieldErrors, formFields, formSpec, type EntryCheck, type FormEntry } from '@/lib/form-fields';
+import type { ImportNote } from '@/lib/import-transform';
 
 /**
  * Entries of the reporting form (app/formulir), checked like an Excel sheet
@@ -118,5 +119,62 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('Form submit error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Gagal memproses formulir.' }, { status: 500 });
+  }
+}
+
+/**
+ * A stored row revised on the form: checked like a new entry (but a
+ * transformer from 1997 on may stay, as older reports have them), every field
+ * of the form written, emptied ones included. The import notes of those
+ * fields are replaced by the new check's, so the data quality page follows
+ * the correction; notes on other columns stay.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const { category, id, entry } = await req.json() as { category: InventoryCategory; id: string; entry: FormEntry };
+    if (!isCategory(category) || !id || !entry?.values) return NextResponse.json({ error: 'Data yang diubah tidak lengkap.' }, { status: 400 });
+
+    const supabase = await createClient();
+    const { data: current, error: loadError } = await supabase.from(category).select('id, company_id, catatan_impor').eq('id', id).maybeSingle();
+    if (loadError) throw new Error(loadError.message);
+    if (!current) return NextResponse.json({ error: 'Data tidak ditemukan; mungkin sudah dihapus.' }, { status: 404 });
+
+    const fields = formFields(category);
+    const labels = new Map(fields.map((field) => [field.key, field.label]));
+    const errors = Object.entries(fieldErrors(fields, entry)).map(([key, message]) => `${labels.get(key)}: ${message}`);
+
+    const row = entryRow(category, entry);
+    const headers = Object.keys(row);
+    const mappings = Object.fromEntries(headers.map((key) => [key, key]));
+    const result = transformRows(category, { headers, allRows: [row], rowNumbers: [1] }, mappings, {}, { keepIssueRows: true });
+    for (const issue of result.issues.list()) if (issue.level === 'warning' && !issue.key.startsWith('missing:')) errors.push(issue.label);
+    const item = result.rows[0]?.item;
+    if (!item) errors.push('Isian kosong.');
+
+    // Another row of the company with the same brand and serial number.
+    const serial = String(row.nomor_serial ?? '').trim();
+    if (category !== 'minyak_dielektrik' && serial && !UNKNOWN.test(serial)) {
+      const { data: same } = await supabase.from(category).select('id, nama_merek').eq('company_id', current.company_id).eq('nomor_serial', serial).neq('id', id);
+      if ((same ?? []).some((other) => norm(other.nama_merek) === norm(row.nama_merek))) errors.push('Merek dan nomor serial ini sudah dipakai data lain milik perusahaan.');
+    }
+    if (errors.length || !item) return NextResponse.json({ errors }, { status: 422 });
+
+    const changes: Record<string, unknown> = {};
+    for (const field of fields) changes[field.key] = item[field.key] ?? null;
+    if ('koordinat_raw' in changes) {
+      changes.koordinat_lat = item.koordinat_lat ?? null;
+      changes.koordinat_lng = item.koordinat_lng ?? null;
+    }
+    const edited = new Set([...fields.map((field) => field.key), 'koordinat']);
+    const kept = ((current.catatan_impor ?? []) as ImportNote[]).filter((note) => !edited.has(note.kolom));
+    const fresh = (item.catatan_impor ?? []) as ImportNote[];
+    changes.catatan_impor = kept.length + fresh.length ? [...kept, ...fresh] : null;
+
+    const { error: updateError } = await supabase.from(category).update(changes).eq('id', id);
+    if (updateError) throw new Error(updateError.message);
+    return NextResponse.json({ saved: true });
+  } catch (err) {
+    console.error('Form edit error:', err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Gagal menyimpan perubahan.' }, { status: 500 });
   }
 }
