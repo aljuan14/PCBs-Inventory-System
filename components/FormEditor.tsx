@@ -117,7 +117,7 @@ export default function FormEditor({ sections, initial, validate, title, saveLab
   };
 
   return (
-    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-4">
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
         <button type="button" onClick={onCancel} aria-label="Tutup" className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-slate-600"><X className="h-4 w-4" /></button>
@@ -125,7 +125,7 @@ export default function FormEditor({ sections, initial, validate, title, saveLab
       <div className="space-y-3">
         {sections.map((section) => (
           <div key={section.title} className="rounded-xl border border-slate-200 bg-white">
-            <button type="button" onClick={() => setOpen((current) => ({ ...current, [section.title]: !current[section.title] }))} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
+            <button type="button" onClick={() => setOpen((current) => ({ ...current, [section.title]: !current[section.title] }))} className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left sm:px-4">
               <span>
                 <span className="block text-sm font-semibold text-slate-800">{section.title}</span>
                 {section.note && <span className="text-[11px] text-slate-500">{section.note}</span>}
@@ -133,7 +133,7 @@ export default function FormEditor({ sections, initial, validate, title, saveLab
               <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open[section.title] ? 'rotate-180' : ''}`} />
             </button>
             {open[section.title] && (
-              <div className="grid gap-3 border-t border-slate-100 px-4 py-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 border-t border-slate-100 p-3 sm:grid-cols-2 sm:p-4">
                 {section.fields.map((field) => (
                   <FieldInput key={field.key} field={field} entry={entry} error={errors[field.key]} onChange={(value) => set(field.key, value)}
                     onUnknownYear={(unknown) => setEntry((current) => ({ ...current, unknownYear: unknown, values: { ...current.values, [field.key]: unknown ? '' : current.values[field.key] ?? '' } }))} />

@@ -102,7 +102,7 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
       </div>
 
       {editing && (
-        <div className="space-y-3 border-b border-slate-200 p-4">
+        <div className="space-y-3 border-b border-slate-200 p-3 sm:p-4">
           {errors.length > 0 && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900">
               <p className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-4 w-4" /> Perubahan belum tersimpan:</p>

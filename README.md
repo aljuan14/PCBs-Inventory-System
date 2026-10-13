@@ -205,15 +205,20 @@ Data inventaris asli (`Data-inventaris/`) tidak disimpan di repositori.
 **Sudah**
 - [x] Impor multi-sheet (Template KLHK & PLN) dengan pemeriksaan, perbaikan koordinat, dan cek duplikat
 - [x] Dashboard berbasis ringkasan trigger untuk ratusan ribu baris
-- [x] Tonase transformator per kadar PCBs, < 1997 / semua
+- [x] Tonase transformator per kadar PCBs, < 1997 / ≥ 1997 / tanpa tahun, ditambah tonase dari pernyataan
 - [x] Peta dengan filter dan pengelompokan per wilayah untuk semua titik
 - [x] Daftar Lampiran I & II Permen LHK 29/2020 yang dicocokkan dengan data
 - [x] Login, Row Level Security, mode offline, dan sinkronisasi antar-laptop
 - [x] Web hanya-ringkasan yang diperbarui dari laptop admin
+- [x] ID SIMPEL: perusahaan dihubungkan dengan daftar PILAR
+- [x] Formulir web 1.1–1.4, 2, 3, 4.2, 5 dengan pernyataan, bukti dukung, pemilih titik di peta, revisi data tersimpan, dan unggah template
+- [x] Aturan unggah perusahaan (1 MB, tanpa gambar, .xlsx template KLHK)
+- [x] Status PCBs merah / kuning / hijau per perusahaan dan nasional (juga di web), roadmap uji dan penanganan
+- [x] Halaman laporan perusahaan `/lapor/<ID SIMPEL>`, peran admin / perusahaan dengan data terbatas per perusahaan, tampilan ponsel
+- [x] Uji skala PLN (±350 ribu baris): semua halaman di bawah 1 detik
 
 **Berikutnya**
-- [ ] Judul hasil uji ppm sesuai arahan pimpinan ("hasil pengujian minyak dielektrik")
-- [ ] Konverter PDF ke Excel untuk laporan yang hanya dikirim sebagai PDF
+- [ ] Login dari PILAR / SIMPEL (halaman `/masuk`), setelah cara dan kuncinya disepakati
+- [ ] Pindah ke server kantor: satu database lengkap online
+- [ ] Unggah ulang data PT PLN (Persero) yang sudah diperbaiki
 - [ ] Uji mode offline di laptop Windows
-- [ ] Tampilan ponsel dan peran admin/viewer
-- [ ] Tabel ringkasan untuk kualitas data (`inventory_quality` masih membaca seluruh baris)

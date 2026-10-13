@@ -34,7 +34,7 @@ function LaporContent() {
   const picked = list?.length === 1 ? list[0] : list?.find((company) => company.id === params.get('unit')) ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 lg:px-8">
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-5 sm:py-8 lg:px-8">
       <header className="flex flex-wrap items-center gap-4">
         <Image src="/logo-klh.jpg" alt="Logo Kementerian Lingkungan Hidup" width={44} height={44} loading="eager" className="h-11 w-11 shrink-0 rounded-full" />
         <div className="min-w-0 flex-1">

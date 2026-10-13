@@ -48,8 +48,17 @@ export default function CompanyReport({ supabase, companyId }: { supabase: Supab
       <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reload} onRoadmap={() => setCategory('roadmap')} />
       <CompanyStatementCard supabase={supabase} companyId={companyId} onSaved={onStatement} />
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
-            <div role="tablist" aria-label="Formulir" className="flex flex-wrap gap-1 rounded-xl bg-slate-200/60 p-1">
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">
+            {/* On a phone the eleven tabs take six rows: a dropdown instead. */}
+            <label className="block sm:hidden">
+              <span className="sr-only">Formulir</span>
+              <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-600">
+                {FORM_SPECS.map((spec) => <option key={spec.code} value={spec.category}>{spec.code} {spec.title}</option>)}
+                {OTHER_FORMS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                <option value="roadmap">Roadmap uji &amp; penanganan</option>
+              </select>
+            </label>
+            <div role="tablist" aria-label="Formulir" className="hidden flex-wrap gap-1 rounded-xl bg-slate-200/60 p-1 sm:flex">
               {FORM_SPECS.map((spec) => (
                 <button key={spec.code} type="button" role="tab" aria-selected={category === spec.category} onClick={() => setCategory(spec.category)}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${category === spec.category ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
