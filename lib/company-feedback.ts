@@ -68,6 +68,7 @@ export function describeIssue(category: InventoryCategory, issue: ValidationIssu
   if (issue.key === 'weight:implausible') return `Berat peralatan tidak wajar (lebih dari 1.000 ton) pada ${count} (${where}). Mohon pastikan satuannya kilogram.`;
   if (issue.key === 'weight:total_in_tons') return `Berat total tampaknya ditulis dalam ton pada ${count} (${where}). Mohon gunakan satuan kilogram.`;
   if (issue.key === 'weight:ton_in_kg') return `Kolom berat (ton) tampaknya diisi dalam kilogram pada ${count} (${where}). Mohon tuliskan beratnya dalam ton.`;
+  if (issue.key === 'weight:power_mismatch') return `Berat transformator tidak sesuai dengan dayanya (lebih dari 50 kg per kVA) pada ${count} (${where}). Mohon periksa satuan berat (ton atau kg) dan daya (kVA atau MVA).`;
   if (issue.key === 'weight:mismatch') return `Berat total tidak sama dengan berat kering ditambah berat minyak pada ${count} (${where}).`;
   // A finding added later without its own wording: fall back to the report label.
   return `${issue.label} pada ${count} (${where}).`;

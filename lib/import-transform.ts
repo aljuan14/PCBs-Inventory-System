@@ -322,6 +322,8 @@ const noteText = (value: unknown) => (value instanceof Date ? value.toISOString(
 // Heavier than the largest power transformers in the PLN data (about 400 t):
 // a spreadsheet error (UID Jabar reports oil weights in the billions of kg).
 const MAX_WEIGHT_KG = 1_000_000;
+// Large power transformers weigh about 1 kg per kVA, small distribution ones about 10.
+const MAX_KG_PER_KVA = 50;
 
 /**
  * Weights of a transformer row (kg): values over 1.000 t are cleared; a total
@@ -370,6 +372,11 @@ function checkWeights(
   }
   if (typeof item.berat_total_kg === 'number' && (item.berat_ton === null || item.berat_ton === undefined)) {
     item.berat_ton = Number((item.berat_total_kg / 1000).toFixed(4));
+  }
+  // Over 50 kg per kVA: the weight or the power is in the wrong unit (see migration 20261013000006). Flagged, not changed.
+  const weightKg = typeof item.berat_total_kg === 'number' ? item.berat_total_kg : typeof item.berat_ton === 'number' ? item.berat_ton * 1000 : null;
+  if (weightKg !== null && typeof item.daya_kva === 'number' && item.daya_kva > 0 && weightKg / item.daya_kva > MAX_KG_PER_KVA) {
+    found.push(['weight:power_mismatch', 'warning', 'Berat tidak sesuai daya (lebih dari 50 kg per kVA): periksa satuan berat (ton/kg) atau daya (kVA/MVA)', rowNumber, `${weightKg / 1000} t, ${item.daya_kva} kVA`]);
   }
 }
 

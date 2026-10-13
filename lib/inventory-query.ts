@@ -159,7 +159,8 @@ export type PcbRange = 'all' | 'safe' | 'moderate' | 'upto50' | 'high' | 'untest
 export type TestFilter = 'all' | 'lab' | 'cepat' | 'none';
 export type YearRange = 'all' | 'pre1985' | '1985_1996' | 'from1997' | 'unknown' | 'custom';
 export type CoordinateFilter = 'all' | 'with' | 'without' | 'empty' | 'unreadable' | 'fixed';
-export type MissingFilter = 'all' | 'serial' | 'name' | 'year' | 'location' | 'daya' | 'volume' | 'code' | 'cleared';
+// 'weightpower': not missing, but a weight that does not fit the power (migration 20261013000006).
+export type MissingFilter = 'all' | 'serial' | 'name' | 'year' | 'location' | 'daya' | 'volume' | 'code' | 'cleared' | 'weightpower';
 export type AddedWithin = 'all' | '1d' | '7d' | '30d';
 export type InventorySort = 'newest' | 'oldest' | 'ppm_desc' | 'year_asc' | 'year_desc' | 'daya_desc' | 'name_asc';
 
@@ -303,6 +304,7 @@ function applyFilters(request: InventoryRequest, category: CategoryFilter, filte
   else if (filters.missing === 'volume') request = request.is('volume_l', null).eq('category', 'minyak_dielektrik');
   else if (filters.missing === 'code') request = request.is('kode_alat', null);
   else if (filters.missing === 'cleared') request = request.contains('catatan_impor', noteMatch({ jenis: 'dikosongkan' }));
+  else if (filters.missing === 'weightpower') request = request.eq('berat_tidak_sesuai_daya', true);
 
   if (filters.addedWithin !== 'all') {
     request = request.gte('created_at', new Date(Date.now() - ADDED_WITHIN_DAYS[filters.addedWithin] * DAY_MS).toISOString());
@@ -439,6 +441,8 @@ export interface QualityFigures {
   equipment: number;
   transformers: number;
   oil: number;
+  /** Transformers over 50 kg per kVA (20261013000006). */
+  weight_power: number;
 }
 
 export interface QualityGroup extends QualityFigures {
@@ -456,7 +460,7 @@ export interface InventoryQuality {
 
 const EMPTY_QUALITY: QualityFigures = {
   total: 0, complete: 0, no_coordinates: 0, unreadable_coordinates: 0, fixed_coordinates: 0, cleared_values: 0, no_name: 0,
-  no_serial: 0, no_year: 0, no_daya: 0, no_volume: 0, no_code: 0, with_code: 0, equipment: 0, transformers: 0, oil: 0,
+  no_serial: 0, no_year: 0, no_daya: 0, no_volume: 0, no_code: 0, with_code: 0, equipment: 0, transformers: 0, oil: 0, weight_power: 0,
 };
 
 const toFigures = (raw: Record<string, unknown> | undefined): QualityFigures =>

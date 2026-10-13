@@ -210,6 +210,7 @@ const MISSING_LABELS: Record<InventoryFilters['missing'], string> = {
   volume: 'Tanpa volume minyak',
   code: 'Tanpa kode alat',
   cleared: 'Ada nilai dikosongkan saat impor',
+  weightpower: 'Berat tidak sesuai daya',
 };
 const NOTE_TONES: Record<ImportNoteRow['jenis'], string> = {
   diperbaiki: 'border-sky-200 bg-sky-50 text-sky-800',
