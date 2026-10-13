@@ -58,7 +58,27 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  return response;
+  // Peran akun (migrasi 20261013000011). Akun perusahaan hanya membuka laporannya sendiri
+  // (/lapor/<ID SIMPEL>) dan API formulir; akun tanpa peran tidak membuka apa pun.
+  // Batas datanya dijaga di database (RLS); ini hanya mengarahkan halaman.
+  const { data: access, error: accessError } = await supabase.rpc('my_access');
+  // Belum ada fungsinya (database web sebelum migrasi itu dijalankan): perilaku lama. Aman,
+  // karena pembatasan datanya datang dari migrasi yang sama.
+  if (accessError) return response;
+  const role = access as { peran: 'admin' | 'perusahaan'; id_simpel: string | null } | null;
+  if (role?.peran === 'admin') return response;
+  if (role?.peran === 'perusahaan' && role.id_simpel) {
+    const own = `/lapor/${encodeURIComponent(role.id_simpel)}`;
+    if (pathname === own || pathname === '/api/formulir') return response;
+    if (pathname.startsWith('/api/')) {
+      return withCookies(NextResponse.json({ error: 'Akun perusahaan tidak dapat mengakses fitur ini.' }, { status: 403 }), response);
+    }
+    return withCookies(NextResponse.redirect(new URL(own, request.url)), response);
+  }
+  if (pathname.startsWith('/api/')) {
+    return withCookies(NextResponse.json({ error: 'Akun ini belum diberi peran. Hubungi admin.' }, { status: 403 }), response);
+  }
+  return withCookies(new NextResponse('Akun ini belum diberi peran. Hubungi admin Direktorat Pengelolaan B3.', { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } }), response);
 }
 
 /** Bawa cookie sesi yang baru diperbarui ke response redirect / JSON. */

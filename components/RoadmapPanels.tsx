@@ -247,9 +247,9 @@ function FocusList({ supabase, companyId, reloadKey, onChange }: { supabase: Sup
 export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void }) {
   return (
     <div className="space-y-6">
-      <CompanyPlanForm key={companyId} supabase={supabase} companyId={companyId} onSaved={onChange} />
+      <CompanyPlanForm key={`plan-${companyId}`} supabase={supabase} companyId={companyId} onSaved={onChange} />
       <PlanList supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={onChange} />
-      <FocusList key={companyId} supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={onChange} />
+      <FocusList key={`focus-${companyId}`} supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={onChange} />
     </div>
   );
 }

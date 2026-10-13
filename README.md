@@ -134,7 +134,8 @@ npm run offline -- --dev   # Supabase lokal + next dev
 | `npm run data:push` / `data:pull` | Kirim / ambil data lewat repo private |
 | `npm run web:publish` | Kirim ringkasan ke web sekarang |
 | `npm run simpel:load` | Muat daftar perusahaan PILAR (CSV terbaru di `Data-inventaris/id_simpel/`) |
-| `npm run offline:user -- email password` | Buat akun atau ganti password (offline) |
+| `npm run offline:user -- email password` | Buat akun admin atau ganti password (offline) |
+| `npm run offline:user -- email password perusahaan <ID SIMPEL>` | Buat akun perusahaan: hanya melihat laporan perusahaan dengan ID SIMPEL itu |
 
 ---
 
@@ -164,6 +165,7 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | `inventory_stats_parts` | Ringkasan statistik yang dijaga trigger, sumber semua angka dashboard |
 | `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta |
 | `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
+| `user_access` | Peran setiap akun: admin, atau perusahaan dengan ID SIMPEL-nya |
 | `company_statements` | Pernyataan perusahaan (riwayat; yang terbaru berlaku), termasuk jumlah dan tonase trafo 1997 ke atas |
 | `pengurangan_pcbs` | Log perawatan pengurangan PCBs (formulir 2) |
 | `bukti_dukung` | Tautan bukti dukung formulir 1.1–1.4 per perusahaan (riwayat; yang terbaru berlaku) |
@@ -176,7 +178,7 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | RPC `map_clusters`, `oil_brand_counts`, `summary_build`, `summary_cells` | Peta per wilayah, merek minyak, serta pembuatan dan pembacaan ringkasan web |
 | Storage `pcbs-files` | Workbook yang diunggah (privat) |
 
-Semua tabel, fungsi, dan bucket hanya bisa diakses pengguna yang sudah login.
+Semua tabel, fungsi, dan bucket hanya bisa diakses pengguna yang sudah login, sesuai perannya (`user_access`): **admin** melihat semua; **perusahaan** hanya membaca dan mengubah baris perusahaan dengan ID SIMPEL-nya (dijaga Row Level Security di database) dan hanya membuka `/lapor/<ID SIMPEL>` miliknya. Akun tanpa peran tidak bisa membuka apa pun.
 
 ---
 
