@@ -6,6 +6,7 @@ import CompanyStatementCard, { type CompanyStatement } from '@/components/Compan
 import InventoryFormPanel from '@/components/InventoryFormPanel';
 import ReductionFormPanel from '@/components/ReductionFormPanel';
 import { ProcessingFormPanel, ReportingFormPanel, StorageFormPanel } from '@/components/WasteFormPanels';
+import TemplateUpload from '@/components/TemplateUpload';
 import type { CompanyOption } from '@/components/DataTable';
 import { FORM_SPECS } from '@/lib/form-fields';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
@@ -30,6 +31,8 @@ export default function FormulirPage() {
   // Stored units per form, tagged with their company so another company's counts never show.
   const [counts, setCounts] = useState<{ companyId: string; values: Partial<Record<InventoryCategory, number>> } | null>(null);
   const [reload, setReload] = useState(0);
+  // Bumped after an Excel template is stored, so the panels below load it.
+  const [imported, setImported] = useState(0);
 
   useEffect(() => {
     supabase.from('companies').select('id, nama_perusahaan').order('nama_perusahaan')
@@ -82,10 +85,13 @@ export default function FormulirPage() {
                 </button>
               ))}
             </div>
-            {category === 'pengurangan' ? <ReductionFormPanel key={companyId} supabase={supabase} companyId={companyId} onSaved={() => setReload((value) => value + 1)} />
-              : category === 'penyimpanan' ? <StorageFormPanel key={companyId} supabase={supabase} companyId={companyId} />
-                : category === 'pengolahan' ? <ProcessingFormPanel key={companyId} supabase={supabase} companyId={companyId} />
-                  : category === 'pelaporan' ? <ReportingFormPanel key={companyId} supabase={supabase} companyId={companyId} />
+            {OTHER_FORMS.some(([key]) => key === category) && (
+              <TemplateUpload key={`${companyId}:${category}`} supabase={supabase} companyId={companyId} kind={category as OtherForm} onImported={() => { setImported((value) => value + 1); setReload((value) => value + 1); }} />
+            )}
+            {category === 'pengurangan' ? <ReductionFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} onSaved={() => setReload((value) => value + 1)} />
+              : category === 'penyimpanan' ? <StorageFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} />
+                : category === 'pengolahan' ? <ProcessingFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} />
+                  : category === 'pelaporan' ? <ReportingFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} />
                     : <InventoryFormPanel
               key={`${companyId}:${category}`}
               companyId={companyId}

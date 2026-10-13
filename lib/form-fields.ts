@@ -354,3 +354,20 @@ export const BALANCE_SECTIONS: FormSection[] = [
 
 /** A new entry with the waste code and name already filled in. */
 export const wasteEntryDefaults = () => ({ kode_limbah: 'A101d', nama_limbah: WASTE_NAME_TEXT });
+
+/**
+ * An entry of a table form (logbook, balance) as its row: numbers parsed,
+ * empty text as null; an empty amount in tons is left out so the table's
+ * default (0) applies.
+ */
+export function recordFromEntry(fields: FormField[], entry: FormEntry, companyId: string): Record<string, unknown> {
+  const record: Record<string, unknown> = { company_id: companyId };
+  for (const field of fields) {
+    const value = entry.values[field.key]?.trim() ?? '';
+    if (field.input === 'number') {
+      if (value) record[field.key] = Number(value.replace(',', '.'));
+      else if (!field.key.endsWith('_ton')) record[field.key] = null;
+    } else record[field.key] = value || null;
+  }
+  return record;
+}

@@ -70,6 +70,7 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 - **Formulir 3 Penyimpanan:** logbook penyimpanan (masa simpan dan jumlah di TPS dihitung otomatis) dan 27 ketentuan teknis Ya/Tidak beserta izin TPS Limbah B3.
 - **Formulir 4.2 Pengolahan** (untuk penghasil): 11 ketentuan teknis Ya/Tidak. Formulir 5 memakai pertanyaan yang sama, jadi cukup diisi sekali. Persentase penaatan dihitung otomatis.
 - **Formulir 5 Pelaporan:** neraca dihasilkan / dikelola / disimpan / belum dikelola (ton) dengan baris TOTAL.
+- **Unggah template Excel 2, 3, 4.2, dan 5** di tab masing-masing: template dikenali dari judulnya, kolom dicek terhadap template resmi, baris contoh template dilewati, isinya diperiksa dengan aturan formulir web lalu ditampilkan sebelum disimpan. Log perawatan dicocokkan ke trafo 1.1 lewat merek + nomor serial (`lib/template-import.ts`).
 - Formulir 4.1 (untuk jasa pengelola limbah B3) belum ada, karena diisi pengolah, bukan pemilik peralatan.
 - Isian 1.1–1.4 tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
 

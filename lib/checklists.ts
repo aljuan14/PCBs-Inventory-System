@@ -86,3 +86,14 @@ export const complianceRate = (answers: ChecklistAnswer[]) => {
   return answered.length ? answers.filter((answer) => answer.jawaban === 'ya').length / answers.length : null;
 };
 
+
+/** The ketentuan_teknis row of a set of answers (and the storage permit for form 3). */
+export function checklistRow(companyId: string, checklist: ChecklistKey, answers: ChecklistAnswer[], permit: { izin_status: string | null; izin_nomor: string | null; izin_masa_berlaku: string | null } | null) {
+  return {
+    company_id: companyId,
+    checklist,
+    jawaban: answers.map((answer) => ({ jawaban: answer.jawaban, nomor_surat: answer.nomor_surat?.trim() || null, keterangan: answer.keterangan?.trim() || null, bukti_dukung: answer.bukti_dukung?.trim() || null })),
+    persentase_penaatan: complianceRate(answers),
+    ...(CHECKLISTS[checklist].permit && permit ? permit : {}),
+  };
+}

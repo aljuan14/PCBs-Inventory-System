@@ -54,6 +54,23 @@ export function recordOf(entry: FormEntry, companyId: string, itemId: string | n
   return record;
 }
 
+/**
+ * Writes a maintenance log into its transformer: the latest maintenance
+ * (columns 12-16 of form 1.1), the replacement oil as its oil brand, and the
+ * after-test when there is one, so the PCBs status follows.
+ */
+export function applyToTrafo(supabase: SupabaseClient, trafoId: string, record: Record<string, string | number | null>) {
+  const changes: Record<string, string | number | null> = {
+    perawatan_jenis: record.perawatan_jenis, perawatan_waktu: record.perawatan_waktu, perawatan_merek_oli_pengganti: record.perawatan_merek_oli_pengganti,
+    perawatan_volume_ditambahkan_l: record.perawatan_volume_l, perawatan_penyedia_jasa: record.perawatan_penyedia_jasa,
+  };
+  if (record.perawatan_merek_oli_pengganti) changes.merek_minyak_dielektrik = record.perawatan_merek_oli_pengganti;
+  if (record.uji_sesudah_ppm !== null) {
+    Object.assign(changes, { uji_konsentrasi_ppm: record.uji_sesudah_ppm, uji_jenis: record.uji_sesudah_jenis, uji_metode: record.uji_sesudah_metode, uji_penyedia_jasa: record.uji_sesudah_penyedia_jasa });
+  }
+  return supabase.from('transformator_digunakan').update(changes).eq('id', trafoId);
+}
+
 /** Transformers still in use, those over 50 ppm first; or those matching the search. */
 function TrafoPicker({ supabase, companyId, onPick, onManual }: { supabase: SupabaseClient; companyId: string; onPick: (trafo: Trafo) => void; onManual: () => void }) {
   const [query, setQuery] = useState('');
@@ -105,7 +122,7 @@ function TrafoPicker({ supabase, companyId, onPick, onManual }: { supabase: Supa
  * transformers in use. An entry made for a listed transformer can also write
  * the maintenance and the after-test into it, so its PCBs status follows.
  */
-export default function ReductionFormPanel({ supabase, companyId, onSaved }: { supabase: SupabaseClient; companyId: string; onSaved: () => void }) {
+export default function ReductionFormPanel({ supabase, companyId, onSaved, refreshKey = 0 }: { supabase: SupabaseClient; companyId: string; onSaved: () => void; refreshKey?: number }) {
   const [logs, setLogs] = useState<{ key: number; rows: Log[] } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [step, setStep] = useState<'list' | 'pick' | 'edit'>('list');
@@ -121,7 +138,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved }: { s
       .eq('company_id', companyId).order('perawatan_waktu', { ascending: false }).order('created_at', { ascending: false })
       .then(({ data }) => { if (active) setLogs({ key: reloadKey, rows: (data ?? []) as Log[] }); });
     return () => { active = false; };
-  }, [supabase, companyId, reloadKey]);
+  }, [supabase, companyId, reloadKey, refreshKey]);
 
   const start = (trafo: Trafo | null) => {
     setEditing({ entry: trafo ? entryFromTrafo(trafo) : { id: newId(), values: {} }, trafo });
@@ -141,16 +158,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved }: { s
     }
     let updated = false;
     if (editing?.trafo && updateTrafo) {
-      // The transformer keeps its latest maintenance (columns 12-16 of form 1.1), and the after-test when there is one.
-      const changes: Record<string, string | number | null> = {
-        perawatan_jenis: record.perawatan_jenis, perawatan_waktu: record.perawatan_waktu, perawatan_merek_oli_pengganti: record.perawatan_merek_oli_pengganti,
-        perawatan_volume_ditambahkan_l: record.perawatan_volume_l, perawatan_penyedia_jasa: record.perawatan_penyedia_jasa,
-      };
-      if (record.perawatan_merek_oli_pengganti) changes.merek_minyak_dielektrik = record.perawatan_merek_oli_pengganti;
-      if (record.uji_sesudah_ppm !== null) {
-        Object.assign(changes, { uji_konsentrasi_ppm: record.uji_sesudah_ppm, uji_jenis: record.uji_sesudah_jenis, uji_metode: record.uji_sesudah_metode, uji_penyedia_jasa: record.uji_sesudah_penyedia_jasa });
-      }
-      const { error: updateError } = await supabase.from('transformator_digunakan').update(changes).eq('id', editing.trafo.id);
+      const { error: updateError } = await applyToTrafo(supabase, editing.trafo.id, record);
       if (updateError) setError(`Log tersimpan, tetapi data trafo gagal diperbarui: ${updateError.message}`);
       else updated = true;
     }

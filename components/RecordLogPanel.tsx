@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import FormEditor from '@/components/FormEditor';
 import { newId } from '@/components/InventoryFormPanel';
-import { fieldErrors, type FormEntry, type FormSection } from '@/lib/form-fields';
+import { fieldErrors, recordFromEntry, type FormEntry, type FormSection } from '@/lib/form-fields';
 
 export type LogColumn = { label: string; value: (row: Record<string, unknown>) => React.ReactNode; total?: (rows: Record<string, unknown>[]) => React.ReactNode; className?: string };
 
@@ -18,7 +18,7 @@ export const shortDate = (value: unknown) => (value ? new Date(`${value}T00:00:0
  * the fields come from `sections`, `extraErrors` adds checks across fields,
  * and the columns with `total` get a TOTAL row as in the template.
  */
-export default function RecordLogPanel({ supabase, companyId, table, orderBy, title, description, addLabel, sections, defaults, extraErrors, columns }: {
+export default function RecordLogPanel({ supabase, companyId, table, orderBy, title, description, addLabel, sections, defaults, extraErrors, columns, refreshKey = 0 }: {
   supabase: SupabaseClient;
   companyId: string;
   table: string;
@@ -30,6 +30,8 @@ export default function RecordLogPanel({ supabase, companyId, table, orderBy, ti
   defaults: () => Record<string, string>;
   extraErrors?: (values: Record<string, number | null>) => Record<string, string>;
   columns: LogColumn[];
+  /** Changed from outside (an Excel upload) to load the rows again. */
+  refreshKey?: number;
 }) {
   const fields = sections.flatMap((section) => section.fields);
   const [rows, setRows] = useState<{ key: number; list: Record<string, unknown>[] } | null>(null);
@@ -47,7 +49,7 @@ export default function RecordLogPanel({ supabase, companyId, table, orderBy, ti
         setRows({ key: reloadKey, list: (data ?? []) as Record<string, unknown>[] });
       });
     return () => { active = false; };
-  }, [supabase, companyId, table, orderBy, reloadKey]);
+  }, [supabase, companyId, table, orderBy, reloadKey, refreshKey]);
 
   const numbers = (entry: FormEntry) => Object.fromEntries(fields.filter((field) => field.input === 'number').map((field) => {
     const value = entry.values[field.key]?.trim();
@@ -58,11 +60,7 @@ export default function RecordLogPanel({ supabase, companyId, table, orderBy, ti
   const save = async (entry: FormEntry) => {
     setSaving(true);
     setError(null);
-    const record: Record<string, unknown> = { company_id: companyId, ...numbers(entry) };
-    for (const field of fields) if (field.input !== 'number') record[field.key] = entry.values[field.key]?.trim() || null;
-    // Empty amounts the table defaults to 0 are left out, so the default applies.
-    for (const [key, value] of Object.entries(record)) if (value === null && key.endsWith('_ton')) delete record[key];
-    const { error: saveError } = await supabase.from(table).insert(record);
+    const { error: saveError } = await supabase.from(table).insert(recordFromEntry(fields, entry, companyId));
     setSaving(false);
     if (saveError) return setError(`Gagal menyimpan: ${saveError.message}`);
     setEditing(null);

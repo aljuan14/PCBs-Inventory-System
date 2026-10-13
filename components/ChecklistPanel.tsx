@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CheckCircle2, Loader2 } from 'lucide-react';
-import { CHECKLISTS, complianceRate, type ChecklistAnswer, type ChecklistKey } from '@/lib/checklists';
+import { CHECKLISTS, checklistRow, complianceRate, type ChecklistAnswer, type ChecklistKey } from '@/lib/checklists';
 
 type Saved = { jawaban: ChecklistAnswer[]; izin_status: string | null; izin_nomor: string | null; izin_masa_berlaku: string | null; created_at: string };
 
@@ -15,7 +15,7 @@ const fmtDate = (value: string) => new Date(value).toLocaleString('id-ID', { dat
  * the company's last answers; each save keeps the earlier ones as history.
  * Form 3 also asks for the storage permit.
  */
-export default function ChecklistPanel({ supabase, companyId, checklist }: { supabase: SupabaseClient; companyId: string; checklist: ChecklistKey }) {
+export default function ChecklistPanel({ supabase, companyId, checklist, refreshKey = 0 }: { supabase: SupabaseClient; companyId: string; checklist: ChecklistKey; refreshKey?: number }) {
   const spec = CHECKLISTS[checklist];
   const [answers, setAnswers] = useState<ChecklistAnswer[]>(() => spec.questions.map(() => ({ jawaban: null })));
   const [permit, setPermit] = useState({ izin_status: '', izin_nomor: '', izin_masa_berlaku: '' });
@@ -37,7 +37,7 @@ export default function ChecklistPanel({ supabase, companyId, checklist }: { sup
         setLastSaved(saved?.created_at ?? null);
       });
     return () => { active = false; };
-  }, [supabase, companyId, checklist, spec]);
+  }, [supabase, companyId, checklist, spec, refreshKey]);
 
   const set = (index: number, changes: Partial<ChecklistAnswer>) => setAnswers((current) => current.map((answer, at) => (at === index ? { ...answer, ...changes } : answer)));
   const answered = answers.filter((answer) => answer.jawaban).length;
@@ -47,13 +47,8 @@ export default function ChecklistPanel({ supabase, companyId, checklist }: { sup
     if (answered < answers.length) return setError(`Masih ada ${answers.length - answered} ketentuan yang belum dijawab Ya atau Tidak.`);
     setSaving(true);
     setError(null);
-    const { data, error: saveError } = await supabase.from('ketentuan_teknis').insert({
-      company_id: companyId,
-      checklist,
-      jawaban: answers.map((answer) => ({ jawaban: answer.jawaban, nomor_surat: answer.nomor_surat?.trim() || null, keterangan: answer.keterangan?.trim() || null, bukti_dukung: answer.bukti_dukung?.trim() || null })),
-      persentase_penaatan: rate,
-      ...(spec.permit ? { izin_status: permit.izin_status.trim() || null, izin_nomor: permit.izin_nomor.trim() || null, izin_masa_berlaku: permit.izin_masa_berlaku || null } : {}),
-    }).select('created_at').single();
+    const { data, error: saveError } = await supabase.from('ketentuan_teknis').insert(checklistRow(companyId, checklist, answers,
+      { izin_status: permit.izin_status.trim() || null, izin_nomor: permit.izin_nomor.trim() || null, izin_masa_berlaku: permit.izin_masa_berlaku || null })).select('created_at').single();
     setSaving(false);
     if (saveError) return setError(saveError.message);
     setLastSaved((data as { created_at: string }).created_at);
