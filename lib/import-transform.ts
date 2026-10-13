@@ -335,6 +335,18 @@ function checkWeights(
   note: (level: ValidationIssue['level'], entry: ImportNote, example?: unknown) => void,
   found: Array<Parameters<IssueCollector['add']>>,
 ) {
+  // A "Berat (ton)" over 1.000 t is the weight in kg written in the ton column
+  // (PLTMG Nii Tanasa: 60.500 "ton" for a 60,5 t transformer).
+  if (typeof item.berat_ton === 'number' && item.berat_ton > MAX_WEIGHT_KG / 1000) {
+    const tons = item.berat_ton / 1000;
+    if (tons > MAX_WEIGHT_KG / 1000) {
+      note('warning', { kode: 'weight:implausible', jenis: 'dikosongkan', kolom: 'berat_ton', pesan: 'Berat lebih dari 1.000 ton (tidak wajar), dikosongkan', nilai_asli: String(item.berat_ton) }, item.berat_ton);
+      item.berat_ton = null;
+    } else {
+      note('info', { kode: 'weight:ton_in_kg', jenis: 'diperbaiki', kolom: 'berat_ton', pesan: 'Berat (ton) tertulis dalam kg, dibagi 1.000', nilai_asli: String(item.berat_ton), nilai_baru: String(tons) }, `${item.berat_ton} → ${tons}`);
+      item.berat_ton = tons;
+    }
+  }
   for (const key of WEIGHT_FIELDS) {
     const value = item[key];
     if (typeof value === 'number' && value > MAX_WEIGHT_KG) {
