@@ -6,6 +6,7 @@ import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
 import { ALL_SCOPE, mapPointFilter, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
 import DataTable, { type EditableInventoryFields, type InventoryItem, type TablePreset } from '@/components/DataTable';
 import CompanyCheckCard from '@/components/CompanyCheckCard';
+import CompanyPcbStatusCard from '@/components/CompanyPcbStatusCard';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import InventorySummary from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
@@ -57,6 +58,7 @@ export default function InventoryOverview() {
     {error && <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" /> {error}</div>}
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} statuses={statuses} />
     {!SUMMARY_MODE && scope.companyId && companyName && <CompanyCheckCard companyId={scope.companyId} companyName={companyName} reloadKey={reloadKey} onSendsChange={() => setStatusKey((key) => key + 1)} />}
+    {!SUMMARY_MODE && scope.companyId && <CompanyPcbStatusCard supabase={supabase} companyId={scope.companyId} reloadKey={reloadKey} />}
     <InventorySummary stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} />
     {!SUMMARY_MODE && <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>}

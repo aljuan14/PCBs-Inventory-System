@@ -68,6 +68,14 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 - **Formulir 1.1–1.4** sesuai template KLHK, dengan bagian dan urutan kolom yang sama. Isian wajib ditandai, pilihan berupa dropdown, dan koordinat langsung terbaca beserta tautan ke peta. Formulir 1.1/1.2 hanya untuk trafo buatan sebelum 1997 (atau tahunnya tidak diketahui).
 - Isian tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
 
+### Status PCBs & roadmap *(offline)*
+
+- **Kartu status** di dashboard (saat satu perusahaan dipilih) dan di halaman Roadmap: satu kalimat ringkasan semua peralatan perusahaan, lalu lampu **merah / kuning / hijau** untuk trafo buatan sebelum 1997 (atau tanpa tahun) beserta pesannya.
+  - **Merah:** ada trafo belum diuji tanpa rencana uji, > 50 ppm tanpa rencana penanganan, atau rencana yang lewat tanggalnya.
+  - **Kuning:** semua sisanya sudah punya rencana yang belum jatuh tempo, pernyataan belum diisi atau tidak cocok dengan data, atau tahun pembuatan kosong.
+  - **Hijau:** tidak ada yang perlu dilakukan.
+- **Roadmap:** tanggal rencana uji (untuk yang belum diuji) atau penanganan (untuk yang > 50 ppm), untuk semua trafo sekaligus atau trafo yang dicentang. Rencana uji selesai sendiri begitu hasil ujinya masuk; penanganan ditandai selesai oleh admin.
+
 ### Impor data *(offline)*
 
 | Langkah | Keterangan |
@@ -145,9 +153,11 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta |
 | `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
 | `company_statements` | Pernyataan perusahaan (riwayat; yang terbaru berlaku), termasuk jumlah dan tonase trafo 1997 ke atas |
+| `equipment_plans` | Rencana uji / penanganan per trafo atau untuk semua trafo perusahaan |
 | `simpel_companies` | Daftar perusahaan PILAR dengan ID SIMPEL; `companies.pilar_company_id` dan `companies.id_simpel` menyimpan pilihan admin |
 | `summary_map_cells`, `summary_brand_counts`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, waktu kirim |
 | RPC `inventory_stats`, `inventory_charts`, `inventory_units`, `inventory_quality` | Statistik, grafik, daftar unit, dan kualitas data |
+| RPC `company_pcb_status`, `company_focus_transformers` | Angka status PCBs per perusahaan dan daftar trafo sebelum 1997 beserta rencananya |
 | RPC `map_clusters`, `oil_brand_counts`, `summary_build`, `summary_cells` | Peta per wilayah, merek minyak, serta pembuatan dan pembacaan ringkasan web |
 | Storage `pcbs-files` | Workbook yang diunggah (privat) |
 
