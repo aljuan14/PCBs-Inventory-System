@@ -77,7 +77,7 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 
 ### Halaman laporan perusahaan *(offline)*
 
-`/lapor/<ID SIMPEL>`: semua yang dilaporkan satu perusahaan di satu halaman, tanpa menu admin. Isinya status PCBs, pernyataan, formulir 1.1–5 (termasuk data tersimpan dan unggah template), dan roadmap. Perusahaan dicari dari ID SIMPEL-nya; bila satu ID dipakai beberapa unit/pabrik, unitnya dipilih dulu. Ini pintu masuk dari aplikasi PILAR/SIMPEL, yang mengetahui ID SIMPEL perusahaan yang login. Admin membuka halaman yang sama lewat label ID SIMPEL di halaman Perusahaan; halaman **Isi formulir** memakai isi yang sama dengan pemilih perusahaan. Sebelum perusahaan dipilih, **Isi formulir** menampilkan daftar perusahaan yang perlu perhatian (perlu tindakan, belum isi pernyataan) dan pratinjau laporan yang terkunci, sedangkan **Roadmap** menampilkan jadwal nasional (lewat tanggal, 30/90 hari ke depan, belum punya rencana). Perusahaan terakhir yang dibuka diingat di browser dan tercantum di alamat (`?company=`).
+`/lapor/<ID SIMPEL>`: semua yang dilaporkan satu perusahaan di satu halaman, tanpa menu admin. Isinya status PCBs, pernyataan, formulir 1.1–5 (termasuk data tersimpan dan unggah template), dan roadmap. Perusahaan dicari dari ID SIMPEL-nya; bila satu ID dipakai beberapa unit/pabrik, unitnya dipilih dulu. Ini pintu masuk dari aplikasi PILAR/SIMPEL, yang mengetahui ID SIMPEL perusahaan yang login. Admin membuka halaman yang sama lewat label ID SIMPEL di halaman Perusahaan; halaman **Isi formulir** memakai isi yang sama dengan pemilih perusahaan. Sebelum perusahaan dipilih, **Isi formulir** menampilkan daftar perusahaan yang perlu perhatian (perlu tindakan, surat menunggu verifikasi, belum melapor) dan pratinjau laporan yang terkunci, sedangkan **Roadmap** menampilkan jadwal nasional (lewat tanggal, 30/90 hari ke depan, belum punya rencana). Perusahaan terakhir yang dibuka diingat di browser dan tercantum di alamat (`?company=`).
 
 ### Status PCBs & roadmap *(offline)*
 
@@ -103,7 +103,7 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 ### Perusahaan & kualitas data *(offline)*
 
 - **Perusahaan:** isi data per perusahaan, hasil pemeriksaan siap dikirim lewat email, dan status pengiriman (belum dikirim, sudah dikirim, ada data baru, kosong).
-- **ID SIMPEL:** setiap perusahaan dihubungkan dengan datanya di PILAR. Kandidat disarankan dari kemiripan nama, nama yang cocok persis bisa dihubungkan sekaligus, sisanya dipilih admin atau dicari lewat nama, NPWP, NIB, atau ID SIMPEL.
+- **ID SIMPEL** (menu sendiri, `/id-simpel`): setiap perusahaan di data inventaris dijodohkan dengan catatannya di daftar perusahaan PILAR. Tab **Perusahaan kita** berupa tabel dengan status (terhubung, tanpa ID SIMPEL, perlu dipilih, tidak ditemukan, cocok persis), kandidat terbaik, dan tombol Pilih / Cari yang membuka jendela kandidat beserta pencarian nama, NPWP, NIB, atau ID SIMPEL. Tab **Daftar PILAR** menampilkan seluruh daftar dengan ID SIMPEL, NPWP, NIB, alamat, dan perusahaan kita yang terhubung. Pencocokan mengenali ejaan Inggris/Indonesia (Division = Divisi, Factory = Pabrik); ID SIMPEL yang tidak berupa angka ditandai.
 - **Kualitas data:** termasuk tanda **berat tidak sesuai daya** (lebih dari 50 kg per kVA, biasanya salah satuan berat atau daya; hanya ditandai, data tidak diubah). Skor kelengkapan per perusahaan dan unit, plus laporan temuan yang bisa diekspor ke Excel atau PDF.
 
 ---

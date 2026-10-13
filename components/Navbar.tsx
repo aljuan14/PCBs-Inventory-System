@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, CalendarClock, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
+import { Building2, CalendarClock, Fingerprint, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
 import { SUMMARY_MODE } from '@/lib/data-mode';
@@ -61,6 +61,7 @@ export default function Navbar() {
           <Link href="/upload" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload') && !isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><UploadCloud className="h-4 w-4" /> Upload data</Link>
           <Link href="/upload/riwayat" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><History className="h-4 w-4" /> Riwayat upload</Link>
           <Link href="/companies" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/companies') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Building2 className="h-4 w-4" /> Perusahaan</Link>
+          <Link href="/id-simpel" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/id-simpel') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Fingerprint className="h-4 w-4" /> ID SIMPEL</Link>
           <Link href="/kualitas-data" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/kualitas-data') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><ClipboardCheck className="h-4 w-4" /> Kualitas data</Link>
         </>}
       </nav>

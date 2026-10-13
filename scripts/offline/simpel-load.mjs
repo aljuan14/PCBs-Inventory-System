@@ -42,6 +42,8 @@ main(async () => {
   step(`Memuat daftar perusahaan PILAR dari ${path.relative(ROOT, file)}`);
   const col = (name) => `"${name}"`;
   const text = (name) => `NULLIF(btrim(s.${col(name)}), '')`;
+  // Addresses carry HTML line breaks (&#13;&#10;) and &amp; from PILAR's forms: read as plain text.
+  const cleanText = (name) => `NULLIF(btrim(regexp_replace(replace(regexp_replace(s.${col(name)}, '&#[0-9]+;', ' ', 'g'), '&amp;', '&'), '\\s+', ' ', 'g')), '')`;
   const script = [
     'BEGIN;',
     `CREATE TEMP TABLE staging (${header.map((name) => `${col(name)} text`).join(', ')}) ON COMMIT DROP;`,
@@ -49,7 +51,7 @@ main(async () => {
     `${content.replace(/\n+$/, '')}\n\\.`,
     'DELETE FROM public.simpel_companies;',
     `INSERT INTO public.simpel_companies (id, id_simpel, nama, npwp, nib, alamat, bidang_usaha, id_perusahaan_induk)
-     SELECT DISTINCT ON (s.id) s.id::uuid, ${text('idCompanySimpel')}, btrim(s.name), ${text('npwp')}, ${text('nib')}, ${text('alamatKantor')}, ${text('bidangUsaha')}, ${text('idPerusahaanInduk')}::uuid
+     SELECT DISTINCT ON (s.id) s.id::uuid, ${text('idCompanySimpel')}, btrim(regexp_replace(replace(s.name, '&amp;', '&'), '\\s+', ' ', 'g')), ${text('npwp')}, ${text('nib')}, ${cleanText('alamatKantor')}, ${text('bidangUsaha')}, ${text('idPerusahaanInduk')}::uuid
      FROM staging s WHERE s.id IS NOT NULL AND btrim(coalesce(s.name, '')) <> '';`,
     'COMMIT;',
   ].join('\n');

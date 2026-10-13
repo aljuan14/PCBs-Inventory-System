@@ -29,10 +29,16 @@ export type Candidate = {
 // Legal forms and filler that every other name also has.
 const STOP_WORDS = new Set(['pt', 'cv', 'tbk', 'persero', 'perseroan', 'terbatas', 'pabrik', 'plant', 'unit', 'the', 'dan', 'and', 'co', 'ltd', 'inc', 'ud', 'koperasi']);
 
-/** Lowercase words without punctuation, legal forms left out. */
+// English and Indonesian spellings of the same word, so "Noodle Division" meets "Divisi Noodle".
+const SYNONYMS: Record<string, string> = {
+  division: 'divisi', div: 'divisi', factory: 'pabrik', mill: 'pabrik', refinery: 'kilang', branch: 'cabang',
+  office: 'kantor', field: 'lapangan', regional: 'regional', indonesian: 'indonesia', persada: 'persada',
+};
+
+/** Lowercase words without punctuation, legal forms left out, English spellings made Indonesian. */
 export function nameTokens(name: string): string[] {
-  return name.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ').split(' ').filter((word) => word && !STOP_WORDS.has(word));
+  return name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').split(' ').map((word) => SYNONYMS[word] ?? word).filter((word) => word && !STOP_WORDS.has(word));
 }
 
 export const normalName = (name: string) => nameTokens(name).join(' ');
