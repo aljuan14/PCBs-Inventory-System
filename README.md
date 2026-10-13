@@ -72,7 +72,8 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 
 | Langkah | Keterangan |
 |---|---|
-| Unggah | Workbook multi-sheet hingga 50 MB langsung ke Storage. |
+| Unggah | Workbook multi-sheet hingga 50 MB langsung ke Storage. Berkas di atas 10 MB dikirim tanpa fotonya (hanya data sel). |
+| Aturan unggah perusahaan | Hanya .xlsx (bukan .xls, .xlsm, PDF), maksimal 1 MB, tanpa gambar atau objek tersemat, tanpa makro, tidak dikunci kata sandi, memakai template KLHK, maksimal 5.000 baris per sheet. Untuk admin hanya peringatan; nanti untuk akun perusahaan menjadi penolakan (`lib/upload-rules.ts`). |
 | Deteksi format | Header dicari otomatis (termasuk judul bertingkat) dan dikenali sebagai Template KLHK atau format PLN beserta kategorinya. |
 | Pemetaan kolom | Otomatis sesuai format. Admin cukup mengonfirmasi. |
 | Pemeriksaan | Koordinat tidak terbaca, angka atau tanggal tidak valid, kolom penting kosong, dan duplikat, lengkap dengan nomor baris Excel. |

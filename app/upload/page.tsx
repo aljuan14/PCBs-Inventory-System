@@ -7,6 +7,9 @@ import { UploadCloud, FileSpreadsheet, Building2, Layers, CheckCircle, ArrowRigh
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 import { IMPORT_PROFILE_LABELS, type ImportProfile } from '@/lib/import-profiles';
 import { MAX_UPLOAD_BYTES } from '@/lib/upload-store';
+import { COMPACT_ABOVE_BYTES, compactWorkbook } from '@/lib/excel-compact';
+import { checkFileRules, checkSheetRules, enforceUploadRules, type RuleCheck } from '@/lib/upload-rules';
+import UploadRules from '@/components/UploadRules';
 import CompanyPicker from '@/components/CompanyPicker';
 import ProgressPanel from '@/components/ProgressPanel';
 import { applyProgress, postWithProgress, startProgress, uploadWithProgress, type ProgressEvent, type ProgressState } from '@/lib/progress';
@@ -113,8 +116,20 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
 
   // Upload & review states
-  const [uploadStage, setUploadStage] = useState<'upload' | 'scan' | null>(null);
+  const [uploadStage, setUploadStage] = useState<'compact' | 'upload' | 'scan' | null>(null);
   const uploading = uploadStage !== null;
+  // Sizes before and after the photos were dropped, shown under the chosen file.
+  const [compacted, setCompacted] = useState<{ from: number; to: number } | null>(null);
+  // The company upload rules checked on the chosen file (lib/upload-rules.ts), tagged with it so a slow check of an earlier file is dropped.
+  const [fileRules, setFileRules] = useState<{ file: File; checks: RuleCheck[] | null } | null>(null);
+  const chooseFile = (chosen: File) => {
+    setFile(chosen);
+    setCompacted(null);
+    setFileRules({ file: chosen, checks: null });
+    checkFileRules(chosen)
+      .catch((): RuleCheck[] => [{ key: 'readable', label: 'Berkas dapat dibaca', ok: false, detail: 'Berkas tidak bisa diperiksa.' }])
+      .then((checks) => setFileRules((current) => (current?.file === chosen ? { file: chosen, checks } : current)));
+  };
   // Steps of the upload (reported by the browser) and the scan (streamed by the server).
   const [uploadProgress, setUploadProgress] = useState<ProgressState | null>(null);
   const trackUpload = (event: ProgressEvent) => setUploadProgress((prev) => prev && applyProgress(prev, event, Date.now()));
@@ -157,8 +172,29 @@ export default function UploadPage() {
       return;
     }
 
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setErrorMsg(`Ukuran berkas melebihi batas ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`);
+    if (enforceUploadRules() && fileRules?.checks?.some((check) => !check.ok)) {
+      setErrorMsg('Berkas tidak memenuhi aturan unggah. Perbaiki sesuai catatan di bawah berkas.');
+      return;
+    }
+
+    // Large workbooks are mostly photos: send their cells only (see excel-compact.ts).
+    let upload = file;
+    if (file.size > COMPACT_ABOVE_BYTES) {
+      setUploadStage('compact');
+      try {
+        upload = await compactWorkbook(file);
+      } catch {
+        setUploadStage(null);
+        setErrorMsg('Berkas tidak bisa dibaca untuk diperkecil. Pastikan berkas Excel tidak rusak atau terkunci kata sandi.');
+        return;
+      }
+      setCompacted({ from: file.size, to: upload.size });
+    } else {
+      setCompacted(null);
+    }
+    if (upload.size > MAX_UPLOAD_BYTES) {
+      setUploadStage(null);
+      setErrorMsg(`Ukuran data berkas melebihi batas ${MAX_UPLOAD_BYTES / 1024 / 1024} MB, meskipun foto di dalamnya sudah dibuang.`);
       return;
     }
 
@@ -172,8 +208,8 @@ export default function UploadPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fileName: file.name,
-          fileSize: file.size,
+          fileName: upload.name,
+          fileSize: upload.size,
           companyId: isNewCompany ? null : selectedCompanyId,
           newCompanyName: isNewCompany ? newCompanyName.trim() : null,
         }),
@@ -196,7 +232,7 @@ export default function UploadPage() {
         setNewCompanyName('');
       }
 
-      await uploadWithProgress(init.signedUrl, file, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+      await uploadWithProgress(init.signedUrl, upload, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
         (sent, total) => trackUpload({ type: 'progress', done: sent, total, unit: 'bytes' }));
 
       // 2. Scan every sheet of the stored workbook.
@@ -341,9 +377,7 @@ export default function UploadPage() {
                   type="file"
                   accept=".xlsx,.xls"
                   onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setFile(e.target.files[0]);
-                    }
+                    if (e.target.files && e.target.files[0]) chooseFile(e.target.files[0]);
                   }}
                   className="hidden"
                 />
@@ -356,6 +390,13 @@ export default function UploadPage() {
                     <p className="text-xs text-slate-500 font-medium mt-1">
                       {(file.size / 1024 / 1024).toFixed(1)} MB &bull; Klik untuk mengganti file
                     </p>
+                    {file.size > COMPACT_ABOVE_BYTES && (
+                      <p className="mt-1 text-xs font-medium text-emerald-700">
+                        {compacted
+                          ? `Foto dibuang: dikirim ${(compacted.to / 1024 / 1024).toFixed(2)} MB data dari ${(compacted.from / 1024 / 1024).toFixed(1)} MB`
+                          : 'Berkas besar: foto di dalamnya dibuang sebelum diunggah, hanya data tabel yang dikirim'}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div>
@@ -368,6 +409,9 @@ export default function UploadPage() {
                   </div>
                 )}
               </label>
+              {file && fileRules?.file === file && (
+                <div className="mt-3"><UploadRules title="Aturan unggah perusahaan" checks={fileRules.checks} enforced={enforceUploadRules()} /></div>
+              )}
             </div>
 
             <div className="mt-8 flex justify-end">
@@ -379,7 +423,7 @@ export default function UploadPage() {
                 {uploading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>{uploadStage === 'upload' ? 'Mengunggah berkas...' : 'Memindai semua sheet...'}</span>
+                    <span>{uploadStage === 'compact' ? 'Membuang foto dari berkas...' : uploadStage === 'upload' ? 'Mengunggah berkas...' : 'Memindai semua sheet...'}</span>
                   </>
                 ) : (
                   <>
@@ -421,6 +465,12 @@ export default function UploadPage() {
               </div>
             </div>
           )}
+
+          <UploadRules
+            title="Aturan unggah perusahaan: isi sheet"
+            checks={checkSheetRules(scan.sheets.map((sheet) => ({ ...sheet, include: selection[sheet.sheetName]?.include ?? false })))}
+            enforced={enforceUploadRules()}
+          />
 
           <div className="rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
             <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-4 py-3 text-xs font-bold text-slate-700">
