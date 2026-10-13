@@ -28,7 +28,8 @@ export default function Navbar() {
     createClient().auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null));
   }, [pathname]);
 
-  if (pathname === '/login') return null;
+  // The login page has its own layout, and a company's report (/lapor) is shown without the admin menu.
+  if (pathname === '/login' || pathname.startsWith('/lapor/')) return null;
 
   async function signOut() {
     setSigningOut(true);

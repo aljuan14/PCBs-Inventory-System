@@ -75,6 +75,10 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 - Formulir 4.1 (untuk jasa pengelola limbah B3) belum ada, karena diisi pengolah, bukan pemilik peralatan.
 - Isian 1.1–1.4 tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
 
+### Halaman laporan perusahaan *(offline)*
+
+`/lapor/<ID SIMPEL>`: semua yang dilaporkan satu perusahaan di satu halaman, tanpa menu admin. Isinya status PCBs, pernyataan, formulir 1.1–5 (termasuk data tersimpan dan unggah template), dan roadmap. Perusahaan dicari dari ID SIMPEL-nya; bila satu ID dipakai beberapa unit/pabrik, unitnya dipilih dulu. Ini pintu masuk dari aplikasi PILAR/SIMPEL, yang mengetahui ID SIMPEL perusahaan yang login. Admin membuka halaman yang sama lewat label ID SIMPEL di halaman Perusahaan; halaman **Isi formulir** memakai isi yang sama dengan pemilih perusahaan.
+
 ### Status PCBs & roadmap *(offline)*
 
 - **Kartu status** di dashboard (saat satu perusahaan dipilih) dan di halaman Roadmap: satu kalimat ringkasan semua peralatan perusahaan, lalu lampu **merah / kuning / hijau** untuk trafo buatan sebelum 1997 (atau tanpa tahun) beserta pesannya.

@@ -8,4 +8,4 @@
 export const SUMMARY_MODE = process.env.NEXT_PUBLIC_DATA_MODE === 'summary';
 
 /** Pages that need the inventory rows, closed in summary mode. */
-export const ROW_ONLY_PATHS = ['/upload', '/companies', '/kualitas-data', '/laporan', '/formulir', '/roadmap'];
+export const ROW_ONLY_PATHS = ['/upload', '/companies', '/kualitas-data', '/laporan', '/formulir', '/roadmap', '/lapor'];

@@ -12,7 +12,14 @@ const ICONS: Record<StatusColor, typeof CircleAlert> = { red: CircleAlert, yello
  * The company's PCBs status: what it owns in one sentence, the red / yellow /
  * green light for its transformers before 1997, and what to do next.
  */
-export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 0, roadmapLink = true }: { supabase: SupabaseClient; companyId: string; reloadKey?: number; roadmapLink?: boolean }) {
+export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 0, roadmapLink = true, onRoadmap }: {
+  supabase: SupabaseClient;
+  companyId: string;
+  reloadKey?: number;
+  roadmapLink?: boolean;
+  /** Opens the roadmap in place (the company's report) instead of linking to the Roadmap page. */
+  onRoadmap?: () => void;
+}) {
   const [result, setResult] = useState<{ key: string; counts?: PcbStatusCounts; error?: string } | null>(null);
   const requestKey = `${companyId}|${reloadKey}`;
 
@@ -59,7 +66,9 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
           </ul>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             {counts.rencana_berikut && <span className="flex items-center gap-1.5 text-slate-600"><CalendarClock className="h-3.5 w-3.5" /> Rencana terdekat: {formatPlanDate(counts.rencana_berikut)}</span>}
-            {roadmapLink && <Link href={`/roadmap?company=${companyId}`} className="font-semibold text-emerald-800 underline">Atur roadmap uji dan penanganan</Link>}
+            {onRoadmap
+              ? <button type="button" onClick={onRoadmap} className="font-semibold text-emerald-800 underline">Atur roadmap uji dan penanganan</button>
+              : roadmapLink && <Link href={`/roadmap?company=${companyId}`} className="font-semibold text-emerald-800 underline">Atur roadmap uji dan penanganan</Link>}
           </div>
         </div>
       </div>
