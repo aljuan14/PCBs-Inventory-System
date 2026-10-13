@@ -10,6 +10,7 @@ import { DEFAULT_MAP_FILTERS, fetchMapCells, fetchMapPointsIn, fetchSummaryCells
 import CompanyPicker from '@/components/CompanyPicker';
 import { SUMMARY_MODE } from '@/lib/data-mode';
 import type { CompanyOption } from '@/components/DataTable';
+import { BASEMAPS, BASEMAP_ATTRIBUTION, type Basemap } from '@/lib/basemaps';
 
 export interface MapPoint {
   id: string;
@@ -53,16 +54,7 @@ const cellSize = (zoom: number) => Math.min(5, Math.max(0.0005, 84 / 2 ** zoom))
 // Summary mode: the levels prepared by summary_build (migration 20261010000003).
 const summaryLevel = (zoom: number) => Math.min(11, Math.max(4, Math.round(zoom)));
 
-// Esri tiles need no API key (CARTO's now do and draw "API key required").
-// The light gray canvas comes as a base and a labels layer; tiles beyond
-// the native zoom are scaled up rather than shown as "no data".
-const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
-const BASEMAPS = {
-  map: { label: 'Peta', layers: [`${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`, `${ESRI}/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`], maxNativeZoom: 16 },
-  satellite: { label: 'Satelit', layers: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`], maxNativeZoom: 18 },
-} as const;
-const BASEMAP_ATTRIBUTION = 'Tiles &copy; Esri';
-type Basemap = keyof typeof BASEMAPS;
+
 
 const CATEGORY_OPTIONS: Array<{ key: CategoryFilter; label: string }> = [
   { key: 'all', label: 'Semua kategori' },

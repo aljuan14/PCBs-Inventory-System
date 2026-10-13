@@ -1,9 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, ChevronDown, Loader2, MapPin, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import dynamic from 'next/dynamic';
+import { CheckCircle2, ChevronDown, Loader2, Map as MapIcon, MapPin, X } from 'lucide-react';
 import { parseDMSCoordinate } from '@/lib/dms';
 import type { FormEntry, FormField, FormSection } from '@/lib/form-fields';
+
+// Leaflet needs the window.
+const CoordinatePicker = dynamic(() => import('@/components/CoordinatePicker'), { ssr: false });
 
 const inputClass = 'w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600';
 
@@ -26,6 +31,12 @@ export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { f
   const value = entry.values[field.key] ?? '';
   const border = error ? 'border-rose-300' : 'border-slate-200';
   const listId = field.options && field.input === 'text' ? `options-${field.key}` : undefined;
+  // The point to open the map on, fixed when the map opens (null: no point yet).
+  const [picking, setPicking] = useState<{ initial: { lat: number; lng: number } | null } | null>(null);
+  const openMap = () => {
+    const parsed = parseDMSCoordinate(value);
+    setPicking({ initial: parsed.isValid ? { lat: parsed.latitude as number, lng: parsed.longitude as number } : null });
+  };
   let control: React.ReactNode;
   if (field.input === 'select') {
     control = (
@@ -55,6 +66,11 @@ export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { f
         />
         {field.unit && <span className="pr-3 text-xs text-slate-400">{field.unit}</span>}
         {listId && <datalist id={listId}>{field.options!.map((option) => <option key={option} value={option} />)}</datalist>}
+        {field.input === 'coordinate' && (
+          <button type="button" onClick={openMap} className="mr-1 flex shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">
+            <MapIcon className="h-3.5 w-3.5" /> Pilih di peta
+          </button>
+        )}
       </div>
     );
   }
@@ -64,6 +80,8 @@ export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { f
       <div className="mt-1">{control}</div>
       {field.input === 'coordinate' && <CoordinatePreview value={value} />}
       {error ? <p className="mt-1 text-[11px] font-medium text-rose-700">{error}</p> : field.hint && field.input !== 'coordinate' && <p className="mt-1 text-[11px] text-slate-400">{field.hint}</p>}
+      {/* In a portal: inside the label, clicks on the map would focus the input. */}
+      {picking && createPortal(<CoordinatePicker initial={picking.initial} onClose={() => setPicking(null)} onPick={(picked) => { onChange(picked); setPicking(null); }} />, document.body)}
     </label>
   );
 }

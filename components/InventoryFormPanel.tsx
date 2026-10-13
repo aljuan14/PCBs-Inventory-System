@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import EvidencePanel from '@/components/EvidencePanel';
 import FormEditor from '@/components/FormEditor';
 import { MAX_FORM_ROWS, entryErrors, formSpec, isTrafo, TRAFO_FOCUS_YEAR, type EntryCheck, type FormEntry } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
@@ -171,6 +172,7 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
           </button>
         </div>
       )}
+      <EvidencePanel companyId={companyId} category={category} />
     </div>
   );
 }
