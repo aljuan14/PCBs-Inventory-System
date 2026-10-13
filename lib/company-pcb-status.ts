@@ -106,3 +106,24 @@ export function summarySentence(s: PcbStatusCounts): string {
     : '';
   return owned + focus + after;
 }
+
+/** National view: every company's colour, or 'empty' when it has neither data nor a statement yet. */
+export type NationalColor = StatusColor | 'empty';
+
+export const EMPTY_STATUS = { label: 'Belum melapor', dot: 'bg-slate-400', card: 'border-slate-200 bg-slate-50', text: 'text-slate-600' };
+
+export const nationalColor = (s: PcbStatusCounts): NationalColor =>
+  s.trafo_digunakan + s.trafo_tidak_digunakan + s.kapasitor + s.minyak === 0 && !s.pernyataan ? 'empty' : evaluateStatus(s).color;
+
+/** Transformers still needing something with no plan, or past their plan: how urgent a red company is. */
+export const openActions = (s: PcbStatusCounts) =>
+  (s.belum_uji - s.belum_uji_terjadwal) + (s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal);
+
+export async function fetchAllPcbStatus(supabase: SupabaseClient): Promise<Map<string, PcbStatusCounts>> {
+  const { data, error } = await supabase.rpc('pcb_status_all');
+  if (error) throw new Error(error.message);
+  return new Map(((data ?? []) as Array<{ company_id: string; status: PcbStatusCounts }>).map((row) => [row.company_id, row.status]));
+}
+
+/** Yellow only because the statement is missing: nothing in the data itself needs doing. */
+export const onlyStatementMissing = (s: PcbStatusCounts) => !s.pernyataan && evaluateStatus(s).messages.length === 1;

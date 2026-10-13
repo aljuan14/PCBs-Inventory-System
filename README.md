@@ -74,6 +74,7 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
   - **Merah:** ada trafo belum diuji tanpa rencana uji, > 50 ppm tanpa rencana penanganan, atau rencana yang lewat tanggalnya.
   - **Kuning:** semua sisanya sudah punya rencana yang belum jatuh tempo, pernyataan belum diisi atau tidak cocok dengan data, atau tahun pembuatan kosong.
   - **Hijau:** tidak ada yang perlu dilakukan.
+- **Ringkasan nasional** di dashboard (tanpa perusahaan dipilih): jumlah perusahaan merah / kuning / hijau / belum melapor, angka nasional (trafo belum diuji, > 50 ppm, tanpa rencana, rencana lewat), dan daftar perusahaan per warna, yang paling banyak tindakan terbuka di atas. Klik perusahaan untuk melihat dashboard-nya. Halaman Perusahaan juga menampilkan status tiap perusahaan.
 - **Roadmap:** tanggal rencana uji (untuk yang belum diuji) atau penanganan (untuk yang > 50 ppm), untuk semua trafo sekaligus atau trafo yang dicentang. Rencana uji selesai sendiri begitu hasil ujinya masuk; penanganan ditandai selesai oleh admin.
 
 ### Impor data *(offline)*
@@ -157,7 +158,7 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | `simpel_companies` | Daftar perusahaan PILAR dengan ID SIMPEL; `companies.pilar_company_id` dan `companies.id_simpel` menyimpan pilihan admin |
 | `summary_map_cells`, `summary_brand_counts`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, waktu kirim |
 | RPC `inventory_stats`, `inventory_charts`, `inventory_units`, `inventory_quality` | Statistik, grafik, daftar unit, dan kualitas data |
-| RPC `company_pcb_status`, `company_focus_transformers` | Angka status PCBs per perusahaan dan daftar trafo sebelum 1997 beserta rencananya |
+| RPC `company_pcb_status`, `company_focus_transformers`, `pcb_status_all` | Angka status PCBs per perusahaan dan daftar trafo sebelum 1997 beserta rencananya |
 | RPC `map_clusters`, `oil_brand_counts`, `summary_build`, `summary_cells` | Peta per wilayah, merek minyak, serta pembuatan dan pembacaan ringkasan web |
 | Storage `pcbs-files` | Workbook yang diunggah (privat) |
 
