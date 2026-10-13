@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
+import { SUMMARY_MODE } from '@/lib/data-mode';
 
 /**
  * A company's PCBs status for the transformers in focus (made before 1997 or
@@ -53,7 +54,14 @@ export const STATUS_COLORS: Record<StatusColor, { label: string; dot: string; ca
 const fmt = (value: number) => value.toLocaleString('id-ID');
 export const formatPlanDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
+// On the web the counts come from summary_company_status, sent by web:publish (migration 20261013000005).
 export async function fetchPcbStatus(supabase: SupabaseClient, companyId: string): Promise<PcbStatusCounts> {
+  if (SUMMARY_MODE) {
+    const { data, error } = await supabase.from('summary_company_status').select('status').eq('company_id', companyId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('Status perusahaan ini belum dikirim ke web.');
+    return data.status as PcbStatusCounts;
+  }
   const { data, error } = await supabase.rpc('company_pcb_status', { p_company_id: companyId });
   if (error) throw new Error(error.message);
   return data as PcbStatusCounts;
@@ -120,7 +128,9 @@ export const openActions = (s: PcbStatusCounts) =>
   (s.belum_uji - s.belum_uji_terjadwal) + (s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal);
 
 export async function fetchAllPcbStatus(supabase: SupabaseClient): Promise<Map<string, PcbStatusCounts>> {
-  const { data, error } = await supabase.rpc('pcb_status_all');
+  const { data, error } = SUMMARY_MODE
+    ? await supabase.from('summary_company_status').select('company_id, status')
+    : await supabase.rpc('pcb_status_all');
   if (error) throw new Error(error.message);
   return new Map(((data ?? []) as Array<{ company_id: string; status: PcbStatusCounts }>).map((row) => [row.company_id, row.status]));
 }

@@ -4,8 +4,8 @@
  *
  * Send the dashboard summary of the local data to Supabase Cloud, which the
  * web on Vercel shows (NEXT_PUBLIC_DATA_MODE=summary): the companies (id and
- * name only), inventory_stats_parts and the summary_* tables of migration
- * 20261010000003. The inventory rows themselves never leave the laptops.
+ * name only), inventory_stats_parts, the summary_* tables of migration
+ * 20261010000003 and the PCBs status per company (20261013000005). The inventory rows themselves never leave the laptops.
  *
  * The cloud database is replaced in one transaction: "TRUNCATE companies
  * CASCADE" empties every table that refers to a company (inventory rows,
@@ -28,7 +28,7 @@ import { DB_CONTAINER, OfflineError, ROOT, copyOut, ensureDatabase, ensureDocker
 export const WEB_ENV_FILE = path.join(ROOT, '.env.web');
 const BACKUP_DIR = path.join(ROOT, 'Data-inventaris', 'backup-cloud');
 const INVENTORY_TABLES = ['transformator_digunakan', 'transformator_tidak_digunakan', 'kapasitor', 'minyak_dielektrik'];
-const SUMMARY_TABLES = ['summary_map_cells', 'summary_brand_counts'];
+const SUMMARY_TABLES = ['summary_map_cells', 'summary_brand_counts', 'summary_company_status'];
 
 /** WEB_DATABASE_URL from the environment or .env.web; null when not set up. */
 export function webDatabaseUrl() {
@@ -78,6 +78,8 @@ export async function publish({ reset = false } = {}) {
   step('Memeriksa database web (Supabase Cloud)');
   const [[ready]] = await cloudQuery(url, "select to_regclass('public.summary_map_cells') is not null and to_regprocedure('public.summary_cells(integer, double precision, double precision, double precision, double precision, text[], uuid, text)') is not null;");
   if (ready !== 't') throw new OfflineError('Database web belum punya tabel ringkasan. Jalankan migrasi 20261010000003_web_summary.sql di SQL Editor Supabase dulu.');
+  const [[statusReady]] = await cloudQuery(url, "select to_regclass('public.summary_company_status') is not null;");
+  if (statusReady !== 't') throw new OfflineError('Database web belum punya tabel status PCBs. Jalankan di SQL Editor Supabase, berurutan, semua migrasi mulai 20261012000001 sampai 20261013000005.');
   const [[rows]] = await cloudQuery(url, `select ${INVENTORY_TABLES.map((table) => `(select count(*) from public.${table})`).join(' + ')};`);
   if (Number(rows) > 0) {
     if (!reset) {
@@ -93,6 +95,7 @@ export async function publish({ reset = false } = {}) {
 
   step('Menyusun ringkasan dari data lokal');
   await query('select public.summary_build()');
+  await query('select public.summary_build_status()');
   const parts = await columnsOf('inventory_stats_parts');
   const script = [
     'BEGIN;',

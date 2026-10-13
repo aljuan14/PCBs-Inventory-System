@@ -29,7 +29,7 @@ const LOOPBACK_OPTION = 'com.docker.network.bridge.host_binding_ipv4';
  * Not synced: field_definitions is filled by supabase/seed.sql, and the
  * summary_* tables are rebuilt from the data (summary_build) for the web.
  */
-const SKIP_TABLES = new Set(['public.field_definitions', 'public.summary_map_cells', 'public.summary_brand_counts', 'public.summary_meta']);
+const SKIP_TABLES = new Set(['public.field_definitions', 'public.summary_map_cells', 'public.summary_brand_counts', 'public.summary_meta', 'public.summary_company_status']);
 /** Login accounts travel with the data so every laptop has the same users. */
 const AUTH_TABLES = ['auth.users', 'auth.identities'];
 /** Tables large enough to split per import batch. */

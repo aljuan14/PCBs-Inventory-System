@@ -32,7 +32,7 @@ Laptop (offline, data lengkap)                         Web (Vercel, hanya ringka
 |---|---|---|
 | Untuk | Admin yang mengolah data | Pimpinan yang memantau hasil |
 | Isi database | Semua baris data (±356 ribu) | Ringkasan saja: angka, sel peta, jumlah merek |
-| Fitur | Semua | Dashboard, tonase, peta, daftar Lampiran I/II. Tanpa tabel, unggah, edit |
+| Fitur | Semua | Dashboard, status PCBs perusahaan, tonase, peta, daftar Lampiran I/II. Tanpa tabel, unggah, edit, formulir, roadmap |
 | Cara menjalankan | `npm run offline`, lihat **[OFFLINE.md](OFFLINE.md)** | https://pcbs-inventory-system.vercel.app |
 
 Keduanya wajib login. Akun dibuat oleh admin, dan pendaftaran dari halaman login ditutup. Web diperbarui otomatis setiap `npm run data:push` dari laptop admin (lihat [Memperbarui web](#memperbarui-web)).
@@ -67,6 +67,10 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 - **Pernyataan perusahaan:** tidak memiliki transformator, atau memiliki trafo buatan sebelum 1997 dan/atau 1997 ke atas. Untuk trafo 1997 ke atas cukup jumlah dan tonasenya.
 - **Formulir 1.1–1.4** sesuai template KLHK, dengan bagian dan urutan kolom yang sama. Isian wajib ditandai, pilihan berupa dropdown, dan koordinat langsung terbaca beserta tautan ke peta. Formulir 1.1/1.2 hanya untuk trafo buatan sebelum 1997 (atau tahunnya tidak diketahui).
 - **Formulir 2 Pengurangan PCBs:** log perawatan trafo yang masih digunakan (mis. retrofilling) dengan hasil uji sebelum dan sesudahnya, kondisi, dan pengelolaan limbah B3. Trafo dipilih dari data 1.1 sehingga datanya terisi otomatis; bila dicentang, perawatan dan hasil uji sesudahnya ikut memperbarui data trafo, sehingga status PCBs dan roadmap mengikuti.
+- **Formulir 3 Penyimpanan:** logbook penyimpanan (masa simpan dan jumlah di TPS dihitung otomatis) dan 27 ketentuan teknis Ya/Tidak beserta izin TPS Limbah B3.
+- **Formulir 4.2 Pengolahan** (untuk penghasil): 11 ketentuan teknis Ya/Tidak. Formulir 5 memakai pertanyaan yang sama, jadi cukup diisi sekali. Persentase penaatan dihitung otomatis.
+- **Formulir 5 Pelaporan:** neraca dihasilkan / dikelola / disimpan / belum dikelola (ton) dengan baris TOTAL.
+- Formulir 4.1 (untuk jasa pengelola limbah B3) belum ada, karena diisi pengolah, bukan pemilik peralatan.
 - Isian 1.1–1.4 tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
 
 ### Status PCBs & roadmap *(offline)*
@@ -156,9 +160,10 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
 | `company_statements` | Pernyataan perusahaan (riwayat; yang terbaru berlaku), termasuk jumlah dan tonase trafo 1997 ke atas |
 | `pengurangan_pcbs` | Log perawatan pengurangan PCBs (formulir 2) |
+| `penyimpanan_logbook`, `pelaporan_neraca`, `ketentuan_teknis` | Logbook penyimpanan (formulir 3), neraca (formulir 5), dan jawaban ketentuan teknis Ya/Tidak (formulir 3 dan 4.2) |
 | `equipment_plans` | Rencana uji / penanganan per trafo atau untuk semua trafo perusahaan |
 | `simpel_companies` | Daftar perusahaan PILAR dengan ID SIMPEL; `companies.pilar_company_id` dan `companies.id_simpel` menyimpan pilihan admin |
-| `summary_map_cells`, `summary_brand_counts`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, waktu kirim |
+| `summary_map_cells`, `summary_brand_counts`, `summary_company_status`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, status PCBs per perusahaan, waktu kirim |
 | RPC `inventory_stats`, `inventory_charts`, `inventory_units`, `inventory_quality` | Statistik, grafik, daftar unit, dan kualitas data |
 | RPC `company_pcb_status`, `company_focus_transformers`, `pcb_status_all` | Angka status PCBs per perusahaan dan daftar trafo sebelum 1997 beserta rencananya |
 | RPC `map_clusters`, `oil_brand_counts`, `summary_build`, `summary_cells` | Peta per wilayah, merek minyak, serta pembuatan dan pembacaan ringkasan web |

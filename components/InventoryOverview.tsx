@@ -59,9 +59,9 @@ export default function InventoryOverview() {
     {error && <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" /> {error}</div>}
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} statuses={statuses} />
     {!SUMMARY_MODE && scope.companyId && companyName && <CompanyCheckCard companyId={scope.companyId} companyName={companyName} reloadKey={reloadKey} onSendsChange={() => setStatusKey((key) => key + 1)} />}
-    {!SUMMARY_MODE && (scope.companyId
-      ? <CompanyPcbStatusCard supabase={supabase} companyId={scope.companyId} reloadKey={reloadKey} />
-      : <NationalPcbStatus supabase={supabase} companies={companies} reloadKey={reloadKey} onSelectCompany={(companyId) => { setScope({ companyId, unit: null, subUnit: null }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />)}
+    {scope.companyId
+      ? <CompanyPcbStatusCard supabase={supabase} companyId={scope.companyId} reloadKey={reloadKey} roadmapLink={!SUMMARY_MODE} />
+      : <NationalPcbStatus supabase={supabase} companies={companies} reloadKey={reloadKey} onSelectCompany={(companyId) => { setScope({ companyId, unit: null, subUnit: null }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
     <InventorySummary stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} />
     {!SUMMARY_MODE && <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>}
