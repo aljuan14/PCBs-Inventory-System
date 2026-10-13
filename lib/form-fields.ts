@@ -294,3 +294,63 @@ export const REDUCTION_SECTIONS: FormSection[] = [
 ];
 
 export const REDUCTION_FIELDS = REDUCTION_SECTIONS.flatMap((section) => section.fields);
+
+const WASTE_NAME_TEXT = 'Limbah yang mengandung senyawa POPs dan UPOPs antara lain polychlorinated biphenyls (PCBs), DDT, PCDD, PCDF';
+const WASTE_SOURCE_OPTIONS = [
+  'Minyak dielektrik yang sudah dikeluarkan dari transformator',
+  'Karkas transformator (minyak dielektrik sudah dikeluarkan)',
+  'Transformator utuh sudah tidak digunakan',
+  'Kapasitor sudah tidak digunakan',
+  'Minyak dielektrik sudah tidak digunakan',
+];
+
+/** Form 3 "Tabel Logbook Penyimpanan PCBs" (table penyimpanan_logbook). */
+export const STORAGE_SECTIONS: FormSection[] = [
+  {
+    title: 'Limbah yang disimpan',
+    fields: [
+      { key: 'kode_limbah', label: 'Kode limbah', input: 'text', required: true, options: ['A101d'] },
+      { key: 'nama_limbah', label: 'Nama limbah', input: 'text', required: true, options: [WASTE_NAME_TEXT] },
+      { key: 'sumber_limbah', label: 'Sumber limbah', input: 'text', required: true, options: WASTE_SOURCE_OPTIONS },
+      { key: 'nomor_serial', label: 'Nomor serial peralatan', input: 'text' },
+    ],
+  },
+  {
+    title: 'Waktu & jumlah',
+    note: 'Masa simpan dan jumlah yang masih disimpan di TPS dihitung otomatis.',
+    fields: [
+      { key: 'tanggal_dihasilkan', label: 'Tanggal dihasilkan', input: 'date', required: true },
+      { key: 'tanggal_terakhir_dikelola', label: 'Tanggal terakhir dikelola', input: 'date' },
+      { key: 'jumlah_dihasilkan_ton', label: 'Jumlah dihasilkan', input: 'number', unit: 'ton', required: true },
+      { key: 'jumlah_dikelola_ton', label: 'Jumlah telah dikelola lebih lanjut', input: 'number', unit: 'ton' },
+      { key: 'bukti_dukung', label: 'Bukti dukung (tautan Google Drive)', input: 'text' },
+    ],
+  },
+];
+
+/** Form 5 "Tabel neraca Pengelolaan PCBs" (table pelaporan_neraca). */
+export const BALANCE_SECTIONS: FormSection[] = [
+  {
+    title: 'Limbah',
+    fields: [
+      { key: 'kode_limbah', label: 'Kode limbah', input: 'text', required: true, options: ['A101d'] },
+      { key: 'nama_limbah', label: 'Nama limbah', input: 'text', required: true, options: [WASTE_NAME_TEXT] },
+      { key: 'jenis', label: 'Jenis', input: 'text', required: true, options: WASTE_SOURCE_OPTIONS },
+      { key: 'nomor_serial', label: 'Nomor serial peralatan', input: 'text' },
+      { key: 'periode', label: 'Periode pelaporan (tanggal)', input: 'date' },
+    ],
+  },
+  {
+    title: 'Neraca',
+    note: 'Yang belum dikelola = dihasilkan − dikelola − disimpan, dihitung otomatis.',
+    fields: [
+      { key: 'dihasilkan_ton', label: 'Dihasilkan', input: 'number', unit: 'ton', required: true },
+      { key: 'dikelola_ton', label: 'Dikelola', input: 'number', unit: 'ton' },
+      { key: 'disimpan_ton', label: 'Disimpan', input: 'number', unit: 'ton' },
+      { key: 'keterangan', label: 'Keterangan', input: 'text', hint: 'mis. diserahkan ke pihak ketiga PT …, pengangkut PT …, kode festronik KLH-…' },
+    ],
+  },
+];
+
+/** A new entry with the waste code and name already filled in. */
+export const wasteEntryDefaults = () => ({ kode_limbah: 'A101d', nama_limbah: WASTE_NAME_TEXT });

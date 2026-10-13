@@ -5,6 +5,7 @@ import CompanyPicker from '@/components/CompanyPicker';
 import CompanyStatementCard, { type CompanyStatement } from '@/components/CompanyStatementCard';
 import InventoryFormPanel from '@/components/InventoryFormPanel';
 import ReductionFormPanel from '@/components/ReductionFormPanel';
+import { ProcessingFormPanel, ReportingFormPanel, StorageFormPanel } from '@/components/WasteFormPanels';
 import type { CompanyOption } from '@/components/DataTable';
 import { FORM_SPECS } from '@/lib/form-fields';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
@@ -12,15 +13,19 @@ import { createClient } from '@/lib/supabase/client';
 
 /**
  * Reporting form: the company's statement, then forms 1.1–1.4 of the KLHK
- * templates typed in entry by entry, and form 2 (maintenance log). For now the admin fills it in for a
+ * templates typed in entry by entry, form 2 (maintenance log), form 3
+ * (storage logbook and checklist), 4.2 (processing checklist) and 5 (balance). For now the admin fills it in for a
  * company; later the company itself, logged in through PILAR.
  */
+type OtherForm = 'pengurangan' | 'penyimpanan' | 'pengolahan' | 'pelaporan';
+const OTHER_FORMS: Array<[OtherForm, string]> = [['pengurangan', '2 Pengurangan'], ['penyimpanan', '3 Penyimpanan'], ['pengolahan', '4.2 Pengolahan'], ['pelaporan', '5 Pelaporan']];
+
 export default function FormulirPage() {
   const supabase = useMemo(() => createClient(), []);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [companyId, setCompanyId] = useState<string | null>(null);
-  // A form 1.x by its category, or form 2.
-  const [category, setCategory] = useState<InventoryCategory | 'pengurangan'>('transformator_digunakan');
+  // A form 1.x by its category, or one of forms 2-5.
+  const [category, setCategory] = useState<InventoryCategory | OtherForm>('transformator_digunakan');
   const [statement, setStatement] = useState<CompanyStatement | null>(null);
   // Stored units per form, tagged with their company so another company's counts never show.
   const [counts, setCounts] = useState<{ companyId: string; values: Partial<Record<InventoryCategory, number>> } | null>(null);
@@ -70,14 +75,18 @@ export default function FormulirPage() {
                   {spec.code} {spec.title}
                 </button>
               ))}
-              <button type="button" role="tab" aria-selected={category === 'pengurangan'} onClick={() => setCategory('pengurangan')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${category === 'pengurangan' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
-                2 Pengurangan PCBs
-              </button>
+              {OTHER_FORMS.map(([key, label]) => (
+                <button key={key} type="button" role="tab" aria-selected={category === key} onClick={() => setCategory(key)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${category === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}>
+                  {label}
+                </button>
+              ))}
             </div>
-            {category === 'pengurangan' ? (
-              <ReductionFormPanel key={companyId} supabase={supabase} companyId={companyId} onSaved={() => setReload((value) => value + 1)} />
-            ) : <InventoryFormPanel
+            {category === 'pengurangan' ? <ReductionFormPanel key={companyId} supabase={supabase} companyId={companyId} onSaved={() => setReload((value) => value + 1)} />
+              : category === 'penyimpanan' ? <StorageFormPanel key={companyId} supabase={supabase} companyId={companyId} />
+                : category === 'pengolahan' ? <ProcessingFormPanel key={companyId} supabase={supabase} companyId={companyId} />
+                  : category === 'pelaporan' ? <ReportingFormPanel key={companyId} supabase={supabase} companyId={companyId} />
+                    : <InventoryFormPanel
               key={`${companyId}:${category}`}
               companyId={companyId}
               category={category}
