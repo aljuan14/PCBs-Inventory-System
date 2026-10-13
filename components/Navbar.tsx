@@ -16,6 +16,14 @@ const categoryIcons = {
   minyak_dielektrik: Droplets,
 };
 
+function NavLink({ href, icon: Icon, label, active }: { href: string; icon: typeof Grid2X2; label: string; active: boolean }) {
+  return (
+    <Link href={href} aria-current={active ? 'page' : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${active ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}>
+      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-emerald-700' : 'text-slate-400'}`} /> {label}
+    </Link>
+  );
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -39,33 +47,43 @@ export default function Navbar() {
     router.refresh();
   }
 
+  // Menus by what they are for. Reporting, incoming data and administration
+  // work on the rows: not on the web (summary mode).
+  const groups: Array<{ title: string; rowsOnly?: boolean; items: Array<{ href: string; label: string; icon: typeof Grid2X2; active?: boolean }> }> = [
+    { title: 'Inventarisasi', items: INVENTORY_CATEGORIES.map((category) => ({ href: `/dashboard/${category.key.replaceAll('_', '-')}`, label: category.shortLabel, icon: categoryIcons[category.key] })) },
+    { title: 'Pelaporan', rowsOnly: true, items: [
+      { href: '/formulir', label: 'Isi formulir', icon: ClipboardPen },
+      { href: '/roadmap', label: 'Roadmap', icon: CalendarClock },
+    ] },
+    { title: 'Data masuk', rowsOnly: true, items: [
+      { href: '/upload', label: 'Upload data', icon: UploadCloud, active: isActive('/upload') && !isActive('/upload/riwayat') },
+      { href: '/upload/riwayat', label: 'Riwayat upload', icon: History },
+      { href: '/kualitas-data', label: 'Kualitas data', icon: ClipboardCheck },
+    ] },
+    { title: 'Administrasi', rowsOnly: true, items: [
+      { href: '/companies', label: 'Perusahaan', icon: Building2 },
+      { href: '/id-simpel', label: 'ID SIMPEL', icon: Fingerprint },
+    ] },
+  ];
+
   return (
     <aside className="sticky top-0 z-40 flex h-screen w-64 print:hidden shrink-0 flex-col border-r border-slate-200 bg-[#fbfcfa] px-4 py-5">
       <Link href="/dashboard" className="flex items-center gap-3 px-2 pb-7">
         <Image src="/logo-klh.jpg" alt="Logo Kementerian Lingkungan Hidup" width={40} height={40} loading="eager" className="h-10 w-10 shrink-0 rounded-full" />
         <div><div className="text-sm font-bold tracking-tight text-slate-900">PCBs inventory</div><div className="text-[10px] font-medium text-slate-500">Direktorat B3</div></div>
       </Link>
-      <nav className="space-y-1 text-sm font-medium">
-        <Link href="/dashboard" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${pathname === '/dashboard' ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Grid2X2 className="h-4 w-4" /> Dashboard</Link>
-        <div className="px-3 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Inventarisasi</div>
-        {INVENTORY_CATEGORIES.map((category) => {
-          const Icon = categoryIcons[category.key];
-          const href = `/dashboard/${category.key.replaceAll('_', '-')}`;
-          return <Link key={category.key} href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive(href) ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Icon className="h-4 w-4" /> {category.shortLabel}</Link>;
-        })}
-        {/* Upload, riwayat, perusahaan dan kualitas data butuh baris data: tidak ada di web (mode ringkasan). */}
-        {!SUMMARY_MODE && <>
-          <div className="px-3 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Lainnya</div>
-          <Link href="/formulir" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/formulir') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><ClipboardPen className="h-4 w-4" /> Isi formulir</Link>
-          <Link href="/roadmap" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/roadmap') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><CalendarClock className="h-4 w-4" /> Roadmap</Link>
-          <Link href="/upload" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload') && !isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><UploadCloud className="h-4 w-4" /> Upload data</Link>
-          <Link href="/upload/riwayat" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/upload/riwayat') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><History className="h-4 w-4" /> Riwayat upload</Link>
-          <Link href="/companies" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/companies') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Building2 className="h-4 w-4" /> Perusahaan</Link>
-          <Link href="/id-simpel" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/id-simpel') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><Fingerprint className="h-4 w-4" /> ID SIMPEL</Link>
-          <Link href="/kualitas-data" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${isActive('/kualitas-data') ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}><ClipboardCheck className="h-4 w-4" /> Kualitas data</Link>
-        </>}
+      <nav className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-4 text-sm font-medium">
+        <NavLink href="/dashboard" icon={Grid2X2} label="Dashboard" active={pathname === '/dashboard'} />
+        {groups.filter((group) => !group.rowsOnly || !SUMMARY_MODE).map((group) => (
+          <div key={group.title} className="mt-5">
+            <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.title}</div>
+            <div className="space-y-0.5">
+              {group.items.map((item) => <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} active={item.active ?? isActive(item.href)} />)}
+            </div>
+          </div>
+        ))}
       </nav>
-      <div className="mt-auto border-t border-slate-200 pt-4">
+      <div className="shrink-0 border-t border-slate-200 pt-4">
         <div className="flex items-center gap-2 px-2 text-xs text-slate-500">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">{email ? email[0].toUpperCase() : 'AD'}</span>
           <span className="min-w-0 truncate" title={email ?? undefined}>{email ?? 'Direktorat B3'}</span>
