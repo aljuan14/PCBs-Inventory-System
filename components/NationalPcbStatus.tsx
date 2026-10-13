@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ChevronRight, Loader2, ShieldAlert } from 'lucide-react';
-import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, nationalColor, onlyStatementMissing, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
+import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, nationalColor, onlyPaperwork, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 
 const ORDER: NationalColor[] = ['red', 'yellow', 'green', 'empty'];
@@ -55,8 +55,8 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
   if (!statuses) return <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Menghitung status PCBs perusahaan…</div>;
   if (statuses.error) return <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">Status PCBs perusahaan gagal dimuat: {statuses.error}</p>;
 
-  // Most yellow companies only lack the statement (introduced 2026-10-12); said on the tile so it is not read as a data problem.
-  const statementOnly = byColor.yellow.filter((row) => onlyStatementMissing(row.counts)).length;
+  // Many yellow companies only lack paperwork (statement, supporting evidence); said on the tile so it is not read as a data problem.
+  const paperworkOnly = byColor.yellow.filter((row) => onlyPaperwork(row.counts)).length;
   const list = [...byColor[color]].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name));
   const visible = showAll ? list : list.slice(0, SHOWN);
   const figures: Array<[string, number, string | null]> = [
@@ -88,7 +88,7 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
               className={`rounded-xl border p-3 text-left transition-shadow ${style.card} ${color === key ? 'ring-2 ring-slate-900/15' : 'hover:brightness-[0.98]'}`}>
               <span className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide ${style.text}`}><span className={`h-2 w-2 rounded-full ${style.dot}`} />{style.label}</span>
               <span className="mt-1 flex items-baseline gap-1.5"><span className="text-2xl font-semibold tabular-nums text-slate-900">{fmt(byColor[key].length)}</span><span className="text-xs text-slate-500">perusahaan</span></span>
-              {key === 'yellow' && statementOnly > 0 && <span className="mt-0.5 block text-[11px] text-amber-800">{fmt(statementOnly)} hanya karena belum mengisi pernyataan</span>}
+              {key === 'yellow' && paperworkOnly > 0 && <span className="mt-0.5 block text-[11px] text-amber-800">{fmt(paperworkOnly)} hanya karena kelengkapan administrasi (pernyataan / bukti dukung)</span>}
             </button>
           );
         })}

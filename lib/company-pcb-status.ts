@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
+import { TRAFO_FOCUS_YEAR, formSpec } from '@/lib/form-fields';
+import { EVIDENCE_ITEMS } from '@/lib/evidence';
 import { SUMMARY_MODE } from '@/lib/data-mode';
 
 /**
@@ -13,7 +14,8 @@ import { SUMMARY_MODE } from '@/lib/data-mode';
  * - yellow: everything left has a plan still ahead, the statement is
  *   missing or at odds with the data, the TPS permit ends within 90 days,
  *   waste stored over 365 days, a checklist point answered "tidak", or
- *   waste not handled yet in the balance (forms 3-5);
+ *   waste not handled yet in the balance (forms 3-5), or the supporting
+ *   evidence of a form 1.x with data incomplete;
  * - green: nothing left to do (no focus transformer, or all tested within
  *   50 ppm or handled).
  */
@@ -54,6 +56,8 @@ export type PcbStatusCounts = {
   pengolahan_tidak?: number | null;
   pengolahan_penaatan?: number | null;
   belum_dikelola_ton?: number;
+  /** Links filled in per form 1.x on its latest save (migration 20261013000009). */
+  bukti_dukung?: Partial<Record<keyof typeof EVIDENCE_ITEMS, number>>;
 };
 
 /** How long before the TPS permit ends the status turns yellow, and how long PCBs waste may be stored. */
@@ -61,7 +65,8 @@ export const PERMIT_WARNING_DAYS = 90;
 export const MAX_STORAGE_DAYS = 365;
 
 export type StatusColor = 'red' | 'yellow' | 'green';
-export type StatusMessage = { tone: StatusColor; text: string };
+/** `admin`: about paperwork (statement, supporting evidence), not about the equipment. */
+export type StatusMessage = { tone: StatusColor; text: string; admin?: boolean };
 
 export const STATUS_COLORS: Record<StatusColor, { label: string; dot: string; card: string; text: string }> = {
   red: { label: 'Perlu tindakan', dot: 'bg-rose-600', card: 'border-rose-200 bg-rose-50', text: 'text-rose-800' },
@@ -121,7 +126,18 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   unmet(s.pengolahan_tidak, s.pengolahan_penaatan, 'pengolahan');
   if ((Number(s.belum_dikelola_ton) || 0) > 0) messages.push({ tone: 'yellow', text: `Neraca: ${tons(Number(s.belum_dikelola_ton))} ton limbah PCBs belum dikelola.` });
 
-  if (!s.pernyataan) messages.push({ tone: 'yellow', text: 'Perusahaan belum mengisi pernyataan kepemilikan transformator.' });
+  // Supporting evidence of every form 1.x the company has data in.
+  const rowsPerForm: Record<keyof typeof EVIDENCE_ITEMS, number> = {
+    transformator_digunakan: s.trafo_digunakan, transformator_tidak_digunakan: s.trafo_tidak_digunakan, kapasitor: s.kapasitor, minyak_dielektrik: s.minyak,
+  };
+  if (s.bukti_dukung) {
+    for (const [form, rows] of Object.entries(rowsPerForm) as Array<[keyof typeof EVIDENCE_ITEMS, number]>) {
+      const needed = EVIDENCE_ITEMS[form].length;
+      const filled = s.bukti_dukung[form] ?? 0;
+      if (rows > 0 && filled < needed) messages.push({ tone: 'yellow', admin: true, text: `Bukti dukung formulir ${formSpec(form).code} belum lengkap: ${fmt(filled)}/${fmt(needed)} tautan.` });
+    }
+  }
+  if (!s.pernyataan) messages.push({ tone: 'yellow', admin: true, text: 'Perusahaan belum mengisi pernyataan kepemilikan transformator.' });
   else if (!s.pernyataan.punya_trafo_sebelum_1997 && s.fokus > 0) {
     messages.push({ tone: 'yellow', text: `Pernyataan menyebut tidak ada trafo sebelum ${TRAFO_FOCUS_YEAR}, tetapi data berisi ${fmt(s.fokus)}. Periksa pernyataan atau datanya.` });
   } else if (s.pernyataan.punya_trafo_sebelum_1997 && trafo === 0) {
@@ -177,5 +193,8 @@ export async function fetchAllPcbStatus(supabase: SupabaseClient): Promise<Map<s
   return new Map(((data ?? []) as Array<{ company_id: string; status: PcbStatusCounts }>).map((row) => [row.company_id, row.status]));
 }
 
-/** Yellow only because the statement is missing: nothing in the data itself needs doing. */
-export const onlyStatementMissing = (s: PcbStatusCounts) => !s.pernyataan && evaluateStatus(s).messages.length === 1;
+/** Yellow only for paperwork (statement, supporting evidence): nothing in the data itself needs doing. */
+export const onlyPaperwork = (s: PcbStatusCounts) => {
+  const { color, messages } = evaluateStatus(s);
+  return color === 'yellow' && messages.every((message) => message.admin);
+};
