@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronRight, Scale } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { ChevronRight, FileSignature, Scale } from 'lucide-react';
+import { fetchAllPcbStatus } from '@/lib/company-pcb-status';
 import { categoryTint, type InventoryCategory } from '@/lib/inventory';
 import { PRE_1997_FILTER, sumStats, TRAFO_CATEGORIES, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats } from '@/lib/inventory-query';
 import { formatPercent, niceMax } from '@/components/DashboardCharts';
-import { ScopeToggle, type StatusScope } from '@/components/InventorySummary';
+import { NEWER_COLOR, PRE_1997_COLOR, ScopeToggle, UNKNOWN_COLOR, type StatusScope } from '@/components/InventorySummary';
 
 /** kg as tons: one decimal below 100 t, whole tons above. */
 export const formatTons = (kg: number) => (kg / 1000).toLocaleString('id-ID', { maximumFractionDigits: kg < 100_000 ? 1 : 0 });
@@ -107,14 +109,98 @@ function TonnageColumns({ stats, category, band, onSelect }: { stats: InventoryS
   );
 }
 
+type YearBand = 'pre1997' | 'from1997' | 'noyear';
+const YEAR_BANDS: Array<{ key: YearBand; label: string; color: string; filters: Partial<InventoryFilters> }> = [
+  { key: 'pre1997', label: 'Sebelum 1997', color: PRE_1997_COLOR, filters: PRE_1997_FILTER },
+  { key: 'from1997', label: '1997 ke atas', color: NEWER_COLOR, filters: { yearRange: 'from1997' } },
+  { key: 'noyear', label: 'Tahun tidak diketahui', color: UNKNOWN_COLOR, filters: { yearRange: 'unknown' } },
+];
+
+const bandWeight = (stats: InventoryStats | null, band: YearBand) => TRAFO_CATEGORIES.reduce((sum, category) => {
+  const figures = stats?.[category];
+  return figures ? sum + figures[`weight_${band}_high_kg`] + figures[`weight_${band}_low_kg`] + figures[`weight_${band}_untested_kg`] : sum;
+}, 0);
+
+type Declared = { tons: number; units: number; companies: number };
+
+/**
+ * Tons of transformers from 1997 on that companies declared on their
+ * statement (company_statements, through the status counts so the web has
+ * them too). Company-wide, so left out when a unit is picked.
+ */
+function useDeclared(supabase: SupabaseClient | undefined, companyId: string | null, unitPicked: boolean, reloadKey: number) {
+  const [declared, setDeclared] = useState<{ key: string; value: Declared | null } | null>(null);
+  const key = `${companyId}|${unitPicked}|${reloadKey}`;
+  useEffect(() => {
+    if (!supabase || unitPicked) return;
+    let active = true;
+    fetchAllPcbStatus(supabase).then((map) => {
+      if (!active) return;
+      const value: Declared = { tons: 0, units: 0, companies: 0 };
+      for (const [id, status] of map) {
+        const statement = status.pernyataan;
+        if ((companyId && id !== companyId) || !statement?.punya_trafo_1997_keatas) continue;
+        value.tons += Number(statement.tonase_trafo_1997_keatas_ton) || 0;
+        value.units += Number(statement.jumlah_trafo_1997_keatas) || 0;
+        value.companies++;
+      }
+      setDeclared({ key, value });
+    }, () => { if (active) setDeclared({ key, value: null }); });
+    return () => { active = false; };
+  }, [supabase, companyId, unitPicked, key]);
+  return !supabase || unitPicked || declared?.key !== key ? null : declared.value;
+}
+
+/** Tons per production-year band, the boss's split of before 1997 against 1997 on. */
+function YearSplit({ stats, declared, onSelect }: { stats: InventoryStats | null; declared: Declared | null; onSelect?: Select }) {
+  const bands = YEAR_BANDS.map((band) => ({ ...band, kg: bandWeight(stats, band.key) }));
+  const total = bands.reduce((sum, band) => sum + band.kg, 0);
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <h4 className="text-sm font-bold text-slate-900">Menurut tahun pembuatan</h4>
+      <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={bands.map((band) => `${band.label} ${formatTons(band.kg)} ton`).join(', ')}>
+        {bands.map((band) => band.kg > 0 && <div key={band.key} style={{ width: `${share(band.kg, total)}%`, backgroundColor: band.color }} />)}
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {bands.map((band) => (
+          <button key={band.key} type="button" disabled={!onSelect || band.kg === 0} onClick={() => onSelect?.(band.filters, 'transformator')}
+            className="rounded-lg bg-slate-50 px-3 py-2.5 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-emerald-500">
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: band.color }} />{band.label}</span>
+            <span className="mt-1 flex items-baseline gap-1.5">
+              <span className="text-xl font-semibold tracking-tight text-slate-900">{formatTons(band.kg)}</span>
+              <span className="text-xs text-slate-500">ton · {formatPercent(share(band.kg, total))}</span>
+            </span>
+            {band.key === 'from1997' && declared && declared.companies > 0 && (
+              <span className="mt-1.5 flex items-start gap-1 text-[11px] text-slate-600">
+                <FileSignature className="mt-0.5 h-3 w-3 shrink-0" />
+                <span>Pernyataan perusahaan: <span className="font-semibold">{declared.tons.toLocaleString('id-ID', { maximumFractionDigits: 1 })} ton</span> ({declared.units.toLocaleString('id-ID')} unit, {declared.companies.toLocaleString('id-ID')} perusahaan), dicatat terpisah</span>
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Transformer tonnage from the total weight in the inventory form: all, in
  * use and not in use as figures, then per PCBs class for each type. The
  * switch shows either the ones made before 1997 or all of them; those
  * without a production year follow as their own row, to be filled in.
  */
-export default function TonnageCard({ stats, loading, onSelect }: { stats: InventoryStats | null; loading: boolean; onSelect?: Select }) {
+export default function TonnageCard({ stats, loading, onSelect, supabase, companyId = null, unitPicked = false, reloadKey = 0 }: {
+  stats: InventoryStats | null;
+  loading: boolean;
+  onSelect?: Select;
+  /** With these, the tons companies declared for transformers from 1997 on show beside the inventory's. */
+  supabase?: SupabaseClient;
+  companyId?: string | null;
+  unitPicked?: boolean;
+  reloadKey?: number;
+}) {
   const [scope, setScope] = useState<StatusScope>('pre1997');
+  const declared = useDeclared(supabase, companyId, unitPicked, reloadKey);
   const band: Band = scope === 'pre1997' ? 'pre1997' : 'all';
   const weighed = stats ? sumStats(stats, TRAFO_CATEGORIES, 'with_weight') : 0;
   const units = stats ? sumStats(stats, TRAFO_CATEGORIES, 'total') : 0;
@@ -146,6 +232,8 @@ export default function TonnageCard({ stats, loading, onSelect }: { stats: Inven
         <div className="rounded-xl border border-dashed border-slate-200 px-6 py-8 text-center text-xs text-slate-500">Belum ada berat yang tercatat untuk transformator.</div>
       ) : (
         <div className="space-y-4">
+          <YearSplit stats={stats} declared={declared} onSelect={onSelect} />
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {tiles.map((tile) => (
               <button

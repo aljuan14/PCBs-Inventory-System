@@ -63,7 +63,7 @@ export default function InventoryOverview() {
       ? <CompanyPcbStatusCard supabase={supabase} companyId={scope.companyId} reloadKey={reloadKey} roadmapLink={!SUMMARY_MODE} />
       : <NationalPcbStatus supabase={supabase} companies={companies} reloadKey={reloadKey} onSelectCompany={(companyId) => { setScope({ companyId, unit: null, subUnit: null }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
     <InventorySummary stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
-    <TonnageCard stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} />
+    <TonnageCard stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} supabase={supabase} companyId={scope.companyId} unitPicked={Boolean(scope.unit || scope.subUnit)} reloadKey={reloadKey} />
     {!SUMMARY_MODE && <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>}
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-3 text-base font-semibold">Peta sebaran inventaris</h2><MapLeaflet supabase={supabase} companies={companies} scope={scope} onScopeChange={setScope} reloadKey={reloadKey} height="520px" onSelectPoint={SUMMARY_MODE ? undefined : (selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;

@@ -32,9 +32,9 @@ interface Segment {
 // newer ones, warm gray for "not known" (the same gray as "Belum diuji").
 // Checked with the dataviz palette validator against the white card: CVD
 // ΔE 9.6, normal vision 16.7; the legend beside always carries the values.
-const PRE_1997_COLOR = '#eb6834';
-const NEWER_COLOR = '#2a9d8f';
-const UNKNOWN_COLOR = '#b4b2a9';
+export const PRE_1997_COLOR = '#eb6834';
+export const NEWER_COLOR = '#2a9d8f';
+export const UNKNOWN_COLOR = '#b4b2a9';
 
 const CARD_CLASS = 'rounded-2xl border border-slate-200 bg-white p-5';
 
@@ -218,8 +218,8 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
       <div className={CARD_CLASS}>
         <div className="flex items-start justify-between gap-3">
           <CardTitle
-            title="Status PCBs"
-            subtitle={pre1997 ? 'Trafo buatan sebelum 1997' : 'Semua trafo, termasuk yang tahun produksinya tidak diketahui'}
+            title="Hasil Pengujian Minyak Dielektrik"
+            subtitle={`Pada trafo yang ${category === 'transformator_digunakan' ? 'masih digunakan' : 'sudah tidak digunakan'}${pre1997 ? ', buatan sebelum 1997' : ', semua tahun produksi termasuk yang tidak diketahui'}`}
           />
           <ScopeToggle value={statusScope} onChange={setStatusScope} />
         </div>

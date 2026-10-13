@@ -70,7 +70,7 @@ const CATEGORY_OPTIONS: Array<{ key: CategoryFilter; label: string }> = [
   ...INVENTORY_CATEGORIES.map((category) => ({ key: category.key as CategoryFilter, label: category.shortLabel })),
 ];
 const PCB_OPTIONS: Array<{ key: MapFilters['pcbRange']; label: string }> = [
-  { key: 'all', label: 'Semua status PCBs' },
+  { key: 'all', label: 'Semua hasil uji' },
   ...PCB_COLORS.map((entry) => ({ key: entry.key as MapFilters['pcbRange'], label: entry.label })),
 ];
 const YEAR_OPTIONS: Array<{ key: MapFilters['year']; label: string }> = [
@@ -387,7 +387,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
         )}
         <CompanyPicker companies={companies} value={companyValue} onChange={pickCompany} allLabel="Semua perusahaan" className="w-64" />
         {hasPcb && (
-          <select aria-label="Status PCBs" value={filters.pcbRange} onChange={(e) => setFilter('pcbRange', e.target.value as MapFilters['pcbRange'])} className={SELECT_CLASS}>
+          <select aria-label="Hasil uji minyak dielektrik" value={filters.pcbRange} onChange={(e) => setFilter('pcbRange', e.target.value as MapFilters['pcbRange'])} className={SELECT_CLASS}>
             {PCB_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
         )}
@@ -405,7 +405,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
           <div role="group" aria-label="Warna titik" className="ml-auto flex items-center gap-2 text-[11px] font-semibold text-slate-500">
             Warna:
             <div className="flex rounded-lg bg-slate-100 p-0.5">
-              {([['pcb', 'Status PCBs'], ['category', 'Kategori']] as const).map(([key, label]) => (
+              {([['pcb', 'Hasil uji'], ['category', 'Kategori']] as const).map(([key, label]) => (
                 <button key={key} type="button" aria-pressed={colorMode === key} onClick={() => setColorMode(key)} className={`rounded-md px-2.5 py-1 transition-colors ${colorMode === key ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-700'}`}>{label}</button>
               ))}
             </div>
@@ -428,7 +428,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
 
         {legend.length > 0 && (
           <div className="absolute bottom-6 left-3 z-[500] rounded-xl bg-white/95 p-3 text-[11px] text-slate-700 shadow-md ring-1 ring-slate-200 backdrop-blur-sm">
-            <div className="mb-1.5 font-semibold text-slate-900">{colorMode === 'pcb' ? 'Status PCBs' : 'Jenis alat'}</div>
+            <div className="mb-1.5 font-semibold text-slate-900">{colorMode === 'pcb' ? 'Hasil uji minyak dielektrik' : 'Jenis alat'}</div>
             <div className="flex flex-col gap-1">
               {legend.map((entry) => (
                 <div key={entry.key} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: entry.color }} />{entry.label}</div>

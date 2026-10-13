@@ -47,7 +47,7 @@ Keduanya wajib login. Akun dibuat oleh admin, dan pendaftaran dari halaman login
 |---|---|
 | Filter | Perusahaan › Unit Induk › Unit Pelaksana. Pemilih perusahaan bisa dicari dan berlaku untuk seluruh halaman. |
 | Ringkasan | Total transformator, kapasitor, dan minyak dielektrik. Di bawahnya satu kolom per jenis trafo (digunakan dan tidak digunakan, masing-masing dengan latar warnanya): tahun produksi, lalu Status PCBs (< 2, 2–50, > 50 ppm, belum diuji) dengan tombol **< 1997 / Semua**. |
-| Tonase transformator | Tombol **< 1997 / Semua**. Total tonase, lalu grafik kolom per kadar PCBs (> 50 ppm, ≤ 50 ppm, belum diuji) untuk tiap jenis trafo, dan baris terpisah untuk trafo yang tahun pembuatannya kosong. Skala logaritmik agar angka kecil tetap terlihat. |
+| Tonase transformator | Baris **menurut tahun pembuatan**: tonase < 1997, ≥ 1997, dan tanpa tahun, ditambah tonase ≥ 1997 dari pernyataan perusahaan (dicatat terpisah). Lalu tombol **< 1997 / Semua**. Total tonase, lalu grafik kolom per kadar PCBs (> 50 ppm, ≤ 50 ppm, belum diuji) untuk tiap jenis trafo, dan baris terpisah untuk trafo yang tahun pembuatannya kosong. Skala logaritmik agar angka kecil tetap terlihat. |
 | Tabel data | Semua kolom, pencarian, filter, edit dan hapus. Baris dimuat 50 per langkah saat tabel di-scroll. *(offline)* |
 | Peta sebaran | Filter kategori, perusahaan, Status PCBs, dan tahun. Titik dikelompokkan per wilayah (lingkaran berangka dengan cincin warna per status), lalu tampil satuan saat diperbesar. Warna per Status PCBs atau kategori, pilihan peta atau satelit, dan layar penuh. |
 
