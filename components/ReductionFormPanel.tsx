@@ -57,9 +57,11 @@ export function recordOf(entry: FormEntry, companyId: string, itemId: string | n
 /**
  * Writes a maintenance log into its transformer: the latest maintenance
  * (columns 12-16 of form 1.1), the replacement oil as its oil brand, and the
- * after-test when there is one, so the PCBs status follows.
+ * after-test when there is one, so the PCBs status follows. An after-test of
+ * 50 ppm or less also closes the transformer's open handling plans on the
+ * maintenance date: the roadmap need not be marked by hand.
  */
-export function applyToTrafo(supabase: SupabaseClient, trafoId: string, record: Record<string, string | number | null>) {
+export async function applyToTrafo(supabase: SupabaseClient, trafoId: string, record: Record<string, string | number | null>) {
   const changes: Record<string, string | number | null> = {
     perawatan_jenis: record.perawatan_jenis, perawatan_waktu: record.perawatan_waktu, perawatan_merek_oli_pengganti: record.perawatan_merek_oli_pengganti,
     perawatan_volume_ditambahkan_l: record.perawatan_volume_l, perawatan_penyedia_jasa: record.perawatan_penyedia_jasa,
@@ -68,7 +70,11 @@ export function applyToTrafo(supabase: SupabaseClient, trafoId: string, record: 
   if (record.uji_sesudah_ppm !== null) {
     Object.assign(changes, { uji_konsentrasi_ppm: record.uji_sesudah_ppm, uji_jenis: record.uji_sesudah_jenis, uji_metode: record.uji_sesudah_metode, uji_penyedia_jasa: record.uji_sesudah_penyedia_jasa });
   }
-  return supabase.from('transformator_digunakan').update(changes).eq('id', trafoId);
+  const result = await supabase.from('transformator_digunakan').update(changes).eq('id', trafoId);
+  if (!result.error && typeof record.uji_sesudah_ppm === 'number' && record.uji_sesudah_ppm <= 50) {
+    await supabase.from('equipment_plans').update({ selesai_at: record.perawatan_waktu }).eq('item_id', trafoId).eq('jenis', 'penanganan').is('selesai_at', null);
+  }
+  return result;
 }
 
 /** Transformers still in use, those over 50 ppm first; or those matching the search. */
