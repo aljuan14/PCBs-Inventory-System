@@ -76,8 +76,8 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 ### Status PCBs & roadmap *(offline)*
 
 - **Kartu status** di dashboard (saat satu perusahaan dipilih) dan di halaman Roadmap: satu kalimat ringkasan semua peralatan perusahaan, lalu lampu **merah / kuning / hijau** untuk trafo buatan sebelum 1997 (atau tanpa tahun) beserta pesannya.
-  - **Merah:** ada trafo belum diuji tanpa rencana uji, > 50 ppm tanpa rencana penanganan, atau rencana yang lewat tanggalnya.
-  - **Kuning:** semua sisanya sudah punya rencana yang belum jatuh tempo, pernyataan belum diisi atau tidak cocok dengan data, atau tahun pembuatan kosong.
+  - **Merah:** ada trafo belum diuji tanpa rencana uji, > 50 ppm tanpa rencana penanganan, rencana yang lewat tanggalnya, atau limbah PCBs disimpan tanpa izin TPS yang berlaku (formulir 3).
+  - **Kuning:** semua sisanya sudah punya rencana yang belum jatuh tempo, pernyataan belum diisi atau tidak cocok dengan data, tahun pembuatan kosong, izin TPS berakhir dalam 90 hari, limbah disimpan lebih dari 365 hari, ada ketentuan teknis dijawab "Tidak", atau neraca masih menyisakan limbah belum dikelola.
   - **Hijau:** tidak ada yang perlu dilakukan.
 - **Ringkasan nasional** di dashboard (tanpa perusahaan dipilih): jumlah perusahaan merah / kuning / hijau / belum melapor, angka nasional (trafo belum diuji, > 50 ppm, tanpa rencana, rencana lewat), dan daftar perusahaan per warna, yang paling banyak tindakan terbuka di atas. Klik perusahaan untuk melihat dashboard-nya. Halaman Perusahaan juga menampilkan status tiap perusahaan.
 - **Roadmap:** tanggal rencana uji (untuk yang belum diuji) atau penanganan (untuk yang > 50 ppm), untuk semua trafo sekaligus atau trafo yang dicentang. Rencana uji selesai sendiri begitu hasil ujinya masuk; penanganan ditandai selesai oleh admin.
@@ -98,7 +98,7 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 
 - **Perusahaan:** isi data per perusahaan, hasil pemeriksaan siap dikirim lewat email, dan status pengiriman (belum dikirim, sudah dikirim, ada data baru, kosong).
 - **ID SIMPEL:** setiap perusahaan dihubungkan dengan datanya di PILAR. Kandidat disarankan dari kemiripan nama, nama yang cocok persis bisa dihubungkan sekaligus, sisanya dipilih admin atau dicari lewat nama, NPWP, NIB, atau ID SIMPEL.
-- **Kualitas data:** skor kelengkapan per perusahaan dan unit, plus laporan temuan yang bisa diekspor ke Excel atau PDF.
+- **Kualitas data:** termasuk tanda **berat tidak sesuai daya** (lebih dari 50 kg per kVA, biasanya salah satuan berat atau daya; hanya ditandai, data tidak diubah). Skor kelengkapan per perusahaan dan unit, plus laporan temuan yang bisa diekspor ke Excel atau PDF.
 
 ---
 

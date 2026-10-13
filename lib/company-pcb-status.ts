@@ -8,9 +8,12 @@ import { SUMMARY_MODE } from '@/lib/data-mode';
  * the colour and messages shown on the status card:
  *
  * - red: a transformer not tested and with no plan, one over 50 ppm with no
- *   plan to handle it, or a plan past its date;
- * - yellow: everything left has a plan still ahead, or the statement is
- *   missing or at odds with the data;
+ *   plan to handle it, a plan past its date, or PCBs waste stored without a
+ *   valid TPS permit (form 3);
+ * - yellow: everything left has a plan still ahead, the statement is
+ *   missing or at odds with the data, the TPS permit ends within 90 days,
+ *   waste stored over 365 days, a checklist point answered "tidak", or
+ *   waste not handled yet in the balance (forms 3-5);
  * - green: nothing left to do (no focus transformer, or all tested within
  *   50 ppm or handled).
  */
@@ -40,7 +43,22 @@ export type PcbStatusCounts = {
   tinggi_lewat: number;
   rencana_berikut: string | null;
   pernyataan: StatementRow | null;
+  // Forms 3-5 (migration 20261013000007); missing in a web summary sent before it.
+  simpan_ton?: number;
+  simpan_lewat_365?: number;
+  izin_tps_status?: string | null;
+  izin_tps_berlaku?: string | null;
+  penyimpanan_diisi?: boolean;
+  penyimpanan_tidak?: number | null;
+  penyimpanan_penaatan?: number | null;
+  pengolahan_tidak?: number | null;
+  pengolahan_penaatan?: number | null;
+  belum_dikelola_ton?: number;
 };
+
+/** How long before the TPS permit ends the status turns yellow, and how long PCBs waste may be stored. */
+export const PERMIT_WARNING_DAYS = 90;
+export const MAX_STORAGE_DAYS = 365;
 
 export type StatusColor = 'red' | 'yellow' | 'green';
 export type StatusMessage = { tone: StatusColor; text: string };
@@ -81,6 +99,28 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   if (s.belum_uji_terjadwal > 0) messages.push({ tone: 'yellow', text: `${fmt(s.belum_uji_terjadwal)} trafo dijadwalkan diuji.` });
   if (s.tinggi_terjadwal > 0) messages.push({ tone: 'yellow', text: `${fmt(s.tinggi_terjadwal)} trafo > 50 ppm dijadwalkan ditangani.` });
 
+  // Forms 3-5: storage, its permit and checklists, the balance.
+  const stored = Number(s.simpan_ton) || 0;
+  const tons = (value: number) => value.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+  if (stored > 0) {
+    const permitEnd = s.izin_tps_berlaku ? new Date(`${s.izin_tps_berlaku}T00:00:00`) : null;
+    const daysLeft = permitEnd ? Math.floor((permitEnd.getTime() - Date.now()) / 86_400_000) : null;
+    if (!s.penyimpanan_diisi || !s.izin_tps_status || s.izin_tps_status === 'Belum memiliki izin') {
+      messages.push({ tone: 'red', text: `Menyimpan ${tons(stored)} ton limbah PCBs tanpa izin TPS Limbah B3 yang tercatat.` });
+    } else if (daysLeft !== null && daysLeft < 0) {
+      messages.push({ tone: 'red', text: `Menyimpan ${tons(stored)} ton limbah PCBs, tetapi izin TPS sudah berakhir ${formatPlanDate(s.izin_tps_berlaku!)}.` });
+    } else if (daysLeft !== null && daysLeft <= PERMIT_WARNING_DAYS) {
+      messages.push({ tone: 'yellow', text: `Izin TPS Limbah B3 berakhir ${formatPlanDate(s.izin_tps_berlaku!)} (${fmt(daysLeft)} hari lagi).` });
+    }
+  }
+  if ((s.simpan_lewat_365 ?? 0) > 0) messages.push({ tone: 'yellow', text: `${fmt(s.simpan_lewat_365!)} limbah PCBs disimpan lebih dari ${MAX_STORAGE_DAYS} hari dan belum dikelola seluruhnya.` });
+  const unmet = (count: number | null | undefined, rate: number | null | undefined, what: string) => {
+    if (count) messages.push({ tone: 'yellow', text: `${fmt(count)} ketentuan teknis ${what} belum terpenuhi${rate !== null && rate !== undefined ? ` (penaatan ${Math.round(rate * 100)}%)` : ''}.` });
+  };
+  unmet(s.penyimpanan_tidak, s.penyimpanan_penaatan, 'penyimpanan');
+  unmet(s.pengolahan_tidak, s.pengolahan_penaatan, 'pengolahan');
+  if ((Number(s.belum_dikelola_ton) || 0) > 0) messages.push({ tone: 'yellow', text: `Neraca: ${tons(Number(s.belum_dikelola_ton))} ton limbah PCBs belum dikelola.` });
+
   if (!s.pernyataan) messages.push({ tone: 'yellow', text: 'Perusahaan belum mengisi pernyataan kepemilikan transformator.' });
   else if (!s.pernyataan.punya_trafo_sebelum_1997 && s.fokus > 0) {
     messages.push({ tone: 'yellow', text: `Pernyataan menyebut tidak ada trafo sebelum ${TRAFO_FOCUS_YEAR}, tetapi data berisi ${fmt(s.fokus)}. Periksa pernyataan atau datanya.` });
@@ -89,6 +129,8 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   }
   if (s.fokus_tahun_kosong > 0) messages.push({ tone: 'yellow', text: `${fmt(s.fokus_tahun_kosong)} trafo tanpa tahun pembuatan, dihitung sebagai trafo sebelum ${TRAFO_FOCUS_YEAR}. Lengkapi tahunnya.` });
 
+  // Red first: the national list shows a company's first message.
+  messages.sort((a, b) => Number(b.tone === 'red') - Number(a.tone === 'red'));
   const color: StatusColor = messages.some((message) => message.tone === 'red') ? 'red' : messages.length > 0 ? 'yellow' : 'green';
   if (color === 'green') {
     messages.push({ tone: 'green', text: s.fokus === 0 ? `Tidak ada trafo buatan sebelum ${TRAFO_FOCUS_YEAR}.` : `Semua trafo sebelum ${TRAFO_FOCUS_YEAR} sudah diuji ≤ 50 ppm atau sudah ditangani.` });
