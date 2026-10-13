@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, ChevronDown, Copy, Info, Loader2, MapPin, Pencil, Plus, Send, ShieldCheck, Trash2, X } from 'lucide-react';
-import { parseDMSCoordinate } from '@/lib/dms';
-import { MAX_FORM_ROWS, entryErrors, formSpec, isTrafo, TRAFO_FOCUS_YEAR, type EntryCheck, type FormEntry, type FormField } from '@/lib/form-fields';
+import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import FormEditor from '@/components/FormEditor';
+import { MAX_FORM_ROWS, entryErrors, formSpec, isTrafo, TRAFO_FOCUS_YEAR, type EntryCheck, type FormEntry } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 
-const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+export const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const draftKey = (companyId: string, category: InventoryCategory) => `formulir:${companyId}:${category}`;
 
 // The unsent entries are kept in this browser, so a closed tab loses nothing.
@@ -26,120 +26,6 @@ function writeDraft(key: string, entries: FormEntry[]) {
   } catch {
     // Storage blocked: the entries simply live until the page closes.
   }
-}
-
-const inputClass = 'w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600';
-
-/** Decimal or degree-minute-second coordinate, with what it reads as. */
-function CoordinatePreview({ value }: { value: string }) {
-  if (!value.trim()) return <p className="mt-1 text-[11px] text-slate-400">Contoh: -6.2088, 106.8456 atau S 6°12&apos;31&quot; E 106°50&apos;44&quot;</p>;
-  const parsed = parseDMSCoordinate(value);
-  if (!parsed.isValid) return <p className="mt-1 text-[11px] font-medium text-amber-700">Koordinat belum terbaca.</p>;
-  const lat = parsed.latitude as number;
-  const lng = parsed.longitude as number;
-  return (
-    <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700">
-      <MapPin className="h-3 w-3" /> {lat.toFixed(6)}, {lng.toFixed(6)}
-      <a href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noreferrer" className="ml-1 font-semibold underline">cek di peta</a>
-    </p>
-  );
-}
-
-function FieldInput({ field, entry, error, onChange, onUnknownYear }: { field: FormField; entry: FormEntry; error?: string; onChange: (value: string) => void; onUnknownYear: (unknown: boolean) => void }) {
-  const value = entry.values[field.key] ?? '';
-  const border = error ? 'border-rose-300' : 'border-slate-200';
-  const listId = field.options && field.input === 'text' ? `options-${field.key}` : undefined;
-  let control: React.ReactNode;
-  if (field.input === 'select') {
-    control = (
-      <select value={value} onChange={(event) => onChange(event.target.value)} className={`${inputClass} ${border}`}>
-        <option value="">{field.required ? 'Pilih…' : 'Tidak diisi'}</option>
-        {field.options!.map((option) => <option key={option}>{option}</option>)}
-      </select>
-    );
-  } else if (field.input === 'year') {
-    control = (
-      <div className="flex items-center gap-3">
-        <input type="number" min={1900} max={new Date().getFullYear()} value={value} disabled={entry.unknownYear} onChange={(event) => onChange(event.target.value)} className={`${inputClass} ${border} max-w-32 disabled:bg-slate-100`} />
-        <label className="flex items-center gap-1.5 text-xs text-slate-600"><input type="checkbox" checked={Boolean(entry.unknownYear)} onChange={(event) => onUnknownYear(event.target.checked)} className="accent-emerald-700" /> Tidak diketahui</label>
-      </div>
-    );
-  } else {
-    control = (
-      <div className={`flex items-center rounded-lg border bg-white focus-within:border-emerald-600 ${border}`}>
-        <input
-          type={field.input === 'number' ? 'number' : field.input === 'date' ? 'date' : 'text'}
-          step={field.input === 'number' ? 'any' : undefined}
-          min={field.input === 'number' ? 0 : undefined}
-          list={listId}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="min-w-0 flex-1 rounded-lg px-3 py-2 text-sm outline-none"
-        />
-        {field.unit && <span className="pr-3 text-xs text-slate-400">{field.unit}</span>}
-        {listId && <datalist id={listId}>{field.options!.map((option) => <option key={option} value={option} />)}</datalist>}
-      </div>
-    );
-  }
-  return (
-    <label className={`block text-xs font-medium text-slate-700 ${field.input === 'coordinate' || field.key === 'lokasi_peralatan' || field.key === 'lokasi_penyimpanan' ? 'sm:col-span-2' : ''}`}>
-      {field.label}{field.required && <span className="text-rose-600"> *</span>}
-      <div className="mt-1">{control}</div>
-      {field.input === 'coordinate' && <CoordinatePreview value={value} />}
-      {error ? <p className="mt-1 text-[11px] font-medium text-rose-700">{error}</p> : field.hint && field.input !== 'coordinate' && <p className="mt-1 text-[11px] text-slate-400">{field.hint}</p>}
-    </label>
-  );
-}
-
-function EntryEditor({ category, initial, onSave, onCancel }: { category: InventoryCategory; initial: FormEntry; onSave: (entry: FormEntry) => void; onCancel: () => void }) {
-  const spec = formSpec(category);
-  const [entry, setEntry] = useState(initial);
-  const [tried, setTried] = useState(false);
-  const [open, setOpen] = useState<Record<string, boolean>>(() => Object.fromEntries(spec.sections.map((section) => [section.title, !section.collapsed || section.fields.some((field) => initial.values[field.key])])));
-  const errors = tried ? entryErrors(category, entry) : {};
-  const set = (key: string, value: string) => setEntry((current) => ({ ...current, values: { ...current.values, [key]: value } }));
-
-  const save = () => {
-    setTried(true);
-    const found = entryErrors(category, entry);
-    if (Object.keys(found).length === 0) onSave(entry);
-    else setOpen((current) => ({ ...current, ...Object.fromEntries(spec.sections.filter((section) => section.fields.some((field) => found[field.key])).map((section) => [section.title, true])) }));
-  };
-
-  return (
-    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900">{initial.values.nama_merek || initial.values.merek_minyak_dielektrik ? 'Ubah isian' : 'Isian baru'}</h3>
-        <button type="button" onClick={onCancel} aria-label="Tutup" className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-slate-600"><X className="h-4 w-4" /></button>
-      </div>
-      <div className="space-y-3">
-        {spec.sections.map((section) => (
-          <div key={section.title} className="rounded-xl border border-slate-200 bg-white">
-            <button type="button" onClick={() => setOpen((current) => ({ ...current, [section.title]: !current[section.title] }))} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
-              <span>
-                <span className="block text-sm font-semibold text-slate-800">{section.title}</span>
-                {section.note && <span className="text-[11px] text-slate-500">{section.note}</span>}
-              </span>
-              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open[section.title] ? 'rotate-180' : ''}`} />
-            </button>
-            {open[section.title] && (
-              <div className="grid gap-3 border-t border-slate-100 px-4 py-4 sm:grid-cols-2">
-                {section.fields.map((field) => (
-                  <FieldInput key={field.key} field={field} entry={entry} error={errors[field.key]} onChange={(value) => set(field.key, value)}
-                    onUnknownYear={(unknown) => setEntry((current) => ({ ...current, unknownYear: unknown, values: { ...current.values, [field.key]: unknown ? '' : current.values[field.key] ?? '' } }))} />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {tried && Object.keys(errors).length > 0 && <p className="mt-3 text-xs font-medium text-rose-700">Masih ada {Object.keys(errors).length} isian yang perlu diperbaiki.</p>}
-      <div className="mt-4 flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700">Batal</button>
-        <button type="button" onClick={save} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><CheckCircle2 className="h-4 w-4" /> Simpan ke daftar</button>
-      </div>
-    </div>
-  );
 }
 
 type Result = { saved: boolean; savedRows?: number; blocked: number; checks: EntryCheck[] };
@@ -227,7 +113,10 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"><Info className="mt-0.5 h-4 w-4 shrink-0" /> Menurut pernyataannya, perusahaan ini tidak memiliki trafo buatan sebelum {TRAFO_FOCUS_YEAR}. Ubah pernyataan dulu bila ternyata ada.</p>
       )}
 
-      {editing && <EntryEditor key={editing.id} category={category} initial={editing} onSave={saveEntry} onCancel={() => setEditing(null)} />}
+      {editing && (
+        <FormEditor key={editing.id} sections={spec.sections} initial={editing} validate={(entry) => entryErrors(category, entry)}
+          title={entries.some((item) => item.id === editing.id) ? 'Ubah isian' : 'Isian baru'} saveLabel="Simpan ke daftar" onSave={saveEntry} onCancel={() => setEditing(null)} />
+      )}
 
       {entries.length === 0 ? (
         !editing && <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Belum ada isian. Klik &quot;Tambah isian&quot; untuk mulai. Isian tersimpan sebagai draf di browser ini sampai dikirim.</p>

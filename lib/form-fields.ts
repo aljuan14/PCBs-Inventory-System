@@ -185,10 +185,16 @@ export type FormEntry = { id: string; values: Record<string, string>; unknownYea
 export type EntryCheck = { id: string; errors: string[]; notes: string[]; duplicate: boolean };
 
 /** What blocks saving an entry, per field key (the import check comes after). */
-export function entryErrors(category: InventoryCategory, entry: FormEntry): Record<string, string> {
+export const entryErrors = (category: InventoryCategory, entry: FormEntry) => fieldErrors(formFields(category), entry, isTrafo(category));
+
+/**
+ * Required, number, year and choice checks of any form's fields. With
+ * `focusYear`, a transformer made from TRAFO_FOCUS_YEAR on is refused.
+ */
+export function fieldErrors(fields: FormField[], entry: FormEntry, focusYear = false): Record<string, string> {
   const errors: Record<string, string> = {};
   const currentYear = new Date().getFullYear();
-  for (const field of formFields(category)) {
+  for (const field of fields) {
     const value = entry.values[field.key]?.trim() ?? '';
     if (field.input === 'year') {
       if (!value) {
@@ -197,7 +203,7 @@ export function entryErrors(category: InventoryCategory, entry: FormEntry): Reco
       }
       const year = Number(value);
       if (!Number.isInteger(year) || year < 1900 || year > currentYear) errors[field.key] = `Tahun harus antara 1900 dan ${currentYear}.`;
-      else if (isTrafo(category) && year >= TRAFO_FOCUS_YEAR) errors[field.key] = `Trafo buatan ${TRAFO_FOCUS_YEAR} ke atas tidak diisi satu per satu, cukup jumlah dan tonasenya di Pernyataan.`;
+      else if (focusYear && year >= TRAFO_FOCUS_YEAR) errors[field.key] = `Trafo buatan ${TRAFO_FOCUS_YEAR} ke atas tidak diisi satu per satu, cukup jumlah dan tonasenya di Pernyataan.`;
       continue;
     }
     if (!value) {
@@ -226,3 +232,65 @@ export function entryRow(category: InventoryCategory, entry: FormEntry): Record<
   }
   return row;
 }
+
+/**
+ * Form 2 "Pengurangan PCBs": one maintenance of a transformer still in use,
+ * in the template's columns (table pengurangan_pcbs, migration 20261013000003).
+ * The keys are the table's columns.
+ */
+export const REDUCTION_SECTIONS: FormSection[] = [
+  {
+    title: 'Data transformator',
+    note: 'Terisi otomatis bila trafo dipilih dari data formulir 1.1.',
+    fields: [
+      { key: 'nama_merek', label: 'Nama / merek transformator', input: 'text', required: true },
+      { key: 'nomor_serial', label: 'Nomor serial', input: 'text', required: true },
+      { key: 'tahun_pembuatan', label: 'Tahun pembuatan', input: 'year' },
+      { key: 'negara_asal', label: 'Negara asal / produsen', input: 'text' },
+      { key: 'merek_minyak_dielektrik', label: 'Merek minyak dielektrik / oli', input: 'text' },
+      { key: 'volume_minyak_l', label: 'Volume minyak dielektrik', input: 'number', unit: 'L' },
+      { key: 'lokasi_peralatan', label: 'Lokasi peralatan', input: 'text', required: true },
+      { key: 'koordinat_raw', label: 'Titik koordinat lokasi', input: 'coordinate' },
+    ],
+  },
+  {
+    title: 'Hasil uji sebelum perawatan',
+    fields: [
+      { key: 'uji_sebelum_jenis', label: 'Jenis uji', input: 'select', options: ['Uji cepat', 'Uji lab'] },
+      { key: 'uji_sebelum_ppm', label: 'Konsentrasi PCBs sebelum perawatan', input: 'number', unit: 'ppm' },
+    ],
+  },
+  {
+    title: 'Perawatan pengurangan PCBs',
+    note: 'Perawatan yang dilaporkan, mis. retrofilling (penggantian minyak dielektrik).',
+    fields: [
+      { key: 'perawatan_jenis', label: 'Jenis perawatan', input: 'text', required: true, options: MAINTENANCE_TYPES },
+      { key: 'perawatan_waktu', label: 'Waktu perawatan', input: 'date', required: true },
+      { key: 'perawatan_merek_oli_pengganti', label: 'Merek / tipe oli pengganti', input: 'text' },
+      { key: 'perawatan_volume_l', label: 'Volume ditambahkan / diganti', input: 'number', unit: 'L' },
+      { key: 'perawatan_penyedia_jasa', label: 'Penyedia jasa perawatan', input: 'text', hint: 'Jika dilakukan pihak ketiga' },
+    ],
+  },
+  {
+    title: 'Hasil uji setelah perawatan',
+    note: 'Diisi jika sudah dilakukan uji cepat dan/atau uji laboratorium setelah perawatan.',
+    fields: [
+      { key: 'uji_sesudah_penyedia_jasa', label: 'Penyedia jasa uji', input: 'text', hint: 'Nama perusahaan atau laboratorium' },
+      { key: 'uji_sesudah_jenis', label: 'Jenis uji', input: 'select', options: ['Uji cepat', 'Uji lab'] },
+      { key: 'uji_sesudah_metode', label: 'Metode uji', input: 'text', options: TEST_METHODS },
+      { key: 'uji_sesudah_ppm', label: 'Konsentrasi PCBs setelah perawatan', input: 'number', unit: 'ppm' },
+    ],
+  },
+  {
+    title: 'Kondisi & limbah',
+    fields: [
+      { key: 'berat_ton', label: 'Berat transformator', input: 'number', unit: 'ton' },
+      { key: 'status_kondisi', label: 'Status / kondisi saat perawatan', input: 'text', options: ['Baik', 'Terjadi ceceran', 'Terjadi kebocoran'] },
+      { key: 'peralatan_tanggap_darurat', label: 'Peralatan tanggap darurat', input: 'text', options: ['Hydrant, APAR', 'APAR', 'APAR, serbuk kayu'] },
+      { key: 'pengelolaan_limbah_b3', label: 'Pengelolaan limbah B3 hasil perawatan', input: 'text', required: true, hint: 'mis. diserahkan ke pihak ketiga berizin PT …' },
+      { key: 'bukti_dukung', label: 'Bukti dukung (tautan Google Drive)', input: 'text', hint: 'Foto trafo setelah perawatan dengan simbol dan label' },
+    ],
+  },
+];
+
+export const REDUCTION_FIELDS = REDUCTION_SECTIONS.flatMap((section) => section.fields);

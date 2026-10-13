@@ -66,7 +66,8 @@ Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi f
 
 - **Pernyataan perusahaan:** tidak memiliki transformator, atau memiliki trafo buatan sebelum 1997 dan/atau 1997 ke atas. Untuk trafo 1997 ke atas cukup jumlah dan tonasenya.
 - **Formulir 1.1–1.4** sesuai template KLHK, dengan bagian dan urutan kolom yang sama. Isian wajib ditandai, pilihan berupa dropdown, dan koordinat langsung terbaca beserta tautan ke peta. Formulir 1.1/1.2 hanya untuk trafo buatan sebelum 1997 (atau tahunnya tidak diketahui).
-- Isian tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
+- **Formulir 2 Pengurangan PCBs:** log perawatan trafo yang masih digunakan (mis. retrofilling) dengan hasil uji sebelum dan sesudahnya, kondisi, dan pengelolaan limbah B3. Trafo dipilih dari data 1.1 sehingga datanya terisi otomatis; bila dicentang, perawatan dan hasil uji sesudahnya ikut memperbarui data trafo, sehingga status PCBs dan roadmap mengikuti.
+- Isian 1.1–1.4 tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
 
 ### Status PCBs & roadmap *(offline)*
 
@@ -154,6 +155,7 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta |
 | `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
 | `company_statements` | Pernyataan perusahaan (riwayat; yang terbaru berlaku), termasuk jumlah dan tonase trafo 1997 ke atas |
+| `pengurangan_pcbs` | Log perawatan pengurangan PCBs (formulir 2) |
 | `equipment_plans` | Rencana uji / penanganan per trafo atau untuk semua trafo perusahaan |
 | `simpel_companies` | Daftar perusahaan PILAR dengan ID SIMPEL; `companies.pilar_company_id` dan `companies.id_simpel` menyimpan pilihan admin |
 | `summary_map_cells`, `summary_brand_counts`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, waktu kirim |
