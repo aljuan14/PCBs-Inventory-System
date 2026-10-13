@@ -25,8 +25,18 @@ export type StatementRow = {
   punya_trafo_1997_keatas: boolean;
   jumlah_trafo_1997_keatas: number | null;
   tonase_trafo_1997_keatas_ton: number | null;
+  // Migration 20261013000012; absent in a web summary sent before it.
+  tidak_memiliki_peralatan?: boolean;
+  surat_tanggal?: string | null;
+  verifikasi?: 'menunggu' | 'diterima' | 'ditolak' | null;
   created_at: string;
 };
+
+/** Inventory rows of any kind: with them, the data says what the company owns. */
+export const hasInventory = (s: PcbStatusCounts) => s.trafo_digunakan + s.trafo_tidak_digunakan + s.kapasitor + s.minyak > 0;
+/** The statement says the company owns no transformer, capacitor or dielectric oil (older rows: neither transformer box). */
+export const declaresNone = (statement: StatementRow) =>
+  statement.tidak_memiliki_peralatan ?? (!statement.punya_trafo_sebelum_1997 && !statement.punya_trafo_1997_keatas);
 
 export type PcbStatusCounts = {
   trafo_digunakan: number;
@@ -95,7 +105,6 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   const messages: StatusMessage[] = [];
   const untestedOpen = s.belum_uji - s.belum_uji_terjadwal - s.belum_uji_lewat;
   const highOpen = s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal - s.tinggi_lewat;
-  const trafo = s.trafo_digunakan + s.trafo_tidak_digunakan;
 
   if (s.belum_uji_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.belum_uji_lewat)} trafo melewati tanggal rencana uji dan belum ada hasil ujinya.` });
   if (s.tinggi_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.tinggi_lewat)} trafo > 50 ppm melewati tanggal rencana penanganan.` });
@@ -137,11 +146,24 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
       if (rows > 0 && filled < needed) messages.push({ tone: 'yellow', admin: true, text: `Bukti dukung formulir ${formSpec(form).code} belum lengkap: ${fmt(filled)}/${fmt(needed)} tautan.` });
     }
   }
-  if (!s.pernyataan) messages.push({ tone: 'yellow', admin: true, text: 'Perusahaan belum mengisi pernyataan kepemilikan transformator.' });
-  else if (!s.pernyataan.punya_trafo_sebelum_1997 && s.fokus > 0) {
-    messages.push({ tone: 'yellow', text: `Pernyataan menyebut tidak ada trafo sebelum ${TRAFO_FOCUS_YEAR}, tetapi data berisi ${fmt(s.fokus)}. Periksa pernyataan atau datanya.` });
-  } else if (s.pernyataan.punya_trafo_sebelum_1997 && trafo === 0) {
-    messages.push({ tone: 'yellow', text: `Pernyataan menyebut ada trafo sebelum ${TRAFO_FOCUS_YEAR}, tetapi datanya belum dilaporkan.` });
+  // The statement: with inventory data the data says what the company owns; without, the statement must.
+  const statement = s.pernyataan;
+  if (hasInventory(s)) {
+    if (statement && declaresNone(statement)) {
+      messages.push({ tone: 'yellow', text: 'Pernyataan menyebut tidak memiliki trafo, kapasitor, maupun minyak dielektrik, tetapi datanya ada. Periksa pernyataan atau datanya.' });
+    } else if (statement && !statement.punya_trafo_sebelum_1997 && statement.punya_trafo_1997_keatas && s.fokus > 0) {
+      messages.push({ tone: 'yellow', text: `Pernyataan menyebut hanya ada trafo ${TRAFO_FOCUS_YEAR} ke atas, tetapi data berisi ${fmt(s.fokus)} trafo sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun.` });
+    }
+  } else if (!statement) {
+    messages.push({ tone: 'yellow', admin: true, text: 'Belum ada data maupun pernyataan: isi formulir, atau nyatakan tidak memiliki peralatan.' });
+  } else if (!declaresNone(statement)) {
+    messages.push({ tone: 'yellow', text: 'Perusahaan menyatakan memiliki peralatan, tetapi datanya belum dilaporkan di formulir.' });
+  } else if (statement.verifikasi === 'ditolak') {
+    messages.push({ tone: 'yellow', admin: true, text: 'Surat pernyataan tidak memiliki peralatan ditolak. Unggah surat yang sudah diperbaiki.' });
+  } else if (statement.verifikasi === 'menunggu') {
+    messages.push({ tone: 'yellow', admin: true, text: 'Surat pernyataan tidak memiliki peralatan menunggu verifikasi KLH.' });
+  } else if (statement.verifikasi !== 'diterima') {
+    messages.push({ tone: 'yellow', admin: true, text: 'Pernyataan tidak memiliki peralatan belum dilengkapi surat pernyataan.' });
   }
   if (s.fokus_tahun_kosong > 0) messages.push({ tone: 'yellow', text: `${fmt(s.fokus_tahun_kosong)} trafo tanpa tahun pembuatan, dihitung sebagai trafo sebelum ${TRAFO_FOCUS_YEAR}. Lengkapi tahunnya.` });
 
@@ -149,7 +171,7 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   messages.sort((a, b) => Number(b.tone === 'red') - Number(a.tone === 'red'));
   const color: StatusColor = messages.some((message) => message.tone === 'red') ? 'red' : messages.length > 0 ? 'yellow' : 'green';
   if (color === 'green') {
-    messages.push({ tone: 'green', text: s.fokus === 0 ? `Tidak ada trafo buatan sebelum ${TRAFO_FOCUS_YEAR}.` : `Semua trafo sebelum ${TRAFO_FOCUS_YEAR} sudah diuji ≤ 50 ppm atau sudah ditangani.` });
+    messages.push({ tone: 'green', text: !hasInventory(s) && statement && declaresNone(statement) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik (surat pernyataan diterima).' : s.fokus === 0 ? `Tidak ada trafo buatan sebelum ${TRAFO_FOCUS_YEAR}.` : `Semua trafo sebelum ${TRAFO_FOCUS_YEAR} sudah diuji ≤ 50 ppm atau sudah ditangani.` });
   }
   return { color, messages };
 }
@@ -163,7 +185,9 @@ export function summarySentence(s: PcbStatusCounts): string {
   }
   if (s.kapasitor > 0) parts.push(`${fmt(s.kapasitor)} kapasitor`);
   if (s.minyak > 0) parts.push(`${fmt(s.minyak)} data minyak dielektrik`);
-  const owned = parts.length ? `Tercatat ${parts.join(', ')}.` : 'Belum ada peralatan yang tercatat.';
+  const owned = parts.length ? `Tercatat ${parts.join(', ')}.`
+    : s.pernyataan && declaresNone(s.pernyataan) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik.'
+      : 'Belum ada peralatan yang tercatat.';
   const focus = trafo > 0
     ? ` ${fmt(s.fokus)} trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun: ${fmt(s.aman)} aman (≤ 50 ppm), ${fmt(s.tinggi)} > 50 ppm, ${fmt(s.belum_uji)} belum diuji.`
     : '';
@@ -179,7 +203,7 @@ export type NationalColor = StatusColor | 'empty';
 export const EMPTY_STATUS = { label: 'Belum melapor', dot: 'bg-slate-400', card: 'border-slate-200 bg-slate-50', text: 'text-slate-600' };
 
 export const nationalColor = (s: PcbStatusCounts): NationalColor =>
-  s.trafo_digunakan + s.trafo_tidak_digunakan + s.kapasitor + s.minyak === 0 && !s.pernyataan ? 'empty' : evaluateStatus(s).color;
+  !hasInventory(s) && !s.pernyataan ? 'empty' : evaluateStatus(s).color;
 
 /** Transformers still needing something with no plan, or past their plan: how urgent a red company is. */
 export const openActions = (s: PcbStatusCounts) =>
