@@ -5,16 +5,16 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ChevronRight, FileSignature, Scale } from 'lucide-react';
 import { fetchAllPcbStatus } from '@/lib/company-pcb-status';
 import { categoryTint, type InventoryCategory } from '@/lib/inventory';
-import { PRE_1997_FILTER, sumStats, TRAFO_CATEGORIES, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats } from '@/lib/inventory-query';
+import { PRE_1997_FILTER, sumStats, TRAFO_CATEGORIES, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats, type YearScope } from '@/lib/inventory-query';
 import { formatPercent, niceMax } from '@/components/DashboardCharts';
-import { NEWER_COLOR, PRE_1997_COLOR, ScopeToggle, UNKNOWN_COLOR, type StatusScope } from '@/components/InventorySummary';
+import { NEWER_COLOR, PRE_1997_COLOR, UNKNOWN_COLOR } from '@/components/InventorySummary';
 
 /** kg as tons: one decimal below 100 t, whole tons above. */
 export const formatTons = (kg: number) => (kg / 1000).toLocaleString('id-ID', { maximumFractionDigits: kg < 100_000 ? 1 : 0 });
 const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
-/** All years, made before 1997, or without a production year. */
-type Band = 'all' | 'pre1997' | 'noyear';
+/** All years, made before 1997, from 1997 on, or without a production year. */
+type Band = YearScope | 'noyear';
 type Level = 'high' | 'low' | 'untested';
 type Select = (filters: Partial<InventoryFilters>, type: CategoryFilter) => void;
 
@@ -29,6 +29,7 @@ const LEVELS: Array<{ key: Level; label: string; range: string; color: string; p
 const BANDS: Record<Band, { label: string; filters: Partial<InventoryFilters> }> = {
   all: { label: 'semua tahun pembuatan', filters: {} },
   pre1997: { label: 'buatan sebelum 1997', filters: PRE_1997_FILTER },
+  from1997: { label: 'buatan 1997 ke atas', filters: { yearRange: 'from1997' } },
   noyear: { label: 'tahun pembuatan tidak diketahui', filters: { yearRange: 'unknown' } },
 };
 
@@ -189,8 +190,10 @@ function YearSplit({ stats, declared, onSelect }: { stats: InventoryStats | null
  * switch shows either the ones made before 1997 or all of them; those
  * without a production year follow as their own row, to be filled in.
  */
-export default function TonnageCard({ stats, loading, onSelect, supabase, companyId = null, unitPicked = false, reloadKey = 0 }: {
+export default function TonnageCard({ stats, scope, loading, onSelect, supabase, companyId = null, unitPicked = false, reloadKey = 0 }: {
   stats: InventoryStats | null;
+  /** The dashboard's production-year switch. */
+  scope: YearScope;
   loading: boolean;
   onSelect?: Select;
   /** With these, the tons companies declared for transformers from 1997 on show beside the inventory's. */
@@ -199,31 +202,30 @@ export default function TonnageCard({ stats, loading, onSelect, supabase, compan
   unitPicked?: boolean;
   reloadKey?: number;
 }) {
-  const [scope, setScope] = useState<StatusScope>('pre1997');
   const declared = useDeclared(supabase, companyId, unitPicked, reloadKey);
-  const band: Band = scope === 'pre1997' ? 'pre1997' : 'all';
+  const band: Band = scope;
   const weighed = stats ? sumStats(stats, TRAFO_CATEGORIES, 'with_weight') : 0;
   const units = stats ? sumStats(stats, TRAFO_CATEGORIES, 'total') : 0;
-  const weightKey: keyof CategoryStats = scope === 'pre1997' ? 'pre1997_weight_kg' : 'weight_kg';
-  const suffix = scope === 'pre1997' ? ' < 1997' : '';
+  const suffix = scope === 'pre1997' ? ' < 1997' : scope === 'from1997' ? ' ≥ 1997' : '';
+  // Tons of the types for the switch's years, every PCBs class together.
+  const tons = (categories: InventoryCategory[]) => categories.reduce((sum, category) => sum + LEVELS.reduce((kg, level) => kg + weightOf(stats, category, band, level.key), 0), 0);
   const tiles: Array<{ label: string; kg: number; type: CategoryFilter }> = [
-    { label: `Total trafo${suffix}`, kg: stats ? sumStats(stats, TRAFO_CATEGORIES, weightKey) : 0, type: 'transformator' },
-    ...TRAFO_CATEGORIES.map((category) => ({ label: `${TRAFO_TITLES[category]}${suffix}`, kg: stats?.[category][weightKey] ?? 0, type: category })),
+    { label: `Total trafo${suffix}`, kg: tons(TRAFO_CATEGORIES), type: 'transformator' },
+    ...TRAFO_CATEGORIES.map((category) => ({ label: `${TRAFO_TITLES[category]}${suffix}`, kg: tons([category]), type: category })),
   ];
 
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-      <div className="mb-5 flex items-start justify-between gap-3">
+      <div className="mb-5">
         <div className="flex items-start gap-3">
           <Scale className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
           <div>
             <h3 className="text-base font-bold text-slate-900">Tonase Transformator</h3>
             <p className="text-xs font-medium text-slate-500">
-              {scope === 'pre1997' ? 'Trafo buatan sebelum 1997' : 'Semua trafo'} · berat total dari formulir inventarisasi{onSelect ? ' · klik untuk melihat datanya di tabel' : ''}
+              {scope === 'pre1997' ? 'Trafo buatan sebelum 1997' : scope === 'from1997' ? 'Trafo buatan 1997 ke atas' : 'Semua trafo'} · berat total dari formulir inventarisasi{onSelect ? ' · klik untuk melihat datanya di tabel' : ''}
             </p>
           </div>
         </div>
-        <ScopeToggle value={scope} onChange={setScope} />
       </div>
 
       {loading ? (

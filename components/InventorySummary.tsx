@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { categoryTint, getCategoryColor, getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
-import { PRE_1997_FILTER, TRAFO_CATEGORIES, pre1997RiskCounts, type CategoryFilter, type InventoryFilters, type InventoryStats } from '@/lib/inventory-query';
+import { PRE_1997_FILTER, SCOPE_FIGURES, TRAFO_CATEGORIES, riskCountsFor, sumStats, type CategoryFilter, type InventoryFilters, type InventoryStats, type YearScope } from '@/lib/inventory-query';
 import { RISK_CLASSES, formatPercent, type RiskCounts } from '@/components/DashboardCharts';
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID', { maximumFractionDigits: 0 });
@@ -13,8 +13,8 @@ const share = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100
 /** Opens the rows behind a figure in the table. */
 type SelectRows = (filters: Partial<InventoryFilters>, category: CategoryFilter) => void;
 
-/** Status PCBs over the transformers made before 1997, or over all of them. */
-export type StatusScope = 'pre1997' | 'all';
+/** What each year scope covers, for subtitles and notes. */
+export const SCOPE_TEXT: Record<YearScope, string> = { all: 'semua tahun produksi, termasuk yang tidak diketahui', pre1997: 'buatan sebelum 1997', from1997: 'buatan 1997 ke atas' };
 
 interface Segment {
   key: string;
@@ -129,17 +129,18 @@ function Donut({ total, segments, center, onSelect }: { total: number; segments:
   );
 }
 
-export function ScopeToggle({ value, onChange }: { value: StatusScope; onChange: (value: StatusScope) => void }) {
-  const options: { key: StatusScope; label: string }[] = [{ key: 'pre1997', label: '< 1997' }, { key: 'all', label: 'Semua' }];
+/** The dashboard's one production-year switch: all, before 1997, 1997 on. */
+export function YearToggle({ value, onChange }: { value: YearScope; onChange: (value: YearScope) => void }) {
+  const options: { key: YearScope; label: string }[] = [{ key: 'all', label: 'Semua' }, { key: 'pre1997', label: '< 1997' }, { key: 'from1997', label: '≥ 1997' }];
   return (
-    <div role="group" aria-label="Cakupan status PCBs" className="flex shrink-0 rounded-lg bg-slate-100 p-0.5">
+    <div role="group" aria-label="Tahun pembuatan" className="flex shrink-0 rounded-lg bg-slate-100 p-0.5">
       {options.map((option) => (
         <button
           key={option.key}
           type="button"
           aria-pressed={value === option.key}
           onClick={() => onChange(option.key)}
-          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-emerald-500 ${value === option.key ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
+          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-emerald-500 ${value === option.key ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
         >
           {option.label}
         </button>
@@ -149,12 +150,11 @@ export function ScopeToggle({ value, onChange }: { value: StatusScope; onChange:
 }
 
 /** Used / not used transformers: their count, then production years, then Status PCBs. */
-function TransformerColumn({ category, stats, grandTotal, statusScope, setStatusScope, loading, onSelect }: {
+function TransformerColumn({ category, stats, grandTotal, scope, loading, onSelect }: {
   category: InventoryCategory;
   stats: InventoryStats | null;
   grandTotal: number;
-  statusScope: StatusScope;
-  setStatusScope: (value: StatusScope) => void;
+  scope: YearScope;
   loading: boolean;
   onSelect?: SelectRows;
 }) {
@@ -169,15 +169,12 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
     { key: 'unknown', label: 'Tidak diketahui', value: summary?.unknown_year ?? 0, color: UNKNOWN_COLOR, filters: { yearRange: 'unknown' } },
   ];
 
-  const pre1997 = statusScope === 'pre1997';
-  const counts: RiskCounts = pre1997
-    ? pre1997RiskCounts(stats, [category])
-    : { safe: summary?.risk_safe ?? 0, moderate: summary?.risk_moderate ?? 0, high: summary?.risk_high ?? 0, untested: total - (summary?.tested ?? 0) };
+  const counts: RiskCounts = riskCountsFor(stats, [category], scope);
   const statusTotal = RISK_CLASSES.reduce((sum, risk) => sum + counts[risk.key], 0);
   const statusTested = statusTotal - counts.untested;
   // Three results only: at or under the 50 ppm threshold, above it, not tested.
   const [safe, , high, untested] = RISK_CLASSES;
-  const scoped = pre1997 ? PRE_1997_FILTER : {};
+  const scoped = SCOPE_FIGURES[scope].filters;
   const results: Segment[] = [
     { key: 'upto50', label: 'Di bawah ambang', hint: '≤ 50 ppm', value: counts.safe + counts.moderate, color: safe.color, icon: safe.icon, iconClass: safe.iconClass, filters: { pcbRange: 'upto50', ...scoped } },
     { key: 'high', label: high.label, hint: high.range, value: counts.high, color: high.color, icon: high.icon, iconClass: high.iconClass, filters: { pcbRange: 'high', ...scoped } },
@@ -214,16 +211,13 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
       </div>
 
       <div className={CARD_CLASS}>
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle
-            title="Hasil Pengujian Minyak Dielektrik"
-            subtitle={`Pada trafo yang ${category === 'transformator_digunakan' ? 'masih digunakan' : 'sudah tidak digunakan'}${pre1997 ? ', buatan sebelum 1997' : ', semua tahun produksi termasuk yang tidak diketahui'}`}
-          />
-          <ScopeToggle value={statusScope} onChange={setStatusScope} />
-        </div>
+        <CardTitle
+          title="Hasil Pengujian Minyak Dielektrik"
+          subtitle={`Pada trafo yang ${category === 'transformator_digunakan' ? 'masih digunakan' : 'sudah tidak digunakan'}, ${SCOPE_TEXT[scope]}`}
+        />
         <div className="mt-4">
           {loading ? <Skeleton className="h-36" /> : statusTotal === 0
-            ? <p className="rounded-xl border border-dashed border-slate-200 py-10 text-center text-xs text-slate-500">{pre1997 ? 'Belum ada trafo buatan sebelum 1997.' : 'Belum ada data.'}</p>
+            ? <p className="rounded-xl border border-dashed border-slate-200 py-10 text-center text-xs text-slate-500">{scope === 'all' ? 'Belum ada data.' : `Belum ada trafo ${SCOPE_TEXT[scope]}.`}</p>
             : <>
                 <Donut total={statusTotal} segments={results} center={{ value: formatPercent(share(statusTested, statusTotal)), label: 'sudah diuji' }} onSelect={select} />
                 <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
@@ -237,12 +231,12 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
 }
 
 /** One headline figure (all transformers, kapasitor, minyak dielektrik), opening its rows in the table. */
-function FigureTile({ category, label, color, value, unit, note, loading, onSelect }: { category: CategoryFilter; label: string; color?: string; value: string; unit: string; note?: string; loading: boolean; onSelect?: SelectRows }) {
+function FigureTile({ category, label, color, value, unit, note, filters = {}, loading, onSelect }: { category: CategoryFilter; label: string; color?: string; value: string; unit: string; note?: string; filters?: Partial<InventoryFilters>; loading: boolean; onSelect?: SelectRows }) {
   return (
     <button
       type="button"
       disabled={!onSelect}
-      onClick={() => onSelect?.({}, category)}
+      onClick={() => onSelect?.(filters, category)}
       className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 text-left transition-colors enabled:cursor-pointer enabled:hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-emerald-500"
     >
       <span className="flex items-center gap-2">
@@ -264,18 +258,23 @@ function FigureTile({ category, label, color, value, unit, note, loading, onSele
  * production years, then their Status PCBs. Each card breaks down the one
  * above it. Kapasitor and minyak dielektrik sit beside the total as figures.
  */
-export default function InventorySummary({ stats, loading, onSelect }: { stats: InventoryStats | null; loading: boolean; onSelect?: SelectRows }) {
-  // One switch for both columns, so their Status PCBs always compare the same transformers.
-  const [statusScope, setStatusScope] = useState<StatusScope>('pre1997');
-  const oil = stats?.minyak_dielektrik;
+export default function InventorySummary({ stats, scope, loading, onSelect }: { stats: InventoryStats | null; scope: YearScope; loading: boolean; onSelect?: SelectRows }) {
+  const { count, volume, filters } = SCOPE_FIGURES[scope];
   const grandTotal = TRAFO_CATEGORIES.reduce((sum, category) => sum + (stats?.[category].total ?? 0), 0);
+  const figure = (categories: InventoryCategory[], key: keyof InventoryStats[InventoryCategory]) => (stats ? sumStats(stats, categories, key) : 0);
+  // Rows without a production year are in "all" only; said under the figure.
+  const withoutYear = (categories: InventoryCategory[], unit: string) => {
+    const missing = figure(categories, 'unknown_year');
+    return scope !== 'all' && missing > 0 ? `${formatNumber(missing)} ${unit} tanpa tahun tidak dihitung` : null;
+  };
+  const oilRows = figure(['minyak_dielektrik'], count);
 
   return (
     <section>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FigureTile category="transformator" label="Total Transformator" value={formatNumber(grandTotal)} unit="trafo" note="Masih digunakan dan tidak digunakan" loading={loading} onSelect={onSelect} />
-        <FigureTile category="kapasitor" label={getCategoryLabel('kapasitor')} color={getCategoryColor('kapasitor')} value={formatNumber(stats?.kapasitor.total ?? 0)} unit="unit" loading={loading} onSelect={onSelect} />
-        <FigureTile category="minyak_dielektrik" label={getCategoryLabel('minyak_dielektrik')} color={getCategoryColor('minyak_dielektrik')} value={formatNumber(oil?.volume_l ?? 0)} unit="liter" note={`${formatNumber(oil?.total ?? 0)} data wadah/sampel`} loading={loading} onSelect={onSelect} />
+        <FigureTile category="transformator" label="Total Transformator" value={formatNumber(figure(TRAFO_CATEGORIES, count))} unit="trafo" note={withoutYear(TRAFO_CATEGORIES, 'trafo') ?? 'Masih digunakan dan tidak digunakan'} filters={filters} loading={loading} onSelect={onSelect} />
+        <FigureTile category="kapasitor" label={getCategoryLabel('kapasitor')} color={getCategoryColor('kapasitor')} value={formatNumber(figure(['kapasitor'], count))} unit="unit" note={withoutYear(['kapasitor'], 'unit') ?? undefined} filters={filters} loading={loading} onSelect={onSelect} />
+        <FigureTile category="minyak_dielektrik" label={getCategoryLabel('minyak_dielektrik')} color={getCategoryColor('minyak_dielektrik')} value={formatNumber(figure(['minyak_dielektrik'], volume))} unit="liter" note={`${formatNumber(oilRows)} data wadah/sampel${withoutYear(['minyak_dielektrik'], 'data') ? ` · ${withoutYear(['minyak_dielektrik'], 'data')}` : ''}`} filters={filters} loading={loading} onSelect={onSelect} />
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -285,8 +284,7 @@ export default function InventorySummary({ stats, loading, onSelect }: { stats: 
               category={category}
               stats={stats}
               grandTotal={grandTotal}
-              statusScope={statusScope}
-              setStatusScope={setStatusScope}
+              scope={scope}
               loading={loading}
               onSelect={onSelect}
             />

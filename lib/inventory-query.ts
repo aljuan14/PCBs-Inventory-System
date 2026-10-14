@@ -25,6 +25,13 @@ export interface CategoryStats {
   pre1997_risk_safe: number;
   pre1997_risk_moderate: number;
   pre1997_risk_high: number;
+  // Migration 20261014000005.
+  from1997_tested: number;
+  from1997_risk_safe: number;
+  from1997_risk_moderate: number;
+  from1997_risk_high: number;
+  pre1997_volume_l: number;
+  from1997_volume_l: number;
   volume_l: number;
   with_coordinates: number;
   /** Rows with a total weight, and the weights summed in kg (migration 20260929000004). */
@@ -65,7 +72,8 @@ export type InventoryStats = Record<InventoryCategory, CategoryStats>;
 const EMPTY_STATS: CategoryStats = {
   total: 0, before_1997: 0, from_1997: 0, unknown_year: 0, tested: 0, lab_tested: 0, lab_below_50: 0,
   lab_at_least_50: 0, risk_safe: 0, risk_moderate: 0, risk_high: 0, pre1997_tested: 0, pre1997_risk_safe: 0,
-  pre1997_risk_moderate: 0, pre1997_risk_high: 0, volume_l: 0, with_coordinates: 0, with_weight: 0, with_weight_parts: 0,
+  pre1997_risk_moderate: 0, pre1997_risk_high: 0, from1997_tested: 0, from1997_risk_safe: 0, from1997_risk_moderate: 0,
+  from1997_risk_high: 0, pre1997_volume_l: 0, from1997_volume_l: 0, volume_l: 0, with_coordinates: 0, with_weight: 0, with_weight_parts: 0,
   weight_kg: 0, weight_dry_kg: 0, weight_oil_kg: 0, weight_safe_kg: 0, weight_moderate_kg: 0, weight_high_kg: 0,
   weight_untested_kg: 0, pre1997_weight_kg: 0, pre1997_weight_untested_kg: 0, pre1997_lab_safe: 0, pre1997_lab_moderate: 0,
   pre1997_lab_high: 0, pre1997_quick_safe: 0, pre1997_quick_moderate: 0, pre1997_quick_high: 0,
@@ -109,6 +117,27 @@ export function pre1997RiskCounts(stats: InventoryStats | null, categories: Inve
     untested: sum('before_1997') - sum('pre1997_tested'),
   };
 }
+
+/**
+ * The dashboard's production-year switch: all rows, the ones made before
+ * 1997, or from 1997 on. Rows without a year count only in "all".
+ */
+export type YearScope = 'all' | 'pre1997' | 'from1997';
+
+/** Risk classes of the rows of one year scope. */
+export function riskCountsFor(stats: InventoryStats | null, categories: InventoryCategory[], scope: YearScope) {
+  if (scope === 'pre1997') return pre1997RiskCounts(stats, categories);
+  const sum = (key: keyof CategoryStats) => (stats ? sumStats(stats, categories, key) : 0);
+  if (scope === 'from1997') return { safe: sum('from1997_risk_safe'), moderate: sum('from1997_risk_moderate'), high: sum('from1997_risk_high'), untested: sum('from_1997') - sum('from1997_tested') };
+  return { safe: sum('risk_safe'), moderate: sum('risk_moderate'), high: sum('risk_high'), untested: sum('total') - sum('tested') };
+}
+
+/** Rows, oil volume and table filter of one year scope. */
+export const SCOPE_FIGURES: Record<YearScope, { count: keyof CategoryStats; volume: keyof CategoryStats; filters: Partial<InventoryFilters> }> = {
+  all: { count: 'total', volume: 'volume_l', filters: {} },
+  pre1997: { count: 'before_1997', volume: 'pre1997_volume_l', filters: { yearRange: 'custom', yearMin: null, yearMax: 1996 } },
+  from1997: { count: 'from_1997', volume: 'from1997_volume_l', filters: { yearRange: 'from1997' } },
+};
 
 /** Table filter for the rows counted by pre1997RiskCounts (tahun_pembuatan < 1997). */
 export const PRE_1997_FILTER: Partial<InventoryFilters> = { yearRange: 'custom', yearMin: null, yearMax: 1996 };

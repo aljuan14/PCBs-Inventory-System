@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, RefreshCw, UploadCloud } from 'lucide-react';
-import { ALL_SCOPE, mapPointFilter, type DashboardScope, type InventoryFilters } from '@/lib/inventory-query';
+import { ALL_SCOPE, mapPointFilter, type DashboardScope, type InventoryFilters, type YearScope } from '@/lib/inventory-query';
 import DataTable, { type EditableInventoryFields, type InventoryItem, type TablePreset } from '@/components/DataTable';
 import CompanyCheckCard from '@/components/CompanyCheckCard';
 import CompanyPcbStatusCard, { reportHref } from '@/components/CompanyPcbStatusCard';
 import DashboardScopeFilter from '@/components/DashboardScopeFilter';
-import InventorySummary from '@/components/InventorySummary';
+import InventorySummary, { YearToggle } from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
 import SummaryStamp from '@/components/SummaryStamp';
 import { useDashboardData } from '@/components/useDashboardData';
@@ -24,6 +24,8 @@ export default function InventoryOverview() {
   const { supabase, stats, companies, loading, refreshing, error, reloadKey, reload } = useDashboardData(scope);
   const companyName = companies.find((company) => company.id === scope.companyId)?.name;
   const readOnly = useReadOnly();
+  // One production-year switch for the figures, the test results and the tonnage.
+  const [years, setYears] = useState<YearScope>('all');
 
   const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
     await updateInventoryItem(supabase, item, changes);
@@ -61,8 +63,13 @@ export default function InventoryOverview() {
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} statuses={statuses} />
     {!SUMMARY_MODE && !readOnly && scope.companyId && companyName && <CompanyCheckCard companyId={scope.companyId} companyName={companyName} reloadKey={reloadKey} onSendsChange={() => setStatusKey((key) => key + 1)} />}
     {scope.companyId && <CompanyPcbStatusCard supabase={supabase} companyId={scope.companyId} reloadKey={reloadKey} hrefFor={SUMMARY_MODE ? undefined : (target) => reportHref(scope.companyId!, target, { readOnly })} />}
-    <InventorySummary stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
-    <TonnageCard stats={stats} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} supabase={supabase} companyId={scope.companyId} unitPicked={Boolean(scope.unit || scope.subUnit)} reloadKey={reloadKey} />
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+      <span className="text-sm font-semibold text-slate-800">Tahun pembuatan</span>
+      <YearToggle value={years} onChange={setYears} />
+      <span className="text-xs text-slate-500">{years === 'all' ? 'Semua peralatan, termasuk yang tahunnya tidak diketahui.' : `Hanya peralatan ${years === 'pre1997' ? 'buatan sebelum 1997' : 'buatan 1997 ke atas'}; yang tahunnya tidak diketahui tidak dihitung.`} Berlaku untuk angka, hasil pengujian, dan tonase di bawah.</span>
+    </div>
+    <InventorySummary stats={stats} scope={years} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
+    <TonnageCard stats={stats} scope={years} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} supabase={supabase} companyId={scope.companyId} unitPicked={Boolean(scope.unit || scope.subUnit)} reloadKey={reloadKey} />
     {!SUMMARY_MODE && <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>}
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-3 text-base font-semibold">Peta sebaran inventaris</h2><MapLeaflet supabase={supabase} companies={companies} scope={scope} onScopeChange={setScope} reloadKey={reloadKey} height="520px" onSelectPoint={SUMMARY_MODE ? undefined : (selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
   </div>;
