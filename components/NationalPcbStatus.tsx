@@ -16,7 +16,8 @@ type Row = { id: string; name: string; color: NationalColor; counts: PcbStatusCo
 /**
  * How many companies are red, yellow, green or have not reported, with the
  * national figures behind it and the companies of one colour, most urgent
- * first. Picking a company narrows the dashboard to it.
+ * first. Picking a company is left to the page (the Perusahaan page opens its
+ * report).
  */
 export default function NationalPcbStatus({ supabase, companies, reloadKey, onSelectCompany }: {
   supabase: SupabaseClient;
