@@ -67,9 +67,10 @@ function Legend({ segments, total, active, setActive, onSelect }: { segments: Se
             >
               <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: segment.color }} />
               {Icon && <Icon className={`h-3.5 w-3.5 shrink-0 ${segment.iconClass ?? ''}`} />}
-              <span className="min-w-0 flex-1 truncate text-slate-600">
-                {segment.label}
-                {segment.hint && <span className="ml-1 text-slate-400">{segment.hint}</span>}
+              {/* The range on its own line, so a narrow card never cuts it off. */}
+              <span className="min-w-0 flex-1 text-slate-600">
+                <span className="block truncate">{segment.label}</span>
+                {segment.hint && <span className="block truncate text-[11px] leading-tight text-slate-400">{segment.hint}</span>}
               </span>
               <span className="font-semibold tabular-nums text-slate-800">{formatNumber(segment.value)}</span>
               <span className="w-12 text-right tabular-nums text-slate-500">{formatPercent(share(segment.value, total))}</span>
@@ -125,6 +126,45 @@ function Donut({ total, segments, center, onSelect }: { total: number; segments:
         </div>
       </div>
       <Legend segments={segments} total={total} active={active} setActive={setActive} onSelect={onSelect} />
+    </div>
+  );
+}
+
+const YEAR_OPTIONS: { key: YearScope; label: string; hint: string; color: string }[] = [
+  { key: 'all', label: 'Semua', hint: 'Semua tahun', color: '#64748b' },
+  { key: 'pre1997', label: '< 1997', hint: 'Sebelum 1997', color: PRE_1997_COLOR },
+  { key: 'from1997', label: '≥ 1997', hint: '1997 ke atas', color: NEWER_COLOR },
+];
+
+/**
+ * The same switch floating on the right edge, for when the bar at the top
+ * has scrolled away: the choice stays in sight beside the cards it drives.
+ * Hidden on small screens for now.
+ */
+export function YearRail({ value, onChange, visible }: { value: YearScope; onChange: (value: YearScope) => void; visible: boolean }) {
+  return (
+    <div
+      role="group"
+      aria-label="Tahun pembuatan"
+      aria-hidden={!visible}
+      className={`fixed right-3 top-1/2 z-30 hidden -translate-y-1/2 flex-col gap-1 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-lg backdrop-blur transition-all duration-200 lg:flex ${visible ? 'opacity-100' : 'pointer-events-none translate-x-4 opacity-0'}`}
+    >
+      <span className="px-1 pb-0.5 pt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tahun</span>
+      {YEAR_OPTIONS.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          tabIndex={visible ? 0 : -1}
+          aria-pressed={value === option.key}
+          title={option.hint}
+          onClick={() => onChange(option.key)}
+          className={`flex w-16 flex-col items-center gap-1 rounded-xl px-1.5 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-emerald-500 ${value === option.key ? 'text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+          style={value === option.key ? { backgroundColor: option.color } : undefined}
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: value === option.key ? '#ffffff' : option.color }} />
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
