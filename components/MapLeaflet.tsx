@@ -148,7 +148,7 @@ interface MapProps {
 }
 
 /**
- * Inventory map: filters above, a clean basemap (or satellite), and every
+ * Inventory map: filters above, satellite imagery (or a clean basemap), and every
  * point with coordinates. Zoomed out it shows the points summed per grid
  * cell as bubbles split by PCBs class or category; zoomed in far enough, the
  * single points. Only what is on screen is loaded (map_clusters, migration
@@ -172,7 +172,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   const [filters, setFilters] = useState<MapFilters>(() => ({ ...DEFAULT_MAP_FILTERS, category: category ?? 'all' }));
   const [ownCompany, setOwnCompany] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>(category === 'kapasitor' ? 'category' : 'pcb');
-  const [basemap, setBasemap] = useState<Basemap>('map');
+  const [basemap, setBasemap] = useState<Basemap>('satellite');
   const [fullscreen, setFullscreen] = useState(false);
   const [shown, setShown] = useState<Shown | null>(null);
   const [loading, setLoading] = useState(false);
@@ -199,7 +199,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
         const { layers, maxNativeZoom } = BASEMAPS[key];
         basemapLayers.current[key] = L.layerGroup(layers.map((url) => L.tileLayer(url, { attribution: BASEMAP_ATTRIBUTION, maxZoom: 19, maxNativeZoom })));
       }
-      basemapLayers.current.map!.addTo(map);
+      basemapLayers.current.satellite!.addTo(map);
       layerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
       setReady(true);
