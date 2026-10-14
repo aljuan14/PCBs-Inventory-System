@@ -14,10 +14,13 @@ const fmtDate = (value: string) => new Date(value).toLocaleString('id-ID', { dat
  * The "Tabel Bukti Dukung" of a form 1.x: one link per documentation item,
  * filled in from the last save; each save keeps the earlier links as history.
  */
-export default function EvidencePanel({ companyId, category }: { companyId: string; category: InventoryCategory }) {
+export default function EvidencePanel({ companyId, category, onSaved }: { companyId: string; category: InventoryCategory; onSaved?: () => void }) {
   const supabase = useMemo(() => createClient(), []);
   const items = EVIDENCE_ITEMS[category];
   const [links, setLinks] = useState<string[]>(() => items.map(() => ''));
+  // The links as stored, to mark the boxes saved (green) until they change.
+  const [stored, setStored] = useState<string[]>(() => items.map(() => ''));
+  const [justSaved, setJustSaved] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +32,11 @@ export default function EvidencePanel({ companyId, category }: { companyId: stri
         if (!active) return;
         const saved = data as Saved | null;
         // Matched by label, so a reordered list in a later version keeps its links.
-        if (saved) setLinks(items.map((item) => saved.tautan.find((entry) => entry.label === item.label)?.tautan ?? ''));
+        if (saved) {
+          const loaded = items.map((item) => saved.tautan.find((entry) => entry.label === item.label)?.tautan ?? '');
+          setLinks(loaded);
+          setStored(loaded);
+        }
         setLastSaved(saved?.created_at ?? null);
       });
     return () => { active = false; };
@@ -37,19 +44,27 @@ export default function EvidencePanel({ companyId, category }: { companyId: stri
 
   const invalid = links.map((link) => link.trim() !== '' && !isLink(link));
   const filled = links.filter((link) => isLink(link)).length;
+  const isStored = (index: number) => links[index].trim() !== '' && links[index].trim() === stored[index];
+  const unsaved = links.some((link, index) => link.trim() !== stored[index]);
 
   const save = async () => {
     if (invalid.some(Boolean)) return setError('Ada tautan yang tidak valid. Tautan harus diawali https://');
     setSaving(true);
     setError(null);
+    setJustSaved(false);
+    const trimmed = links.map((link) => link.trim());
     const { data, error: saveError } = await supabase.from('bukti_dukung').insert({
       company_id: companyId,
       formulir: category,
-      tautan: items.map((item, index) => ({ label: item.label, tautan: links[index].trim() || null })),
+      tautan: items.map((item, index) => ({ label: item.label, tautan: trimmed[index] || null })),
     }).select('created_at').single();
     setSaving(false);
     if (saveError) return setError(saveError.message);
     setLastSaved((data as { created_at: string }).created_at);
+    setLinks(trimmed);
+    setStored(trimmed);
+    setJustSaved(true);
+    onSaved?.();
   };
 
   return (
@@ -72,8 +87,9 @@ export default function EvidencePanel({ companyId, category }: { companyId: stri
               {heading && heading.startsWith('A') && <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{heading}</p>}
               <label className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:items-center">
                 <span className="text-xs text-slate-700">{item.group.startsWith('A') ? `${index + 1}. ` : `${item.group}. `}{item.label}</span>
-                <span className={`flex items-center rounded-lg border bg-white focus-within:border-emerald-600 ${invalid[index] ? 'border-rose-300' : 'border-slate-200'}`}>
-                  <input value={links[index]} onChange={(event) => setLinks((current) => current.map((link, at) => (at === index ? event.target.value : link)))} placeholder="https://drive.google.com/…" className="min-w-0 flex-1 rounded-lg px-3 py-1.5 text-xs outline-none" />
+                <span className={`flex items-center rounded-lg border focus-within:border-emerald-600 ${invalid[index] ? 'border-rose-300 bg-white' : isStored(index) ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                  <input value={links[index]} onChange={(event) => setLinks((current) => current.map((link, at) => (at === index ? event.target.value : link)))} placeholder="https://drive.google.com/…" className="min-w-0 flex-1 rounded-lg bg-transparent px-3 py-1.5 text-xs outline-none" />
+                  {isStored(index) && <CheckCircle2 aria-label="Tersimpan" className="mr-1 h-3.5 w-3.5 shrink-0 text-emerald-600" />}
                   {isLink(links[index]) && <a href={links[index].trim()} target="_blank" rel="noreferrer" aria-label="Buka tautan" className="px-2 text-slate-400 hover:text-emerald-700"><ExternalLink className="h-3.5 w-3.5" /></a>}
                 </span>
               </label>
@@ -82,6 +98,10 @@ export default function EvidencePanel({ companyId, category }: { companyId: stri
         })}
       </ol>
       {error && <p className="mt-3 text-xs font-medium text-rose-700">{error}</p>}
+      {justSaved && !unsaved && !error && (
+        <p className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900"><CheckCircle2 className="h-4 w-4 shrink-0" /> Bukti dukung tersimpan: {filled}/{items.length} tautan terisi.</p>
+      )}
+      {unsaved && lastSaved !== undefined && <p className="mt-3 text-xs font-medium text-amber-800">Ada tautan yang belum disimpan.</p>}
       <button type="button" onClick={save} disabled={saving || lastSaved === undefined} className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Simpan bukti dukung
       </button>

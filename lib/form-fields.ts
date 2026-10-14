@@ -87,7 +87,7 @@ export const FORM_SPECS: FormSpec[] = [
       },
       TEST_SECTION(),
       {
-        title: 'Lainnya',
+        title: 'Berat & peralatan tanggap darurat',
         fields: [
           { key: 'berat_ton', label: 'Berat transformator', input: 'number', unit: 'ton' },
           { key: 'peralatan_tanggap_darurat', label: 'Peralatan tanggap darurat', input: 'text', options: ['Hydrant, APAR', 'APAR', 'APAR, serbuk kayu', 'Hydrant, APAR, serbuk kayu'] },

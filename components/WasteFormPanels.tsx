@@ -5,7 +5,7 @@ import ChecklistPanel from '@/components/ChecklistPanel';
 import RecordLogPanel, { shortDate, sumOf, tons } from '@/components/RecordLogPanel';
 import { BALANCE_SECTIONS, STORAGE_SECTIONS, wasteEntryDefaults } from '@/lib/form-fields';
 
-type Props = { supabase: SupabaseClient; companyId: string; refreshKey?: number };
+type Props = { supabase: SupabaseClient; companyId: string; refreshKey?: number; onSaved?: () => void };
 
 const DAY = 24 * 60 * 60 * 1000;
 /** Days stored: to the last handling, or still running to today. */
@@ -16,7 +16,7 @@ function storedDays(row: Record<string, unknown>) {
 }
 
 /** Form 3: the storage logbook and the storage checklist with the permit. */
-export function StorageFormPanel({ supabase, companyId, refreshKey = 0 }: Props) {
+export function StorageFormPanel({ supabase, companyId, refreshKey = 0, onSaved }: Props) {
   return (
     <div className="space-y-8">
       <div>
@@ -27,6 +27,7 @@ export function StorageFormPanel({ supabase, companyId, refreshKey = 0 }: Props)
         supabase={supabase}
         companyId={companyId}
         refreshKey={refreshKey}
+        onSaved={onSaved}
         table="penyimpanan_logbook"
         orderBy="tanggal_dihasilkan"
         title="Logbook penyimpanan"
@@ -48,26 +49,26 @@ export function StorageFormPanel({ supabase, companyId, refreshKey = 0 }: Props)
           { label: 'Disimpan TPS (ton)', value: (row) => tons(row.jumlah_disimpan_ton), total: sumOf('jumlah_disimpan_ton'), className: 'text-right tabular-nums' },
         ]}
       />
-      <ChecklistPanel supabase={supabase} companyId={companyId} checklist="3_penyimpanan" refreshKey={refreshKey} />
+      <ChecklistPanel supabase={supabase} companyId={companyId} checklist="3_penyimpanan" refreshKey={refreshKey} onSaved={onSaved} />
     </div>
   );
 }
 
 /** Form 4.2: processing by a licensed third party, as a checklist. */
-export function ProcessingFormPanel({ supabase, companyId, refreshKey = 0 }: Props) {
+export function ProcessingFormPanel({ supabase, companyId, refreshKey = 0, onSaved }: Props) {
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Formulir 4.2: Pengolahan PCBs (untuk penghasil)</h2>
         <p className="text-xs text-slate-500">Pengolahan peralatan dan minyak yang sudah tidak digunakan oleh pihak ketiga berizin (Pasal 17 Permen LHK 29/2020).</p>
       </div>
-      <ChecklistPanel supabase={supabase} companyId={companyId} checklist="4_2_pengolahan" refreshKey={refreshKey} />
+      <ChecklistPanel supabase={supabase} companyId={companyId} checklist="4_2_pengolahan" refreshKey={refreshKey} onSaved={onSaved} />
     </div>
   );
 }
 
 /** Form 5: the balance of PCBs waste; its processing checklist is the one of form 4.2. */
-export function ReportingFormPanel({ supabase, companyId, refreshKey = 0 }: Props) {
+export function ReportingFormPanel({ supabase, companyId, refreshKey = 0, onSaved }: Props) {
   return (
     <div className="space-y-4">
       <div>
@@ -78,6 +79,7 @@ export function ReportingFormPanel({ supabase, companyId, refreshKey = 0 }: Prop
         supabase={supabase}
         companyId={companyId}
         refreshKey={refreshKey}
+        onSaved={onSaved}
         table="pelaporan_neraca"
         orderBy="created_at"
         title="Neraca pengelolaan PCBs"

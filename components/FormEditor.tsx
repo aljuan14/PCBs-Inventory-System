@@ -64,7 +64,7 @@ export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { f
           onChange={(event) => onChange(event.target.value)}
           className="min-w-0 flex-1 rounded-lg px-3 py-2 text-sm outline-none"
         />
-        {field.unit && <span className="pr-3 text-xs text-slate-400">{field.unit}</span>}
+        {field.unit && <span className="self-stretch flex items-center rounded-r-lg border-l border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-800">{field.unit}</span>}
         {listId && <datalist id={listId}>{field.options!.map((option) => <option key={option} value={option} />)}</datalist>}
         {field.input === 'coordinate' && (
           <button type="button" onClick={openMap} className="mr-1 flex shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">

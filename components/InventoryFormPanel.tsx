@@ -177,7 +177,7 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
         </div>
       )}
       <StoredEntriesPanel companyId={companyId} category={category} refreshKey={sentKey} onChanged={onSaved} />
-      <EvidencePanel companyId={companyId} category={category} />
+      <EvidencePanel companyId={companyId} category={category} onSaved={onSaved} />
     </div>
   );
 }

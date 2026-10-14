@@ -12,6 +12,20 @@ function nextPath() {
   return next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
 }
 
+/**
+ * The admin's contact for "Hubungi admin" (NEXT_PUBLIC_KONTAK_ADMIN, set in
+ * Vercel, not in the public repo): a WhatsApp number (08… / 62…), an email,
+ * or a link. Unset, the text stays plain.
+ */
+function adminContactLink() {
+  const contact = process.env.NEXT_PUBLIC_KONTAK_ADMIN?.trim();
+  if (!contact) return null;
+  if (/^https?:\/\//i.test(contact)) return contact;
+  if (contact.includes('@')) return `mailto:${contact}`;
+  const digits = contact.replace(/\D/g, '').replace(/^0/, '62');
+  return digits ? `https://wa.me/${digits}?text=${encodeURIComponent('Halo admin, saya butuh bantuan akun Sistem Inventarisasi PCBs.')}` : null;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -19,6 +33,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const contactLink = adminContactLink();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -117,7 +132,10 @@ export default function LoginPage() {
                 {loading ? 'Memproses...' : 'Masuk'}
               </button>
             </form>
-            <p className="border-t border-slate-100 bg-slate-50/70 px-7 py-3 text-center text-xs text-slate-500">Belum punya akun atau lupa password? Hubungi admin.</p>
+            <p className="border-t border-slate-100 bg-slate-50/70 px-7 py-3 text-center text-xs text-slate-500">
+              Belum punya akun atau lupa password?{' '}
+              {contactLink ? <a href={contactLink} target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 underline hover:text-emerald-800">Hubungi admin</a> : 'Hubungi admin'}.
+            </p>
           </div>
         </div>
       </div>

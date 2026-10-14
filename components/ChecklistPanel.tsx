@@ -15,13 +15,14 @@ const fmtDate = (value: string) => new Date(value).toLocaleString('id-ID', { dat
  * the company's last answers; each save keeps the earlier ones as history.
  * Form 3 also asks for the storage permit.
  */
-export default function ChecklistPanel({ supabase, companyId, checklist, refreshKey = 0 }: { supabase: SupabaseClient; companyId: string; checklist: ChecklistKey; refreshKey?: number }) {
+export default function ChecklistPanel({ supabase, companyId, checklist, refreshKey = 0, onSaved }: { supabase: SupabaseClient; companyId: string; checklist: ChecklistKey; refreshKey?: number; onSaved?: () => void }) {
   const spec = CHECKLISTS[checklist];
   const [answers, setAnswers] = useState<ChecklistAnswer[]>(() => spec.questions.map(() => ({ jawaban: null })));
   const [permit, setPermit] = useState({ izin_status: '', izin_nomor: '', izin_masa_berlaku: '' });
   const [lastSaved, setLastSaved] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -39,7 +40,14 @@ export default function ChecklistPanel({ supabase, companyId, checklist, refresh
     return () => { active = false; };
   }, [supabase, companyId, checklist, spec, refreshKey]);
 
-  const set = (index: number, changes: Partial<ChecklistAnswer>) => setAnswers((current) => current.map((answer, at) => (at === index ? { ...answer, ...changes } : answer)));
+  const set = (index: number, changes: Partial<ChecklistAnswer>) => {
+    setJustSaved(false);
+    setAnswers((current) => current.map((answer, at) => (at === index ? { ...answer, ...changes } : answer)));
+  };
+  const changePermit = (changes: Partial<typeof permit>) => {
+    setJustSaved(false);
+    setPermit({ ...permit, ...changes });
+  };
   const answered = answers.filter((answer) => answer.jawaban).length;
   const rate = complianceRate(answers);
 
@@ -52,6 +60,8 @@ export default function ChecklistPanel({ supabase, companyId, checklist, refresh
     setSaving(false);
     if (saveError) return setError(saveError.message);
     setLastSaved((data as { created_at: string }).created_at);
+    setJustSaved(true);
+    onSaved?.();
   };
 
   return (
@@ -65,7 +75,7 @@ export default function ChecklistPanel({ supabase, companyId, checklist, refresh
       {spec.permit && (
         <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
           <label className="text-xs font-medium text-slate-600">Status perizinan
-            <select value={permit.izin_status} onChange={(event) => setPermit({ ...permit, izin_status: event.target.value })} className={`${inputClass} mt-1`}>
+            <select value={permit.izin_status} onChange={(event) => changePermit({ izin_status: event.target.value })} className={`${inputClass} mt-1`}>
               <option value="">Pilih…</option>
               <option>Izin TPS Limbah B3</option>
               <option>Rincian Teknis Penyimpanan Limbah B3 (Perizinan Lingkungan)</option>
@@ -73,10 +83,10 @@ export default function ChecklistPanel({ supabase, companyId, checklist, refresh
             </select>
           </label>
           <label className="text-xs font-medium text-slate-600">Nomor SK / surat
-            <input value={permit.izin_nomor} onChange={(event) => setPermit({ ...permit, izin_nomor: event.target.value })} placeholder="mis. 503/0009/PB/DPMPTSP/2019" className={`${inputClass} mt-1`} />
+            <input value={permit.izin_nomor} onChange={(event) => changePermit({ izin_nomor: event.target.value })} placeholder="mis. 503/0009/PB/DPMPTSP/2019" className={`${inputClass} mt-1`} />
           </label>
           <label className="text-xs font-medium text-slate-600">Masa berlaku
-            <input type="date" value={permit.izin_masa_berlaku} onChange={(event) => setPermit({ ...permit, izin_masa_berlaku: event.target.value })} className={`${inputClass} mt-1`} />
+            <input type="date" value={permit.izin_masa_berlaku} onChange={(event) => changePermit({ izin_masa_berlaku: event.target.value })} className={`${inputClass} mt-1`} />
           </label>
         </div>
       )}
@@ -117,6 +127,7 @@ export default function ChecklistPanel({ supabase, companyId, checklist, refresh
         </button>
       </div>
       {error && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>}
+      {justSaved && !error && <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900"><CheckCircle2 className="h-4 w-4 shrink-0" /> Jawaban tersimpan.</p>}
     </div>
   );
 }

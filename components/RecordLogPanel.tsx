@@ -18,7 +18,7 @@ export const shortDate = (value: unknown) => (value ? new Date(`${value}T00:00:0
  * the fields come from `sections`, `extraErrors` adds checks across fields,
  * and the columns with `total` get a TOTAL row as in the template.
  */
-export default function RecordLogPanel({ supabase, companyId, table, orderBy, title, description, addLabel, sections, defaults, extraErrors, columns, refreshKey = 0 }: {
+export default function RecordLogPanel({ supabase, companyId, table, orderBy, title, description, addLabel, sections, defaults, extraErrors, columns, refreshKey = 0, onSaved }: {
   supabase: SupabaseClient;
   companyId: string;
   table: string;
@@ -32,6 +32,8 @@ export default function RecordLogPanel({ supabase, companyId, table, orderBy, ti
   columns: LogColumn[];
   /** Changed from outside (an Excel upload) to load the rows again. */
   refreshKey?: number;
+  /** After a row is added or removed: the company status may change. */
+  onSaved?: () => void;
 }) {
   const fields = sections.flatMap((section) => section.fields);
   const [rows, setRows] = useState<{ key: number; list: Record<string, unknown>[] } | null>(null);
@@ -65,12 +67,14 @@ export default function RecordLogPanel({ supabase, companyId, table, orderBy, ti
     if (saveError) return setError(`Gagal menyimpan: ${saveError.message}`);
     setEditing(null);
     setReloadKey((value) => value + 1);
+    onSaved?.();
   };
 
   const remove = async (id: unknown) => {
     if (!window.confirm('Hapus baris ini?')) return;
     await supabase.from(table).delete().eq('id', id);
     setReloadKey((value) => value + 1);
+    onSaved?.();
   };
 
   const list = rows?.key === reloadKey ? rows.list : null;

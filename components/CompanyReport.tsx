@@ -54,9 +54,9 @@ export default function CompanyReport({ supabase, companyId }: { supabase: Supab
             )}
             {category === 'roadmap' ? <RoadmapPanels supabase={supabase} companyId={companyId} reloadKey={reload} onChange={() => setReload((value) => value + 1)} />
               : category === 'pengurangan' ? <ReductionFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} onSaved={() => setReload((value) => value + 1)} />
-              : category === 'penyimpanan' ? <StorageFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} />
-                : category === 'pengolahan' ? <ProcessingFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} />
-                  : category === 'pelaporan' ? <ReportingFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} />
+              : category === 'penyimpanan' ? <StorageFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} onSaved={() => setReload((value) => value + 1)} />
+                : category === 'pengolahan' ? <ProcessingFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} onSaved={() => setReload((value) => value + 1)} />
+                  : category === 'pelaporan' ? <ReportingFormPanel key={companyId} supabase={supabase} companyId={companyId} refreshKey={imported} onSaved={() => setReload((value) => value + 1)} />
                     : <InventoryFormPanel
               key={`${companyId}:${category}`}
               companyId={companyId}
