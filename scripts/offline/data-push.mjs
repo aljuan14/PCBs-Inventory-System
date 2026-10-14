@@ -93,6 +93,11 @@ async function publishToWeb() {
   try {
     await publish();
   } catch (error) {
+    // Since data:to-cloud the web holds the full data itself: nothing to send.
+    if (error.message.startsWith('Web sekarang memakai data lengkap')) {
+      log('\nWeb memakai data lengkap di cloud, jadi ringkasan tidak dikirim. Ubah data lewat web; repo data ini hanya salinan laptop.');
+      return;
+    }
     log(`\nData sudah terkirim ke repo, tetapi ringkasan web belum diperbarui: ${error.message}`);
     log('Coba lagi nanti dengan "npm run web:publish".');
   }

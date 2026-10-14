@@ -47,13 +47,13 @@ let dbImage;
  * container itself has no DNS for internet names (its network resolves only
  * the Supabase services).
  */
-async function cloud(url, command, { input, capture = true } = {}) {
+export async function cloud(url, command, { input, capture = true } = {}) {
   dbImage ??= (await run('docker', ['inspect', '-f', '{{.Config.Image}}', DB_CONTAINER], { capture: true })).stdout.trim();
   return run('docker', ['run', '--rm', '-i', '--network', 'host', '-e', 'WEB_DATABASE_URL', '--entrypoint', 'sh', dbImage, '-c', command], { env: { WEB_DATABASE_URL: url }, input, capture });
 }
 
 /** A query on the cloud, rows split on "|". */
-async function cloudQuery(url, sql) {
+export async function cloudQuery(url, sql) {
   const { stdout } = await cloud(url, 'psql "$WEB_DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1', { input: sql });
   return stdout.split('\n').filter((line) => line !== '').map((line) => line.split('|'));
 }
@@ -82,8 +82,10 @@ export async function publish({ reset = false } = {}) {
   if (statusReady !== 't') throw new OfflineError('Database web belum punya tabel status PCBs. Jalankan di SQL Editor Supabase, berurutan, semua migrasi mulai 20261012000001 sampai 20261013000005.');
   const [[rows]] = await cloudQuery(url, `select ${INVENTORY_TABLES.map((table) => `(select count(*) from public.${table})`).join(' + ')};`);
   if (Number(rows) > 0) {
+    // Since data:to-cloud the web runs on the full data in the cloud, edited there:
+    // a summary would replace it. Only --reset (back to summary mode, on purpose) goes on.
     if (!reset) {
-      throw new OfflineError(`Database web masih berisi ${Number(rows).toLocaleString('id-ID')} baris inventaris. Jalankan sekali "npm run web:publish -- --reset": datanya dicadangkan dulu ke Data-inventaris/backup-cloud/, lalu dikosongkan.`);
+      throw new OfflineError(`Web sekarang memakai data lengkap di cloud (${Number(rows).toLocaleString('id-ID')} baris inventaris) dan datanya diubah lewat web, jadi ringkasan tidak dikirim. Perintah ini tidak perlu dijalankan lagi. (Hanya untuk kembali ke mode ringkasan: "--reset" mencadangkan lalu MENGOSONGKAN data web.)`);
     }
     step('Mencadangkan data web sebelum dikosongkan');
     fs.mkdirSync(BACKUP_DIR, { recursive: true });

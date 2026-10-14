@@ -133,6 +133,7 @@ npm run offline -- --dev   # Supabase lokal + next dev
 | `npm run offline` | Mode offline lengkap |
 | `npm run data:push` / `data:pull` | Kirim / ambil data lewat repo private |
 | `npm run web:publish` | Kirim ringkasan ke web sekarang |
+| `npm run data:to-cloud` | Salin seluruh data laptop ke Supabase Cloud agar web berjalan penuh (sekali saja; tanpa `--yes` hanya memeriksa) |
 | `npm run simpel:load` | Muat daftar perusahaan PILAR (CSV terbaru di `Data-inventaris/id_simpel/`) |
 | `npm run offline:user -- email password` | Buat akun admin atau ganti password (offline) |
 | `npm run offline:user -- email password perusahaan <ID SIMPEL>` | Buat akun perusahaan: hanya melihat laporan perusahaan dengan ID SIMPEL itu |
@@ -140,6 +141,9 @@ npm run offline -- --dev   # Supabase lokal + next dev
 ---
 
 ## Memperbarui web
+
+> **Sejak 13 Oktober 2026 (masa pengujian), web berjalan penuh dengan data asli di Supabase Cloud.** Data disalin sekali dengan `npm run data:to-cloud`, `NEXT_PUBLIC_DATA_MODE` dihapus di Vercel, dan sejak itu **data hanya diubah lewat web**. `web:publish` menolak berjalan selama cloud berisi data lengkap, dan `data:push` tidak lagi mengirim ringkasan. Bagian di bawah ini berlaku untuk mode ringkasan (cara sebelumnya). Nanti aplikasi dan datanya dipindah ke server kantor dan digabung ke SIMPEL.
+
 
 Web tidak menyimpan baris data. Isinya ringkasan yang dihitung di laptop admin, lalu dikirim ke Supabase Cloud.
 
