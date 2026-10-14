@@ -175,16 +175,14 @@ function TransformerColumn({ category, stats, grandTotal, statusScope, setStatus
     : { safe: summary?.risk_safe ?? 0, moderate: summary?.risk_moderate ?? 0, high: summary?.risk_high ?? 0, untested: total - (summary?.tested ?? 0) };
   const statusTotal = RISK_CLASSES.reduce((sum, risk) => sum + counts[risk.key], 0);
   const statusTested = statusTotal - counts.untested;
-  const results: Segment[] = RISK_CLASSES.map((risk) => ({
-    key: risk.key,
-    label: risk.label,
-    hint: risk.key === 'untested' ? undefined : risk.range,
-    value: counts[risk.key],
-    color: risk.color,
-    icon: risk.icon,
-    iconClass: risk.iconClass,
-    filters: { pcbRange: risk.key, ...(pre1997 ? PRE_1997_FILTER : {}) },
-  }));
+  // Three results only: at or under the 50 ppm threshold, above it, not tested.
+  const [safe, , high, untested] = RISK_CLASSES;
+  const scoped = pre1997 ? PRE_1997_FILTER : {};
+  const results: Segment[] = [
+    { key: 'upto50', label: 'Di bawah ambang', hint: '≤ 50 ppm', value: counts.safe + counts.moderate, color: safe.color, icon: safe.icon, iconClass: safe.iconClass, filters: { pcbRange: 'upto50', ...scoped } },
+    { key: 'high', label: high.label, hint: high.range, value: counts.high, color: high.color, icon: high.icon, iconClass: high.iconClass, filters: { pcbRange: 'high', ...scoped } },
+    { key: 'untested', label: untested.label, value: counts.untested, color: untested.color, icon: untested.icon, iconClass: untested.iconClass, filters: { pcbRange: 'untested', ...scoped } },
+  ];
 
   return (
     <div className="flex h-full flex-col gap-3 rounded-2xl border p-3" style={categoryTint(category)}>
