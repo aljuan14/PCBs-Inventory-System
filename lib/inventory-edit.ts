@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { EditableInventoryFields, InventoryItem } from '@/components/DataTable';
+import { parseDMSCoordinate, repairIndonesianCoordinate } from '@/lib/dms';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 
 /**
@@ -14,9 +15,29 @@ function tableOf(item: InventoryItem): InventoryCategory {
   return table;
 }
 
+/** The coordinate as the edit form shows it: the point read, or the text that could not be read. */
+export function coordinateText(item: InventoryItem) {
+  if (item.latitude !== null && item.latitude !== undefined && item.longitude !== null && item.longitude !== undefined) return `${item.latitude}, ${item.longitude}`;
+  return item.rawCoordinate ?? '';
+}
+
+// The map shows Indonesia only (as the import, lib/import-transform.ts).
+const inIndonesia = (lat: number, lng: number) => lat >= -11.5 && lat <= 6.5 && lng >= 94 && lng <= 141.5;
+
+/** A typed or picked coordinate: empty clears it; anything else must read as a point in Indonesia. */
+function coordinatePayload(text: string) {
+  const raw = text.trim();
+  if (!raw) return { koordinat_raw: null, koordinat_lat: null, koordinat_lng: null };
+  const parsed = parseDMSCoordinate(raw);
+  const point = parsed.isValid ? { latitude: parsed.latitude as number, longitude: parsed.longitude as number } : repairIndonesianCoordinate(raw);
+  if (!point) throw new Error('Koordinat tidak terbaca. Gunakan format desimal, contoh: -6.2088, 106.8456, atau pilih di peta.');
+  if (!inIndonesia(point.latitude, point.longitude)) throw new Error(`Koordinat ${point.latitude}, ${point.longitude} berada di luar wilayah Indonesia. Periksa tanda minus lintang selatan.`);
+  return { koordinat_raw: raw, koordinat_lat: point.latitude, koordinat_lng: point.longitude };
+}
+
 export async function updateInventoryItem(supabase: SupabaseClient, item: InventoryItem, changes: EditableInventoryFields) {
   const table = tableOf(item);
-  const payload: Record<string, string | number | null> = {};
+  const payload: Record<string, unknown> = {};
   if (table === 'minyak_dielektrik') {
     payload.merek_minyak_dielektrik = changes.name.trim() || null;
     payload.uji_konsentrasi_ppm = changes.pcbConcentration;
@@ -33,6 +54,17 @@ export async function updateInventoryItem(supabase: SupabaseClient, item: Invent
     payload.uji_konsentrasi_ppm = changes.pcbConcentration;
     payload.lokasi_peralatan = changes.location.trim() || null;
     if (table === 'transformator_tidak_digunakan') payload.status_kondisi = changes.status.trim() || null;
+  }
+  // Only a changed coordinate is written;
+  // the import's notes on the old coordinate go with it (read here, not from the page).
+  if (changes.coordinate.trim() !== coordinateText(item).trim()) {
+    const coordinate = coordinatePayload(changes.coordinate);
+    // A row from a workbook keeps the text written there ("Di Excel"); only the point changes.
+    if (item.excelRow !== null && item.excelRow !== undefined && item.rawCoordinate) delete (coordinate as Partial<typeof coordinate>).koordinat_raw;
+    Object.assign(payload, coordinate);
+    const { data } = await supabase.from(table).select('catatan_impor').eq('id', item.id).maybeSingle();
+    const notes = ((data?.catatan_impor ?? []) as Array<{ kode?: string }>).filter((note) => !note.kode?.startsWith('coordinate:'));
+    payload.catatan_impor = notes.length > 0 ? notes : null;
   }
   const { error, count } = await supabase.from(table).update(payload, { count: 'exact' }).eq('id', item.id);
   if (error) throw new Error(`Gagal menyimpan perubahan: ${error.message}`);

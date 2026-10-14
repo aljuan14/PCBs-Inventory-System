@@ -13,7 +13,7 @@ const CoordinatePicker = dynamic(() => import('@/components/CoordinatePicker'), 
 const inputClass = 'w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600';
 
 /** Decimal or degree-minute-second coordinate, with what it reads as. */
-function CoordinatePreview({ value }: { value: string }) {
+export function CoordinatePreview({ value }: { value: string }) {
   if (!value.trim()) return <p className="mt-1 text-[11px] text-slate-400">Contoh: -6.2088, 106.8456 atau S 6°12&apos;31&quot; E 106°50&apos;44&quot;</p>;
   const parsed = parseDMSCoordinate(value);
   if (!parsed.isValid) return <p className="mt-1 text-[11px] font-medium text-amber-700">Koordinat belum terbaca.</p>;

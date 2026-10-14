@@ -1,10 +1,15 @@
 'use client';
 
 import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import dynamic from 'next/dynamic';
+import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw, Map as MapIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useReadOnly } from '@/components/useAccess';
 import CompanyPicker from '@/components/CompanyPicker';
+import { CoordinatePreview } from '@/components/FormEditor';
+import { parseDMSCoordinate } from '@/lib/dms';
+import { coordinateText } from '@/lib/inventory-edit';
 import { PCB_CLASSES, getCategoryLabel, pcbClassLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
 import {
   DEFAULT_FILTERS,
@@ -20,6 +25,9 @@ import {
   type InventorySort,
   type UnitSummary,
 } from '@/lib/inventory-query';
+
+// Leaflet needs the window.
+const CoordinatePicker = dynamic(() => import('@/components/CoordinatePicker'), { ssr: false });
 
 export interface InventoryItem {
   id: string;
@@ -87,6 +95,8 @@ export interface EditableInventoryFields {
   location: string;
   pcbConcentration: number | null;
   status: string;
+  /** "lat, lng" or any format the import reads; empty clears it. */
+  coordinate: string;
 }
 
 const toNumber = (value: unknown) => (value === null || value === undefined || value === '' ? null : Number(value));
@@ -298,6 +308,8 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
   const [currentPage, setCurrentPage] = useState(1);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editForm, setEditForm] = useState<EditableInventoryFields | null>(null);
+  // The point the coordinate map opens on, while it is open.
+  const [pickingCoordinate, setPickingCoordinate] = useState<{ initial: { lat: number; lng: number } | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<InventoryItem | null>(null);
@@ -859,6 +871,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                               location: item.location || '',
                               pcbConcentration: item.pcbConcentration ?? null,
                               status: item.status || 'Aktif',
+                              coordinate: coordinateText(item),
                             });
                           }}
                           className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
@@ -994,8 +1007,23 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                 Status
                 <input value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/10" />
               </label>
+              <div className="text-xs font-semibold text-slate-700 sm:col-span-2">
+                <label htmlFor="edit-coordinate">Koordinat</label>
+                <div className="mt-1.5 flex items-center rounded-xl border border-slate-200 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10">
+                  <input id="edit-coordinate" value={editForm.coordinate} onChange={(e) => setEditForm({ ...editForm, coordinate: e.target.value })} placeholder="-6.2088, 106.8456" className="min-w-0 flex-1 rounded-xl px-3 py-2.5 text-sm font-normal text-slate-900 outline-none" />
+                  <button type="button" onClick={() => {
+                    const parsed = parseDMSCoordinate(editForm.coordinate);
+                    setPickingCoordinate({ initial: parsed.isValid ? { lat: parsed.latitude as number, lng: parsed.longitude as number } : null });
+                  }} className="mr-1.5 flex shrink-0 items-center gap-1 rounded-lg bg-slate-100 px-2 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">
+                    <MapIcon className="h-3.5 w-3.5" /> Pilih di peta
+                  </button>
+                </div>
+                <div className="font-normal"><CoordinatePreview value={editForm.coordinate} /></div>
+                {editingItem.rawCoordinate && editingItem.rawCoordinate !== editForm.coordinate && <p className="mt-1 text-[11px] font-normal text-slate-400">Di Excel: {editingItem.rawCoordinate}</p>}
+              </div>
             </div>
 
+            {pickingCoordinate && createPortal(<CoordinatePicker initial={pickingCoordinate.initial} onClose={() => setPickingCoordinate(null)} onPick={(picked) => { setEditForm({ ...editForm, coordinate: picked }); setPickingCoordinate(null); }} />, document.body)}
             {editError && <div role="alert" className="mt-5 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {editError}</div>}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setEditingItem(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
