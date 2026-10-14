@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AlertTriangle, CheckCheck, Info, Link2, Link2Off, Loader2, Search, X } from 'lucide-react';
 import { buildIndex, exactMatch, findCandidates, searchRecords, type Candidate, type SimpelCompany, type SimpelIndex } from '@/lib/simpel-match';
@@ -14,17 +14,17 @@ const PAGE = 1000;
 const SHOWN = 50;
 const fmt = (value: number) => value.toLocaleString('id-ID');
 
-const STATUSES: Record<Status, { label: string; badge: string; help: string }> = {
-  linked: { label: 'Terhubung', badge: 'border-emerald-200 bg-emerald-50 text-emerald-800', help: 'Sudah dijodohkan dengan catatan PILAR yang punya ID SIMPEL.' },
-  no_id: { label: 'Tanpa ID SIMPEL', badge: 'border-amber-200 bg-amber-50 text-amber-800', help: 'Sudah dijodohkan, tetapi catatan PILAR-nya belum punya ID SIMPEL. Perusahaan perlu terdaftar di SIMPEL.' },
-  exact: { label: 'Cocok persis', badge: 'border-sky-200 bg-sky-50 text-sky-800', help: 'Tepat satu catatan PILAR bernama sama. Tinggal dikonfirmasi.' },
-  candidates: { label: 'Perlu dipilih', badge: 'border-slate-300 bg-white text-slate-700', help: 'Ada beberapa catatan PILAR yang mirip. Pilih yang benar.' },
-  none: { label: 'Tidak ditemukan', badge: 'border-rose-200 bg-rose-50 text-rose-800', help: 'Tidak ada nama yang mirip. Cari dengan kata lain, NPWP, atau NIB; bila tetap tidak ada, perusahaan belum terdaftar di PILAR.' },
+const STATUSES: Record<Status, { dot: string; label: string; badge: string; help: string }> = {
+  linked: { dot: 'bg-emerald-500', label: 'Terhubung', badge: 'border-emerald-200 bg-emerald-50 text-emerald-800', help: 'Sudah dijodohkan dengan catatan PILAR yang punya ID SIMPEL.' },
+  no_id: { dot: 'bg-amber-500', label: 'Tanpa ID SIMPEL', badge: 'border-amber-200 bg-amber-50 text-amber-800', help: 'Sudah dijodohkan, tetapi catatan PILAR-nya belum punya ID SIMPEL. Perusahaan perlu terdaftar di SIMPEL.' },
+  exact: { dot: 'bg-sky-500', label: 'Cocok persis', badge: 'border-sky-200 bg-sky-50 text-sky-800', help: 'Tepat satu catatan PILAR bernama sama. Tinggal dikonfirmasi.' },
+  candidates: { dot: 'bg-slate-400', label: 'Perlu dipilih', badge: 'border-slate-300 bg-white text-slate-700', help: 'Ada beberapa catatan PILAR yang mirip. Pilih yang benar.' },
+  none: { dot: 'bg-rose-500', label: 'Tidak ditemukan', badge: 'border-rose-200 bg-rose-50 text-rose-800', help: 'Tidak ada nama yang mirip. Cari dengan kata lain, NPWP, atau NIB; bila tetap tidak ada, perusahaan belum terdaftar di PILAR.' },
 };
 type CompanyFilter = 'all' | 'open' | Status;
-const COMPANY_FILTERS: Array<[CompanyFilter, string]> = [
-  ['all', 'Semua'], ['open', 'Belum terhubung'], ['candidates', 'Perlu dipilih'], ['none', 'Tidak ditemukan'], ['exact', 'Cocok persis'], ['linked', 'Terhubung'], ['no_id', 'Tanpa ID SIMPEL'],
-];
+// Grouped by meaning: everything / still open, the open ones by why, the matched ones.
+const COMPANY_FILTERS: CompanyFilter[][] = [['all', 'open'], ['candidates', 'none', 'exact'], ['linked', 'no_id']];
+const filterLabel = (key: CompanyFilter) => (key === 'all' ? 'Semua' : key === 'open' ? 'Belum terhubung' : STATUSES[key].label);
 type PilarFilter = 'all' | 'with_id' | 'without_id' | 'linked';
 
 /** An ID SIMPEL is a number; the PILAR export has a few that are not (a person's name). */
@@ -108,12 +108,29 @@ function PickDialog({ index, row, busy, onPick, onClose }: { index: SimpelIndex;
   );
 }
 
-function Chips<K extends string>({ options, value, onChange }: { options: Array<[K, string, number]>; value: K; onChange: (key: K) => void }) {
+type Chip<K> = { key: K; label: string; count: number; dot?: string };
+
+/** Filter buttons in groups split by a thin line, on one row that scrolls sideways when narrow. */
+function Chips<K extends string>({ groups, value, onChange }: { groups: Chip<K>[][]; value: K; onChange: (key: K) => void }) {
   return (
-    <div role="group" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
-      {options.map(([key, label, count]) => (
-        <button key={key} type="button" aria-pressed={value === key} onClick={() => onChange(key)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${value === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}>{label} ({fmt(count)})</button>
-      ))}
+    <div className="-mx-1 overflow-x-auto px-1">
+      <div role="group" className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+        {groups.map((group, index) => (
+          <Fragment key={index}>
+            {index > 0 && <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-slate-300" />}
+            {group.map(({ key, label, count, dot }) => {
+              const active = value === key;
+              return (
+                <button key={key} type="button" aria-pressed={active} onClick={() => onChange(key)} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${active ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'}`}>
+                  {dot && <span aria-hidden className={`h-2 w-2 rounded-full ${dot}`} />}
+                  {label}
+                  <span className={`rounded-full px-1.5 py-px text-[10px] tabular-nums ${active ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'}`}>{fmt(count)}</span>
+                </button>
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
     </div>
   );
 }
@@ -229,14 +246,13 @@ export default function IdSimpelPage() {
           {tab === 'companies' ? (
             <section className="space-y-4">
               <div className="grid gap-2 sm:grid-cols-5">
-                {(['linked', 'no_id', 'candidates', 'none', 'exact'] as const).map((key) => (
+                {(['candidates', 'none', 'exact', 'linked', 'no_id'] as const).map((key) => (
                   <button key={key} type="button" onClick={() => setFilter(key)} title={STATUSES[key].help} className={`rounded-xl border p-3 text-left ${STATUSES[key].badge} ${filter === key ? 'ring-2 ring-slate-900/15' : ''}`}>
                     <span className="block text-[11px] font-semibold uppercase tracking-wide">{STATUSES[key].label}</span>
                     <span className="text-xl font-semibold tabular-nums">{fmt(counts[key])}</span>
                   </button>
                 ))}
               </div>
-              <p className="flex items-start gap-1.5 text-xs text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {STATUSES[filter === 'all' || filter === 'open' ? 'candidates' : filter].help}</p>
               {counts.exact > 0 && (
                 <div className="flex flex-col gap-3 rounded-2xl border border-sky-200 bg-sky-50/60 p-4 sm:flex-row sm:items-center">
                   <p className="flex-1 text-sm text-sky-900"><span className="font-semibold">{fmt(counts.exact)} perusahaan</span> namanya sama persis dengan satu ID SIMPEL.</p>
@@ -244,12 +260,15 @@ export default function IdSimpelPage() {
                 </div>
               )}
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-                  <Chips<CompanyFilter> options={COMPANY_FILTERS.map(([key, label]) => [key, label, counts[key]])} value={filter} onChange={setFilter} />
-                  <label className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 focus-within:border-emerald-600 lg:w-72">
-                    <Search className="h-4 w-4 text-slate-400" />
-                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari perusahaan atau ID SIMPEL" className="min-w-0 flex-1 text-xs outline-none" />
-                  </label>
+                <div className="space-y-3 border-b border-slate-200 px-4 py-3">
+                  <Chips<CompanyFilter> groups={COMPANY_FILTERS.map((group) => group.map((key) => ({ key, label: filterLabel(key), count: counts[key], dot: key === 'all' || key === 'open' ? undefined : STATUSES[key].dot })))} value={filter} onChange={setFilter} />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="flex items-start gap-1.5 text-xs text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {filter === 'all' ? 'Semua perusahaan di data inventaris.' : filter === 'open' ? 'Perusahaan yang belum dijodohkan: perlu dipilih, tidak ditemukan, atau cocok persis.' : STATUSES[filter].help}</p>
+                    <label className="flex w-full shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 focus-within:border-emerald-600 sm:w-72">
+                      <Search className="h-4 w-4 text-slate-400" />
+                      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari perusahaan atau ID SIMPEL" className="min-w-0 flex-1 text-xs outline-none" />
+                    </label>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[820px] text-left text-xs">
@@ -293,11 +312,11 @@ export default function IdSimpelPage() {
           ) : (
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-                <Chips<PilarFilter> options={[
-                  ['all', 'Semua', index.records.length],
-                  ['with_id', 'Punya ID SIMPEL', index.records.filter((record) => record.id_simpel).length],
-                  ['without_id', 'Tanpa ID SIMPEL', index.records.filter((record) => !record.id_simpel).length],
-                  ['linked', 'Terhubung ke data kita', linkedTo.size],
+                <Chips<PilarFilter> groups={[
+                  [{ key: 'all', label: 'Semua', count: index.records.length }],
+                  [{ key: 'with_id', label: 'Punya ID SIMPEL', count: index.records.filter((record) => record.id_simpel).length, dot: 'bg-emerald-500' },
+                    { key: 'without_id', label: 'Tanpa ID SIMPEL', count: index.records.filter((record) => !record.id_simpel).length, dot: 'bg-amber-500' }],
+                  [{ key: 'linked', label: 'Terhubung ke data kita', count: linkedTo.size }],
                 ]} value={pilarFilter} onChange={(key) => { setPilarFilter(key); setPilarLimit(SHOWN); }} />
                 <label className="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 focus-within:border-emerald-600 lg:w-80">
                   <Search className="h-4 w-4 text-slate-400" />
