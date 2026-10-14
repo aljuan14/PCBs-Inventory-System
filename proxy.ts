@@ -65,8 +65,17 @@ export async function proxy(request: NextRequest) {
   // Belum ada fungsinya (database web sebelum migrasi itu dijalankan): perilaku lama. Aman,
   // karena pembatasan datanya datang dari migrasi yang sama.
   if (accessError) return response;
-  const role = access as { peran: 'admin' | 'perusahaan'; id_simpel: string | null } | null;
+  const role = access as { peran: 'admin' | 'pemantau' | 'perusahaan'; id_simpel: string | null } | null;
   if (role?.peran === 'admin') return response;
+  // Pemantau (migrasi 20261014000001): halaman yang hanya membaca; formulir, unggah, ID SIMPEL,
+  // akun dan laporan perusahaan (berisi formulir) ditutup, begitu pula API (semuanya menulis).
+  if (role?.peran === 'pemantau') {
+    if (pathname.startsWith('/api/')) {
+      return withCookies(NextResponse.json({ error: 'Akun pemantau hanya dapat melihat data.' }, { status: 403 }), response);
+    }
+    if (!WRITE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) return response;
+    return withCookies(NextResponse.redirect(new URL('/dashboard', request.url)), response);
+  }
   if (role?.peran === 'perusahaan' && role.id_simpel) {
     const own = `/lapor/${encodeURIComponent(role.id_simpel)}`;
     if (pathname === own || pathname === '/api/formulir') return response;
@@ -80,6 +89,9 @@ export async function proxy(request: NextRequest) {
   }
   return withCookies(new NextResponse('Akun ini belum diberi peran. Hubungi admin Direktorat Pengelolaan B3.', { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } }), response);
 }
+
+/** Halaman untuk mengubah data: tidak dibuka akun pemantau (Riwayat upload ada di bawah /upload). */
+const WRITE_PATHS = ['/formulir', '/upload', '/id-simpel', '/akun', '/lapor'];
 
 /** Bawa cookie sesi yang baru diperbarui ke response redirect / JSON. */
 function withCookies(target: NextResponse, source: NextResponse) {

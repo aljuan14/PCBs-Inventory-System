@@ -143,6 +143,8 @@ npm run offline -- --dev   # Supabase lokal + next dev
 ## Memperbarui web
 
 > **Sejak 13 Oktober 2026 (masa pengujian), web berjalan penuh dengan data asli di Supabase Cloud.** Data disalin sekali dengan `npm run data:to-cloud`, `NEXT_PUBLIC_DATA_MODE` dihapus di Vercel, dan sejak itu **data hanya diubah lewat web**. `web:publish` menolak berjalan selama cloud berisi data lengkap, dan `data:push` tidak lagi mengirim ringkasan. Bagian di bawah ini berlaku untuk mode ringkasan (cara sebelumnya). Nanti aplikasi dan datanya dipindah ke server kantor dan digabung ke SIMPEL.
+>
+> **Akun di web** dikelola admin di menu Administrasi → *Akun pengguna*: peran admin, pemantau (melihat semua tanpa dapat mengubah, untuk pimpinan), atau perusahaan (satu ID SIMPEL), serta akun uji coba ZZ Uji A–E. Halaman ini butuh `SUPABASE_SERVICE_ROLE_KEY` di Environment Variables Vercel (kunci *service_role* dari Project Settings → API; jangan diberi awalan `NEXT_PUBLIC_`).
 
 
 Web tidak menyimpan baris data. Isinya ringkasan yang dihitung di laptop admin, lalu dikirim ke Supabase Cloud.

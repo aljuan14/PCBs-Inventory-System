@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { CalendarPlus, CheckCircle2, Loader2, Trash2 } from 'lucide-react';
 import { formatPlanDate } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
+import { useReadOnly } from '@/components/useAccess';
 
 type Need = 'uji' | 'penanganan';
 type Category = 'transformator_digunakan' | 'transformator_tidak_digunakan';
@@ -90,7 +91,7 @@ function CompanyPlanForm({ supabase, companyId, onSaved }: { supabase: SupabaseC
 }
 
 /** Plans made, the ones for single transformers grouped by when they were made. */
-function PlanList({ supabase, companyId, reloadKey, onChange }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void }) {
+function PlanList({ supabase, companyId, reloadKey, onChange, readOnly }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void; readOnly: boolean }) {
   const [plans, setPlans] = useState<{ key: string; rows: Plan[] } | null>(null);
   const requestKey = `${companyId}|${reloadKey}`;
   useEffect(() => {
@@ -135,8 +136,8 @@ function PlanList({ supabase, companyId, reloadKey, onChange }: { supabase: Supa
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${state.className}`}>{state.label}</span>
             {/* A test is done by its result in the data; a handling is marked by hand. */}
-            {plan.jenis === 'penanganan' && !plan.selesai_at && <button type="button" onClick={() => finish(group)} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><CheckCircle2 className="h-3.5 w-3.5" /> Tandai selesai</button>}
-            <button type="button" onClick={() => remove(group)} aria-label="Hapus rencana" className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" /></button>
+            {!readOnly && plan.jenis === 'penanganan' && !plan.selesai_at && <button type="button" onClick={() => finish(group)} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><CheckCircle2 className="h-3.5 w-3.5" /> Tandai selesai</button>}
+            {!readOnly && <button type="button" onClick={() => remove(group)} aria-label="Hapus rencana" className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" /></button>}
           </div>
         );
       })}
@@ -145,7 +146,7 @@ function PlanList({ supabase, companyId, reloadKey, onChange }: { supabase: Supa
 }
 
 /** Focus transformers needing a test or handling, with a plan set for the ones ticked. */
-function FocusList({ supabase, companyId, reloadKey, onChange }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void }) {
+function FocusList({ supabase, companyId, reloadKey, onChange, readOnly }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void; readOnly: boolean }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [limit, setLimit] = useState(PAGE);
   const [rows, setRows] = useState<{ key: string; list: FocusRow[]; more: boolean } | null>(null);
@@ -196,7 +197,7 @@ function FocusList({ supabase, companyId, reloadKey, onChange }: { supabase: Sup
             <button key={key} type="button" aria-pressed={filter === key} onClick={() => { setFilter(key); setLimit(PAGE); setPicked(new Set()); }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${filter === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}>{label}</button>
           ))}
         </div>
-        {picked.size > 0 && (
+        {!readOnly && picked.size > 0 && (
           <div className="flex flex-wrap items-end gap-3 rounded-xl bg-emerald-50 p-3">
             <span className="text-xs font-semibold text-emerald-900">{fmt(picked.size)} trafo dipilih</span>
             <label className="text-xs font-medium text-slate-600">Tanggal rencana<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`${inputClass} mt-1 block`} /></label>
@@ -211,7 +212,7 @@ function FocusList({ supabase, companyId, reloadKey, onChange }: { supabase: Sup
             <table className="w-full min-w-[760px] text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="w-10 px-3 py-2.5"><input type="checkbox" aria-label="Pilih semua" checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(list.map((row) => row.id)))} className="accent-emerald-700" /></th>
+                  {!readOnly && <th className="w-10 px-3 py-2.5"><input type="checkbox" aria-label="Pilih semua" checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(list.map((row) => row.id)))} className="accent-emerald-700" /></th>}
                   <th className="px-3 py-2.5">Merek / No. serial</th><th className="px-3 py-2.5">Tahun</th><th className="px-3 py-2.5">Lokasi</th><th className="px-3 py-2.5">Trafo</th><th className="px-3 py-2.5">Perlu</th><th className="px-3 py-2.5">Rencana</th>
                 </tr>
               </thead>
@@ -220,7 +221,7 @@ function FocusList({ supabase, companyId, reloadKey, onChange }: { supabase: Sup
                   const state = planState(row);
                   return (
                     <tr key={row.id} className={picked.has(row.id) ? 'bg-emerald-50/50' : ''}>
-                      <td className="px-3 py-2.5"><input type="checkbox" aria-label="Pilih" checked={picked.has(row.id)} onChange={() => toggle(row.id)} className="accent-emerald-700" /></td>
+                      {!readOnly && <td className="px-3 py-2.5"><input type="checkbox" aria-label="Pilih" checked={picked.has(row.id)} onChange={() => toggle(row.id)} className="accent-emerald-700" /></td>}
                       <td className="px-3 py-2.5 text-slate-800">{row.nama_merek || '–'}<span className="block text-slate-500">{row.nomor_serial || '–'}</span></td>
                       <td className="px-3 py-2.5 tabular-nums">{row.tahun_pembuatan ?? <span className="text-amber-700">tidak ada</span>}</td>
                       <td className="max-w-56 px-3 py-2.5 text-slate-600"><span className="line-clamp-2">{[row.unit, row.lokasi].filter(Boolean).join(' · ') || '–'}</span></td>
@@ -245,11 +246,13 @@ function FocusList({ supabase, companyId, reloadKey, onChange }: { supabase: Sup
  * their own. On the Roadmap page and in the company's report.
  */
 export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void }) {
+  // A pemantau account sees the plans and the transformers, without the means to change them.
+  const readOnly = useReadOnly();
   return (
     <div className="space-y-6">
-      <CompanyPlanForm key={`plan-${companyId}`} supabase={supabase} companyId={companyId} onSaved={onChange} />
-      <PlanList supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={onChange} />
-      <FocusList key={`focus-${companyId}`} supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={onChange} />
+      {!readOnly && <CompanyPlanForm key={`plan-${companyId}`} supabase={supabase} companyId={companyId} onSaved={onChange} />}
+      <PlanList supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={onChange} readOnly={readOnly} />
+      <FocusList key={`focus-${companyId}`} supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={onChange} readOnly={readOnly} />
     </div>
   );
 }

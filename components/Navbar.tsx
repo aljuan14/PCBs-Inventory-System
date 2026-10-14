@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, CalendarClock, Fingerprint, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
+import { Building2, CalendarClock, Fingerprint, UserCog, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
 import { SUMMARY_MODE } from '@/lib/data-mode';
+import { useAccess } from '@/components/useAccess';
 
 const categoryIcons = {
   transformator_digunakan: Zap,
@@ -30,6 +31,8 @@ export default function Navbar() {
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const [email, setEmail] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const access = useAccess();
+  const readOnly = access?.peran === 'pemantau';
 
   useEffect(() => {
     if (pathname === '/login') return;
@@ -48,21 +51,24 @@ export default function Navbar() {
   }
 
   // Menus by what they are for. Reporting, incoming data and administration
-  // work on the rows: not on the web (summary mode).
-  const groups: Array<{ title: string; rowsOnly?: boolean; items: Array<{ href: string; label: string; icon: typeof Grid2X2; active?: boolean }> }> = [
-    { title: 'Inventarisasi', items: INVENTORY_CATEGORIES.map((category) => ({ href: `/dashboard/${category.key.replaceAll('_', '-')}`, label: category.shortLabel, icon: categoryIcons[category.key] })) },
+  // work on the rows: not on the web (summary mode). A pemantau account gets
+  // the menus that only read (readable); the accounts page is the admin's.
+  type Item = { href: string; label: string; icon: typeof Grid2X2; active?: boolean; readable?: boolean; adminOnly?: boolean };
+  const groups: Array<{ title: string; rowsOnly?: boolean; items: Item[] }> = [
+    { title: 'Inventarisasi', items: INVENTORY_CATEGORIES.map((category) => ({ href: `/dashboard/${category.key.replaceAll('_', '-')}`, label: category.shortLabel, icon: categoryIcons[category.key], readable: true })) },
     { title: 'Pelaporan', rowsOnly: true, items: [
       { href: '/formulir', label: 'Isi formulir', icon: ClipboardPen },
-      { href: '/roadmap', label: 'Roadmap', icon: CalendarClock },
+      { href: '/roadmap', label: 'Roadmap', icon: CalendarClock, readable: true },
     ] },
     { title: 'Data masuk', rowsOnly: true, items: [
       { href: '/upload', label: 'Upload data', icon: UploadCloud, active: isActive('/upload') && !isActive('/upload/riwayat') },
       { href: '/upload/riwayat', label: 'Riwayat upload', icon: History },
-      { href: '/kualitas-data', label: 'Kualitas data', icon: ClipboardCheck },
+      { href: '/kualitas-data', label: 'Kualitas data', icon: ClipboardCheck, readable: true },
     ] },
     { title: 'Administrasi', rowsOnly: true, items: [
-      { href: '/companies', label: 'Perusahaan', icon: Building2 },
+      { href: '/companies', label: 'Perusahaan', icon: Building2, readable: true },
       { href: '/id-simpel', label: 'ID SIMPEL', icon: Fingerprint },
+      { href: '/akun', label: 'Akun pengguna', icon: UserCog, adminOnly: true },
     ] },
   ];
 
@@ -74,7 +80,9 @@ export default function Navbar() {
       </Link>
       <nav className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-4 text-sm font-medium">
         <NavLink href="/dashboard" icon={Grid2X2} label="Dashboard" active={pathname === '/dashboard'} />
-        {groups.filter((group) => !group.rowsOnly || !SUMMARY_MODE).map((group) => (
+        {groups.filter((group) => !group.rowsOnly || !SUMMARY_MODE)
+          .map((group) => ({ ...group, items: group.items.filter((item) => (readOnly ? item.readable : !item.adminOnly || access?.peran === 'admin')) }))
+          .filter((group) => group.items.length > 0).map((group) => (
           <div key={group.title} className="mt-5">
             <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.title}</div>
             <div className="space-y-0.5">
@@ -86,7 +94,10 @@ export default function Navbar() {
       <div className="shrink-0 border-t border-slate-200 pt-4">
         <div className="flex items-center gap-2 px-2 text-xs text-slate-500">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">{email ? email[0].toUpperCase() : 'AD'}</span>
-          <span className="min-w-0 truncate" title={email ?? undefined}>{email ?? 'Direktorat B3'}</span>
+          <span className="min-w-0">
+            <span className="block truncate" title={email ?? undefined}>{email ?? 'Direktorat B3'}</span>
+            {readOnly && <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Pemantau · lihat saja</span>}
+          </span>
         </div>
         <button type="button" onClick={signOut} disabled={signingOut} className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"><LogOut className="h-4 w-4" /> {signingOut ? 'Keluar...' : 'Keluar'}</button>
       </div>

@@ -12,6 +12,7 @@ import PcbCapacitorBrands from '@/components/PcbCapacitorBrands';
 import PcbOilBrands from '@/components/PcbOilBrands';
 import SummaryStamp from '@/components/SummaryStamp';
 import { useDashboardData } from '@/components/useDashboardData';
+import { useReadOnly } from '@/components/useAccess';
 import { SUMMARY_MODE } from '@/lib/data-mode';
 import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
 
@@ -24,6 +25,7 @@ function getCategory(category: InventoryCategory) {
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
 
 export default function InventoryCategoryDashboard({ category, issue }: { category: InventoryCategory; issue?: IssueLink }) {
+  const readOnly = useReadOnly();
   const config = getCategory(category);
   const { supabase, stats, companies, loading, refreshing, error, reloadKey, reload } = useDashboardData();
 
@@ -63,7 +65,7 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
   return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8">
     <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
       <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Inventarisasi kategori</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">{config.label}</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">{config.description}</p></div>
-      <div className="flex gap-2"><button type="button" onClick={reload} disabled={refreshing} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Segarkan</button>{!SUMMARY_MODE && <a href="/upload" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><UploadCloud className="h-4 w-4" /> Upload data</a>}</div>
+      <div className="flex gap-2"><button type="button" onClick={reload} disabled={refreshing} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Segarkan</button>{!SUMMARY_MODE && !readOnly && <a href="/upload" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><UploadCloud className="h-4 w-4" /> Upload data</a>}</div>
     </header>
     {SUMMARY_MODE && <SummaryStamp supabase={supabase} />}
     {error && <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800"><AlertCircle className="h-4 w-4" /> {error}</div>}

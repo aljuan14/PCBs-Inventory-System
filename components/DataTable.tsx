@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useReadOnly } from '@/components/useAccess';
 import CompanyPicker from '@/components/CompanyPicker';
 import { PCB_CLASSES, getCategoryLabel, pcbClassLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
 import {
@@ -279,6 +280,8 @@ function NumberFilter({ value, onCommit, placeholder, label }: { value: number |
 }
 
 export default function DataTable({ category, companies, reloadKey = 0, scope, onScopeChange, preset, onEdit, onDelete }: DataTableProps) {
+  // A pemantau account reads only: no edit or delete buttons (the database refuses them too).
+  const editable = !useReadOnly();
   const supabase = useMemo(() => createClient(), []);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -740,7 +743,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
               <th className={th()}>Status</th>
               <th className={th('tanggal')}>Diinput</th>
               {focused('temuan') && <th className={th('temuan')}>Temuan Impor</th>}
-              <th className={`${th()} ${STICKY_ACTIONS} bg-slate-50 text-right`}>Aksi</th>
+              <th className={`${th()} ${STICKY_ACTIONS} bg-slate-50 text-right`}>{editable ? 'Aksi' : ''}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -840,6 +843,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                     )}
                     <td className={`${td()} ${STICKY_ACTIONS} bg-inherit`}>
                       <div className="flex justify-end gap-1.5">
+                        {editable && <>
                         <button
                           type="button"
                           title="Edit data"
@@ -869,6 +873,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
+                        </>}
                       </div>
                     </td>
                   </tr>
