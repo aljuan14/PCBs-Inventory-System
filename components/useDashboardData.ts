@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { ALL_SCOPE, fetchInventoryStats, type DashboardScope, type InventoryStats } from '@/lib/inventory-query';
 import type { CompanyOption } from '@/components/DataTable';
+import { loadCompanyOptions } from '@/lib/company-sort';
 
 /**
  * Figures and company list for a dashboard. The table and the map load
@@ -24,12 +25,11 @@ export function useDashboardData(scope: DashboardScope = ALL_SCOPE) {
   const { companyId, unit, subUnit } = scope;
 
   const fetchAll = useCallback(async () => {
-    const [{ data: companyRows, error: companyError }, nextStats] = await Promise.all([
-      supabase.from('companies').select('id, nama_perusahaan').order('nama_perusahaan'),
+    const [{ data: companyOptions, error: companyError }, nextStats] = await Promise.all([
+      loadCompanyOptions(supabase),
       fetchInventoryStats(supabase, { companyId, unit, subUnit }),
     ]);
-    if (companyError) throw new Error(companyError.message);
-    const companyOptions = (companyRows ?? []).map((row) => ({ id: row.id as string, name: row.nama_perusahaan as string }));
+    if (companyError) throw new Error(companyError);
     return { companyOptions, nextStats };
   }, [supabase, companyId, unit, subUnit]);
 

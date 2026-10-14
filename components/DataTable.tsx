@@ -61,6 +61,8 @@ export interface TablePreset {
 export interface CompanyOption {
   id: string;
   name: string;
+  /** companies.terakhir_diubah, for the "last edited" order (lib/company-sort.ts). */
+  lastEdited?: string | null;
 }
 
 interface DataTableProps {

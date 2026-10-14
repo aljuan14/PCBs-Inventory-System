@@ -11,6 +11,7 @@ import { RoadmapSchedule } from '@/components/CompanyOverviewLists';
 import { readLastCompany, writeLastCompany } from '@/lib/last-company';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 import { createClient } from '@/lib/supabase/client';
+import { loadCompanyOptions } from '@/lib/company-sort';
 
 function RoadmapContent() {
   const supabase = useMemo(() => createClient(), []);
@@ -22,8 +23,7 @@ function RoadmapContent() {
   const reload = useCallback(() => setReloadKey((value) => value + 1), []);
 
   useEffect(() => {
-    supabase.from('companies').select('id, nama_perusahaan').order('nama_perusahaan')
-      .then(({ data }) => setCompanies((data ?? []).map((company) => ({ id: company.id as string, name: company.nama_perusahaan as string }))));
+    loadCompanyOptions(supabase).then(({ data }) => setCompanies(data));
   }, [supabase]);
 
   // Back to the company opened last time (shared with Isi formulir), if it still exists.

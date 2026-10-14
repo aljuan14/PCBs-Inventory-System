@@ -4,13 +4,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { FEEDBACK_STATUSES, STATUS_ORDER, formatDate, statusOf, type CompanyStatus, type FeedbackStatus } from '@/lib/company-status';
 import type { CompanyOption } from '@/components/DataTable';
+import CompanySortControl from '@/components/CompanySortControl';
+import { useCompanySort } from '@/components/useCompanySort';
+import { formatEdited, sortCompanies } from '@/lib/company-sort';
 
 const ALL = '__all__';
 
 /**
  * Company dropdown with search and, when `statuses` is given, a coloured dot
  * per company showing whether its check results were sent (a native <select>
- * cannot be coloured reliably). Companies are listed in the order given.
+ * cannot be coloured reliably). Companies are listed in the order chosen in
+ * the list (last edited, A-Z, Z-A; lib/company-sort.ts), shared by every list.
  * `allLabel: null` drops the "all companies" option (a company must be picked);
  * `describe` replaces the status text shown on the right of each company.
  */
@@ -29,6 +33,9 @@ export default function CompanyPicker({ companies, value, onChange, statuses = n
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | null>(null);
   const [active, setActive] = useState(0);
+  const [sort, setSort] = useCompanySort();
+  const withEdited = companies.some((company) => company.lastEdited);
+  const edited = useMemo(() => new Map(companies.map((company) => [company.id, company.lastEdited ?? null])), [companies]);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -50,9 +57,10 @@ export default function CompanyPicker({ companies, value, onChange, statuses = n
 
   const options = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const matches = companies.filter((company) => (!needle || company.name.toLowerCase().includes(needle)) && (!statusFilter || statusOf(statuses, company.id) === statusFilter));
+    const ordered = sortCompanies(companies, withEdited ? sort : sort === 'terbaru' ? 'az' : sort, (company) => company.name, (company) => company.lastEdited);
+    const matches = ordered.filter((company) => (!needle || company.name.toLowerCase().includes(needle)) && (!statusFilter || statusOf(statuses, company.id) === statusFilter));
     return [...(allText !== null && !needle && !statusFilter ? [ALL] : []), ...matches.map((company) => company.id)];
-  }, [companies, statuses, query, statusFilter, allText]);
+  }, [companies, statuses, query, statusFilter, allText, sort, withEdited]);
 
   const names = useMemo(() => new Map(companies.map((company) => [company.id, company.name])), [companies]);
   const selected = value ? names.get(value) : null;
@@ -101,6 +109,7 @@ export default function CompanyPicker({ companies, value, onChange, statuses = n
               <Search className="h-3.5 w-3.5 text-slate-400" />
               <input autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} placeholder="Cari perusahaan…" className="min-w-0 flex-1 bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400" />
             </div>
+            <div className="mt-2"><CompanySortControl value={sort} onChange={(value) => { setSort(value); setActive(0); }} withEdited={withEdited} compact /></div>
             {statuses && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {STATUS_ORDER.map((status) => (
@@ -117,7 +126,8 @@ export default function CompanyPicker({ companies, value, onChange, statuses = n
               const isAll = id === ALL;
               const status = statuses?.get(id);
               const isSelected = isAll ? value === null : value === id;
-              const note = isAll ? null : describe ? describe(id) : statuses ? (status?.lastSentAt ? `dikirim ${formatDate(status.lastSentAt)}` : FEEDBACK_STATUSES[statusOf(statuses, id)].label) : null;
+              const lastEdited = edited.get(id);
+              const note = isAll ? null : describe ? describe(id) : statuses ? (status?.lastSentAt ? `dikirim ${formatDate(status.lastSentAt)}` : FEEDBACK_STATUSES[statusOf(statuses, id)].label) : lastEdited ? `diubah ${formatEdited(lastEdited)}` : null;
               return (
                 <li key={id} role="option" aria-selected={isSelected} onMouseEnter={() => setActive(index)} onClick={() => choose(id)} className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-xs ${index === active ? 'bg-slate-50' : ''}`}>
                   {(isAll || !statuses) ? <span className="h-2 w-2 shrink-0" /> : <span className={`h-2 w-2 shrink-0 rounded-full ${dot(id)}`} />}

@@ -5,8 +5,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AlertTriangle, CheckCheck, Info, Link2, Link2Off, Loader2, Search, X } from 'lucide-react';
 import { buildIndex, exactMatch, findCandidates, searchRecords, type Candidate, type SimpelCompany, type SimpelIndex } from '@/lib/simpel-match';
 import { createClient } from '@/lib/supabase/client';
+import CompanySortControl from '@/components/CompanySortControl';
+import { useCompanySort } from '@/components/useCompanySort';
+import { selectCompanies, sortCompanies } from '@/lib/company-sort';
 
-type Company = { id: string; nama_perusahaan: string; pilar_company_id: string | null; id_simpel: string | null };
+type Company = { id: string; nama_perusahaan: string; pilar_company_id: string | null; id_simpel: string | null; terakhir_diubah?: string | null };
 type Status = 'linked' | 'no_id' | 'exact' | 'candidates' | 'none';
 type Row = { company: Company; status: Status; linked: SimpelCompany | null; exact: Candidate | null; candidates: Candidate[] };
 
@@ -157,9 +160,9 @@ export default function IdSimpelPage() {
   const [busy, setBusy] = useState(false);
 
   const loadCompanies = useCallback(async () => {
-    const { data, error: loadError } = await supabase.from('companies').select('id, nama_perusahaan, pilar_company_id, id_simpel').order('nama_perusahaan');
-    if (loadError) throw new Error(loadError.message);
-    return (data ?? []) as Company[];
+    const { data, error: loadError } = await selectCompanies<Company>(supabase, 'id, nama_perusahaan, pilar_company_id, id_simpel');
+    if (loadError) throw new Error(loadError);
+    return data;
   }, [supabase]);
 
   useEffect(() => {
@@ -204,8 +207,11 @@ export default function IdSimpelPage() {
   };
 
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const shownRows = rows.filter((row) => (filter === 'all' || (filter === 'open' ? row.status !== 'linked' && row.status !== 'no_id' : row.status === filter))
-    && words.every((word) => row.company.nama_perusahaan.toLowerCase().includes(word) || row.company.id_simpel === word));
+  const [sort, setSort] = useCompanySort();
+  const withEdited = (companies ?? []).some((company) => company.terakhir_diubah);
+  const shownRows = sortCompanies(rows.filter((row) => (filter === 'all' || (filter === 'open' ? row.status !== 'linked' && row.status !== 'no_id' : row.status === filter))
+    && words.every((word) => row.company.nama_perusahaan.toLowerCase().includes(word) || row.company.id_simpel === word)),
+    withEdited || sort !== 'terbaru' ? sort : 'az', (row) => row.company.nama_perusahaan, (row) => row.company.terakhir_diubah);
 
   const pilarRows = useMemo(() => {
     if (!index) return [];
@@ -264,10 +270,13 @@ export default function IdSimpelPage() {
                   <Chips<CompanyFilter> groups={COMPANY_FILTERS.map((group) => group.map((key) => ({ key, label: filterLabel(key), count: counts[key], dot: key === 'all' || key === 'open' ? undefined : STATUSES[key].dot })))} value={filter} onChange={setFilter} />
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="flex items-start gap-1.5 text-xs text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {filter === 'all' ? 'Semua perusahaan di data inventaris.' : filter === 'open' ? 'Perusahaan yang belum dijodohkan: perlu dipilih, tidak ditemukan, atau cocok persis.' : STATUSES[filter].help}</p>
-                    <label className="flex w-full shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 focus-within:border-emerald-600 sm:w-72">
-                      <Search className="h-4 w-4 text-slate-400" />
-                      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari perusahaan atau ID SIMPEL" className="min-w-0 flex-1 text-xs outline-none" />
-                    </label>
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
+                      <CompanySortControl value={sort} onChange={setSort} withEdited={withEdited} />
+                      <label className="flex w-full shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 focus-within:border-emerald-600 sm:w-72">
+                        <Search className="h-4 w-4 text-slate-400" />
+                        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari perusahaan atau ID SIMPEL" className="min-w-0 flex-1 text-xs outline-none" />
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <div className="overflow-x-auto">

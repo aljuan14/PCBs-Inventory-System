@@ -7,7 +7,7 @@ import type { AccountRow } from '@/app/api/akun/route';
 
 type Peran = 'admin' | 'pemantau' | 'perusahaan';
 type Scenario = { idSimpel: string; email: string; name: string; purpose: string };
-type Data = { accounts: AccountRow[]; companies: Array<{ idSimpel: string; name: string }>; scenarios: Scenario[] };
+type Data = { accounts: AccountRow[]; companies: Array<{ idSimpel: string; name: string; lastEdited: string | null }>; scenarios: Scenario[] };
 
 const ROLES: Record<Peran, { label: string; help: string; badge: string }> = {
   admin: { label: 'Admin', help: 'Melihat dan mengubah semua data, mengelola akun.', badge: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
@@ -38,7 +38,7 @@ function RoleFields({ peran, idSimpel, companies, onChange }: { peran: Peran; id
       </div>
       {peran === 'perusahaan' && (
         <label className="block text-xs font-medium text-slate-600">Perusahaan (yang sudah punya ID SIMPEL)
-          <CompanyPicker companies={companies.map((company) => ({ id: company.idSimpel, name: company.name }))} value={idSimpel} onChange={(value) => onChange('perusahaan', value)} allLabel={null} describe={(id) => `ID SIMPEL ${id}`} className="mt-1 w-full" />
+          <CompanyPicker companies={companies.map((company) => ({ id: company.idSimpel, name: company.name, lastEdited: company.lastEdited }))} value={idSimpel} onChange={(value) => onChange('perusahaan', value)} allLabel={null} describe={(id) => `ID SIMPEL ${id}`} className="mt-1 w-full" />
         </label>
       )}
     </div>

@@ -9,6 +9,7 @@ import DashboardScopeFilter from '@/components/DashboardScopeFilter';
 import DataQualityPanel from '@/components/DataQualityPanel';
 import { fetchCompanyStatuses, type CompanyStatus } from '@/lib/company-status';
 import { deleteInventoryItem, updateInventoryItem } from '@/lib/inventory-edit';
+import { loadCompanyOptions } from '@/lib/company-sort';
 
 /** Data quality per company / unit / sub-unit, with the table its indicators open. */
 export default function DataQualityOverview() {
@@ -23,10 +24,10 @@ export default function DataQualityOverview() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.from('companies').select('id, nama_perusahaan').order('nama_perusahaan').then(({ data, error: companyError }) => {
+    loadCompanyOptions(supabase).then(({ data, error: companyError }) => {
       if (cancelled) return;
-      if (companyError) setError(companyError.message);
-      else setCompanies((data ?? []).map((row) => ({ id: row.id as string, name: row.nama_perusahaan as string })));
+      if (companyError) setError(companyError);
+      else setCompanies(data);
     });
     fetchCompanyStatuses(supabase).then((result) => { if (!cancelled) setStatuses(result); }, () => { if (!cancelled) setStatuses(null); });
     return () => { cancelled = true; };

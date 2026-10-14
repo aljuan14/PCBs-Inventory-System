@@ -3,6 +3,7 @@ import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { ServiceKeyMissing, createServiceClient, requireAdmin } from '@/lib/supabase/admin';
 import { deleteCompany } from '@/lib/company-purge';
 import { TEST_SCENARIOS, seedTestCompany } from '@/lib/test-accounts';
+import { selectCompanies } from '@/lib/company-sort';
 
 /**
  * Login accounts, for the admin only (the "Akun pengguna" page). Supabase
@@ -65,11 +66,16 @@ export async function GET() {
     const [users, { data: access }, { data: companies }] = await Promise.all([
       allUsers(admin),
       admin.from('user_access').select('user_id, peran, id_simpel'),
-      admin.from('companies').select('id_simpel, nama_perusahaan').not('id_simpel', 'is', null).order('nama_perusahaan'),
+      selectCompanies<{ id_simpel: string | null; nama_perusahaan: string; terakhir_diubah?: string }>(admin, 'id_simpel, nama_perusahaan'),
     ]);
     const roles = new Map((access ?? []).map((row) => [row.user_id as string, row]));
     const names = new Map<string, string>();
-    for (const company of companies ?? []) if (!names.has(company.id_simpel)) names.set(company.id_simpel, company.nama_perusahaan);
+    const edited = new Map<string, string>();
+    for (const company of companies) {
+      if (!company.id_simpel) continue;
+      if (!names.has(company.id_simpel)) names.set(company.id_simpel, company.nama_perusahaan);
+      if (company.terakhir_diubah && company.terakhir_diubah > (edited.get(company.id_simpel) ?? '')) edited.set(company.id_simpel, company.terakhir_diubah);
+    }
     const accounts: AccountRow[] = users.map((user) => {
       const role = roles.get(user.id);
       return {
@@ -79,7 +85,7 @@ export async function GET() {
     }).sort((a, b) => PERAN.indexOf(a.peran ?? 'perusahaan') - PERAN.indexOf(b.peran ?? 'perusahaan') || a.email.localeCompare(b.email));
     return NextResponse.json({
       accounts,
-      companies: [...names].map(([idSimpel, name]) => ({ idSimpel, name })),
+      companies: [...names].map(([idSimpel, name]) => ({ idSimpel, name, lastEdited: edited.get(idSimpel) ?? null })),
       scenarios: TEST_SCENARIOS.map(({ idSimpel, email, name, purpose }) => ({ idSimpel, email, name, purpose })),
     });
   });

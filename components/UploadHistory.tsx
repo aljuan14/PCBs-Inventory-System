@@ -8,6 +8,7 @@ import { getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
 import type { CheckReport } from '@/lib/import-transform';
 import { fetchIssueRows, issueLinkHref, issueTableFilter } from '@/lib/inventory-query';
 import CheckIssueList, { type LoadIssueRows } from '@/components/CheckIssueList';
+import { loadCompanyOptions } from '@/lib/company-sort';
 
 const PAGE_SIZE = 50;
 const SELECT_CLASS = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none';
@@ -88,8 +89,7 @@ export default function UploadHistory({ initialCompanyId }: { initialCompanyId: 
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.from('companies').select('id, nama_perusahaan').order('nama_perusahaan')
-      .then(({ data }) => setCompanies((data ?? []).map((row) => ({ id: row.id as string, name: row.nama_perusahaan as string }))));
+    loadCompanyOptions(supabase).then(({ data }) => setCompanies(data));
   }, [supabase]);
 
   const requestKey = `${companyId}|${limit}`;

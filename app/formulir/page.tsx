@@ -10,6 +10,7 @@ import LockedReport from '@/components/LockedReport';
 import type { CompanyOption } from '@/components/DataTable';
 import { readLastCompany, writeLastCompany } from '@/lib/last-company';
 import { createClient } from '@/lib/supabase/client';
+import { loadCompanyOptions } from '@/lib/company-sort';
 
 /**
  * The admin filling in a company's report (components/CompanyReport.tsx);
@@ -24,8 +25,7 @@ function FormulirContent() {
   const [companies, setCompanies] = useState<CompanyOption[] | null>(null);
 
   useEffect(() => {
-    supabase.from('companies').select('id, nama_perusahaan').order('nama_perusahaan')
-      .then(({ data }) => setCompanies((data ?? []).map((company) => ({ id: company.id as string, name: company.nama_perusahaan as string }))));
+    loadCompanyOptions(supabase).then(({ data }) => setCompanies(data));
   }, [supabase]);
 
   // Back to the company opened last time, if it still exists.

@@ -13,11 +13,12 @@ import UploadRules from '@/components/UploadRules';
 import CompanyPicker from '@/components/CompanyPicker';
 import ProgressPanel from '@/components/ProgressPanel';
 import { applyProgress, postWithProgress, startProgress, uploadWithProgress, type ProgressEvent, type ProgressState } from '@/lib/progress';
+import { selectCompanies } from '@/lib/company-sort';
 
 interface CompanyOption {
   id: string;
   nama_perusahaan: string;
-  /** Latest upload for the company, or its creation when it has none: the list is sorted on it, newest first. */
+  /** Last edit of the company (companies.terakhir_diubah), its latest upload, or its creation: the newest is preselected. */
   lastActivity: string;
   lastUploadAt: string | null;
 }
@@ -30,8 +31,8 @@ const formatUploadTime = (value: string) => new Date(value).toLocaleString('id-I
  * the same company needs no selection. Upload times come from upload_sessions.
  */
 async function loadCompanyOptions(supabase: ReturnType<typeof createClient>): Promise<CompanyOption[]> {
-  const { data: companies, error } = await supabase.from('companies').select('id, nama_perusahaan, created_at');
-  if (error) throw new Error(error.message);
+  const { data: companies, error } = await selectCompanies<{ id: string; nama_perusahaan: string; created_at: string; terakhir_diubah?: string }>(supabase, 'id, nama_perusahaan, created_at');
+  if (error) throw new Error(error);
   const lastUpload = new Map<string, string>();
   for (let from = 0; ; from += 1000) {
     const { data, error: uploadError } = await supabase.from('upload_sessions').select('company_id, created_at').order('created_at', { ascending: false }).range(from, from + 999);
@@ -39,10 +40,10 @@ async function loadCompanyOptions(supabase: ReturnType<typeof createClient>): Pr
     for (const row of data ?? []) if (!lastUpload.has(row.company_id)) lastUpload.set(row.company_id, row.created_at);
     if (!data || data.length < 1000) break;
   }
-  return (companies ?? []).map((company) => {
+  return companies.map((company) => {
     const uploadAt = lastUpload.get(company.id) ?? null;
     const iso = (value: string) => new Date(value).toISOString();
-    const lastActivity = uploadAt && iso(uploadAt) > iso(company.created_at) ? iso(uploadAt) : iso(company.created_at);
+    const lastActivity = [company.created_at, company.terakhir_diubah, uploadAt].filter((value): value is string => Boolean(value)).map(iso).sort().at(-1)!;
     return { id: company.id, nama_perusahaan: company.nama_perusahaan, lastActivity, lastUploadAt: uploadAt };
   }).sort(newestFirst);
 }
@@ -350,7 +351,7 @@ export default function UploadPage() {
                 />
               ) : (
                 <CompanyPicker
-                  companies={companies.map((c) => ({ id: c.id, name: c.nama_perusahaan }))}
+                  companies={companies.map((c) => ({ id: c.id, name: c.nama_perusahaan, lastEdited: c.lastActivity }))}
                   value={selectedCompanyId || null}
                   onChange={(id) => setSelectedCompanyId(id ?? '')}
                   allLabel={null}
