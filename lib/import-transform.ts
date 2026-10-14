@@ -522,6 +522,8 @@ export function transformRows(
     if (numbered) numberedParts.set(row, fingerprintParts(category, item));
   });
 
+  fixMissingSouth(rows, findings);
+
   // Records repeated inside the file are imported once: identical rows, and
   // rows with the same unit and No that only leave fields out (UID Lampung
   // pasted its offline transformers twice, the second time without serial
@@ -545,6 +547,34 @@ export function transformRows(
   });
 
   return { rows: unique, skippedEmpty, skippedCopies: rows.length - unique.length, issues };
+}
+
+// A northern latitude written as such ("6.5 N", "6.5 LU", "utara").
+const WRITTEN_NORTH = /\bN\b|\bLU\b|\d\s*N|utara|north/i;
+// How close the mirrored point must be to a point in the south (about 2 km).
+const MIRROR_DEGREES = 0.02;
+
+/**
+ * Latitudes that lost their minus ("6.134701, 106.290987", "0.611122,
+ * 117.26969") put the equipment in the sea north of the rest. A positive
+ * latitude with no north written is turned south when its mirror lies next to
+ * another point of the file in the south (migration 20261014000004 did the
+ * same for the rows imported before).
+ */
+function fixMissingSouth(rows: TransformedRow[], findings: Map<TransformedRow, Array<Parameters<IssueCollector['add']>>>) {
+  const south = rows.flatMap(({ item }) => (typeof item.koordinat_lat === 'number' && item.koordinat_lat < 0 ? [[item.koordinat_lat, item.koordinat_lng as number]] : []));
+  for (const row of rows) {
+    const { item } = row;
+    const lat = item.koordinat_lat;
+    const lng = item.koordinat_lng as number;
+    if (typeof lat !== 'number' || lat <= 0.05 || WRITTEN_NORTH.test(String(item.koordinat_raw ?? ''))) continue;
+    if (!south.some(([otherLat, otherLng]) => Math.abs(otherLat + lat) < MIRROR_DEGREES && Math.abs(otherLng - lng) < MIRROR_DEGREES)) continue;
+    item.koordinat_lat = -lat;
+    const raw = String(item.koordinat_raw);
+    const entry: ImportNote = { kode: 'coordinate:sign_fixed', jenis: 'diperbaiki', kolom: 'koordinat', pesan: 'Tanda minus lintang hilang (titik jatuh di laut), dibalik ke lintang selatan sesuai titik lain di berkas', nilai_asli: raw, nilai_baru: `${-lat}, ${lng}` };
+    item.catatan_impor = [...((item.catatan_impor as ImportNote[] | null) ?? []), entry];
+    findings.get(row)?.push([entry.kode, 'info', entry.pesan, row.rowNumber, `${raw} → ${-lat}, ${lng}`]);
+  }
 }
 
 /**

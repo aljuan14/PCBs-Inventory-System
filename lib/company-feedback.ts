@@ -63,6 +63,7 @@ export function describeIssue(category: InventoryCategory, issue: ValidationIssu
   if (issue.key === 'coordinate:unreadable') return `Titik koordinat tidak dapat dibaca pada ${count} (${where}${examples(issue)}). Mohon gunakan format desimal, contoh: -6.2088, 106.8456.`;
   if (issue.key === 'coordinate:outside') return `Titik koordinat berada di luar wilayah Indonesia pada ${count} (${where}). Mohon periksa kembali lintang dan bujurnya.`;
   if (issue.key === 'coordinate:swapped') return `Lintang dan bujur pada titik koordinat tertukar pada ${count} (${where}).`;
+  if (issue.key === 'coordinate:sign_fixed') return `Lintang titik koordinat ditulis tanpa tanda minus (-) atau huruf S pada ${count} (${where}), sehingga titiknya jatuh di laut. Mohon tuliskan lintang selatan dengan tanda minus, contoh: -6.2088, 106.8456.`;
   if (issue.key === 'coordinate:repaired') return `Format titik koordinat belum baku pada ${count} (${where}). Mohon gunakan format desimal, contoh: -6.2088, 106.8456.`;
   if (issue.key === 'duplicate:file') return `Terdapat data yang tercatat dua kali pada ${count} (${where}).`;
   if (issue.key === 'weight:implausible') return `Berat peralatan tidak wajar (lebih dari 1.000 ton) pada ${count} (${where}). Mohon pastikan satuannya kilogram.`;

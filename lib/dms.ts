@@ -63,8 +63,9 @@ function parseSingleComponent(componentStr: string, defaultHemisphere?: 'N' | 'S
     hemisphere = defaultHemisphere;
   }
 
-  // Buang huruf arah untuk mengekstrak angka
-  const cleanStr = str.replace(/[NSEW]/gi, '').trim();
+  // Buang huruf arah dan sisa label di depan ("Latitude: -6.11" -> ": -6.11")
+  // untuk mengekstrak angka.
+  const cleanStr = str.replace(/[NSEW]/gi, '').replace(/^[^\d.,-]+/, '').trim();
   // Tanda minus di depan berarti selatan/barat bila tidak ada huruf arah.
   const negative = cleanStr.startsWith('-');
 
