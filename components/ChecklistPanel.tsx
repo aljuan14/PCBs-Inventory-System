@@ -65,7 +65,7 @@ export default function ChecklistPanel({ supabase, companyId, checklist, refresh
   };
 
   return (
-    <div className="space-y-3">
+    <div id="ketentuan-teknis" className="scroll-mt-4 space-y-3">
       <div>
         <h3 className="text-sm font-semibold text-slate-900">{spec.title}</h3>
         <p className="text-xs text-slate-500">{spec.note}</p>

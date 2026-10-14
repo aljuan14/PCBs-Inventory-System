@@ -4,7 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import CompanyPicker from '@/components/CompanyPicker';
-import CompanyPcbStatusCard from '@/components/CompanyPcbStatusCard';
+import CompanyPcbStatusCard, { reportHref } from '@/components/CompanyPcbStatusCard';
+import { useReadOnly } from '@/components/useAccess';
 import type { CompanyOption } from '@/components/DataTable';
 import RoadmapPanels from '@/components/RoadmapPanels';
 import { RoadmapSchedule } from '@/components/CompanyOverviewLists';
@@ -20,6 +21,7 @@ function RoadmapContent() {
   const companyId = params.get('company');
   const [companies, setCompanies] = useState<CompanyOption[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const readOnly = useReadOnly();
   const reload = useCallback(() => setReloadKey((value) => value + 1), []);
 
   useEffect(() => {
@@ -54,7 +56,7 @@ function RoadmapContent() {
       {!companyId && companies && <RoadmapSchedule supabase={supabase} companies={companies} onPick={pick} />}
       {companyId && (
         <>
-          <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reloadKey} roadmapLink={false} />
+          <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reloadKey} hrefFor={(target) => reportHref(companyId, target, { readOnly, onRoadmap: true })} />
           <RoadmapPanels supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={reload} />
         </>
       )}

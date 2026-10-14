@@ -26,6 +26,9 @@ const GROUPS: Array<{ title: string; items: Item[] }> = [
   { title: 'Rencana', items: [{ key: 'roadmap', code: null, label: 'Roadmap rencana' }] },
 ];
 
+/** Every tab, to check one read from the address. */
+export const REPORT_TABS: ReportTab[] = GROUPS.flatMap((group) => group.items.map((item) => item.key));
+
 /**
  * The parts of a company's report: on a laptop a grid of equal buttons in
  * three labelled rows (inventory forms, management forms, the roadmap); on a

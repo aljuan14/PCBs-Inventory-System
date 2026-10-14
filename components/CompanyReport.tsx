@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import CompanyPcbStatusCard from '@/components/CompanyPcbStatusCard';
 import CompanyStatementCard, { type CompanyStatement } from '@/components/CompanyStatementCard';
@@ -9,8 +10,8 @@ import ReductionFormPanel from '@/components/ReductionFormPanel';
 import RoadmapPanels from '@/components/RoadmapPanels';
 import { ProcessingFormPanel, ReportingFormPanel, StorageFormPanel } from '@/components/WasteFormPanels';
 import TemplateUpload from '@/components/TemplateUpload';
-import { declaresNone } from '@/lib/company-pcb-status';
-import FormTabs, { OTHER_FORMS, type OtherForm, type ReportTab } from '@/components/FormTabs';
+import { declaresNone, type StatusTarget } from '@/lib/company-pcb-status';
+import FormTabs, { OTHER_FORMS, REPORT_TABS, type OtherForm, type ReportTab } from '@/components/FormTabs';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 
 
@@ -19,11 +20,18 @@ import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
  * statement, then the forms (1.1-1.4 entry by entry, 2 maintenance log, 3
  * storage, 4.2 processing, 5 balance). Shown to the admin on "Isi formulir"
  * and to the company itself on /lapor/<ID SIMPEL>. The parent keys it by
- * company.
+ * company. ?tab= and ?bagian= open a tab and scroll to a part of it (the
+ * PCBs status links here from the dashboard and the roadmap).
  */
 export default function CompanyReport({ supabase, companyId }: { supabase: SupabaseClient; companyId: string }) {
+  const params = useSearchParams();
   // A form 1.x by its category, one of forms 2-5, or the roadmap.
-  const [category, setCategory] = useState<ReportTab>('transformator_digunakan');
+  const [category, setCategory] = useState<ReportTab>(() => {
+    const tab = params.get('tab');
+    return REPORT_TABS.includes(tab as ReportTab) ? tab as ReportTab : 'transformator_digunakan';
+  });
+  // The part of the page to bring into view once it is there (a status message was clicked).
+  const [scrollTo, setScrollTo] = useState<string | null>(() => params.get('bagian') ?? (params.get('tab') ? 'formulir' : null));
   const [statement, setStatement] = useState<CompanyStatement | null>(null);
   // Stored units per form, tagged with their company so another company's counts never show.
   const [counts, setCounts] = useState<{ companyId: string; values: Partial<Record<InventoryCategory, number>> } | null>(null);
@@ -42,12 +50,41 @@ export default function CompanyReport({ supabase, companyId }: { supabase: Supab
 
   const onStatement = useCallback((value: CompanyStatement | null) => setStatement(value), []);
 
+  const go = (target: StatusTarget) => {
+    if (target.tab) setCategory(target.tab);
+    setScrollTo(target.section ?? 'formulir');
+  };
+
+  // The part may still be loading after the tab opens, and what loads above it
+  // moves it down: bring it into view again until it stays put (about 1.5 s).
+  useEffect(() => {
+    if (!scrollTo) return;
+    let ticks = 0;
+    const timer = window.setInterval(() => {
+      const element = document.getElementById(scrollTo);
+      if (element && Math.abs(element.getBoundingClientRect().top - 16) > 24) element.scrollIntoView({ block: 'start' });
+      if (++ticks >= 15) {
+        window.clearInterval(timer);
+        setScrollTo(null);
+      }
+    }, 100);
+    // Scrolling by hand takes over.
+    const stop = () => { window.clearInterval(timer); setScrollTo(null); };
+    window.addEventListener('wheel', stop, { once: true });
+    window.addEventListener('touchmove', stop, { once: true });
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchmove', stop);
+    };
+  }, [scrollTo, category]);
+
   return (
     <div className="space-y-6">
-      <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reload} onRoadmap={() => setCategory('roadmap')} />
-      <CompanyStatementCard supabase={supabase} companyId={companyId} reloadKey={reload} onStatement={onStatement} onSaved={() => setReload((value) => value + 1)} />
+      <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reload} onGo={go} />
+      <div id="pernyataan" className="scroll-mt-4"><CompanyStatementCard supabase={supabase} companyId={companyId} reloadKey={reload} onStatement={onStatement} onSaved={() => setReload((value) => value + 1)} /></div>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">
+      <section id="formulir" className="scroll-mt-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">
             <FormTabs value={category} onChange={setCategory} />
             {OTHER_FORMS.some(([key]) => key === category) && (
               <TemplateUpload key={`${companyId}:${category}`} supabase={supabase} companyId={companyId} kind={category as OtherForm} onImported={() => { setImported((value) => value + 1); setReload((value) => value + 1); }} />

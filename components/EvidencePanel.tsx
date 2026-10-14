@@ -68,7 +68,7 @@ export default function EvidencePanel({ companyId, category, onSaved }: { compan
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+    <div id="bukti-dukung" className="scroll-mt-4 rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <Link2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
