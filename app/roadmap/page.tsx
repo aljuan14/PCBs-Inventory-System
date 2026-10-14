@@ -43,8 +43,8 @@ function RoadmapContent() {
     <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 lg:px-8">
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Pelaporan</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Roadmap uji &amp; penanganan</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-500">Tanggal rencana uji PCBs untuk trafo sebelum {TRAFO_FOCUS_YEAR} yang belum diuji, dan rencana penanganan untuk yang &gt; 50 ppm. Status perusahaan menjadi merah bila ada yang belum punya rencana atau lewat tanggalnya.</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Roadmap uji, penanganan &amp; pengelolaan</h1>
+        <p className="mt-2 max-w-3xl text-sm text-slate-500">Untuk trafo sebelum {TRAFO_FOCUS_YEAR}: trafo masih digunakan yang belum diuji (kapan diuji) atau &gt; 50 ppm (kapan diretrofilling atau diganti), dan trafo yang sudah tidak digunakan (kapan dikelola). Status perusahaan menjadi merah bila ada yang belum punya rencana atau lewat tanggalnya.</p>
       </header>
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
         <span className="text-sm font-semibold text-slate-700">Perusahaan</span>

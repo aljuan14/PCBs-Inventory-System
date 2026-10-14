@@ -53,6 +53,11 @@ export type PcbStatusCounts = {
   tinggi_selesai: number;
   tinggi_terjadwal: number;
   tinggi_lewat: number;
+  /** Transformers no longer in use, each needing a management plan (migration 20261014000002). */
+  kelola?: number;
+  kelola_selesai?: number;
+  kelola_terjadwal?: number;
+  kelola_lewat?: number;
   rencana_berikut: string | null;
   pernyataan: StatementRow | null;
   // Forms 3-5 (migration 20261013000007); missing in a web summary sent before it.
@@ -105,13 +110,17 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   const messages: StatusMessage[] = [];
   const untestedOpen = s.belum_uji - s.belum_uji_terjadwal - s.belum_uji_lewat;
   const highOpen = s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal - s.tinggi_lewat;
+  const manageOpen = manageOpenOf(s);
 
   if (s.belum_uji_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.belum_uji_lewat)} trafo melewati tanggal rencana uji dan belum ada hasil ujinya.` });
   if (s.tinggi_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.tinggi_lewat)} trafo > 50 ppm melewati tanggal rencana penanganan.` });
   if (highOpen > 0) messages.push({ tone: 'red', text: `${fmt(highOpen)} trafo mengandung PCBs > 50 ppm tanpa rencana penanganan (penggantian, retrofilling, atau pengolahan).` });
   if (untestedOpen > 0) messages.push({ tone: 'red', text: `${fmt(untestedOpen)} trafo belum diuji dan belum punya rencana uji.` });
+  if ((s.kelola_lewat ?? 0) > 0) messages.push({ tone: 'red', text: `${fmt(s.kelola_lewat!)} trafo tidak digunakan melewati tanggal rencana pengelolaan.` });
+  if (manageOpen > 0) messages.push({ tone: 'red', text: `${fmt(manageOpen)} trafo tidak digunakan belum punya rencana pengelolaan.` });
   if (s.belum_uji_terjadwal > 0) messages.push({ tone: 'yellow', text: `${fmt(s.belum_uji_terjadwal)} trafo dijadwalkan diuji.` });
   if (s.tinggi_terjadwal > 0) messages.push({ tone: 'yellow', text: `${fmt(s.tinggi_terjadwal)} trafo > 50 ppm dijadwalkan ditangani.` });
+  if ((s.kelola_terjadwal ?? 0) > 0) messages.push({ tone: 'yellow', text: `${fmt(s.kelola_terjadwal!)} trafo tidak digunakan dijadwalkan dikelola.` });
 
   // Forms 3-5: storage, its permit and checklists, the balance.
   const stored = Number(s.simpan_ton) || 0;
@@ -189,7 +198,7 @@ export function summarySentence(s: PcbStatusCounts): string {
     : s.pernyataan && declaresNone(s.pernyataan) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik.'
       : 'Belum ada peralatan yang tercatat.';
   const focus = trafo > 0
-    ? ` ${fmt(s.fokus)} trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun: ${fmt(s.aman)} aman (≤ 50 ppm), ${fmt(s.tinggi)} > 50 ppm, ${fmt(s.belum_uji)} belum diuji.`
+    ? ` ${fmt(s.fokus)} trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun: ${fmt(s.aman)} aman (≤ 50 ppm), ${fmt(s.tinggi)} > 50 ppm, ${fmt(s.belum_uji)} belum diuji${s.kelola ? `, ${fmt(s.kelola)} tidak digunakan (perlu dikelola)` : ''}.`
     : '';
   const after = s.pernyataan?.punya_trafo_1997_keatas
     ? ` Menurut pernyataan, ada ${fmt(s.pernyataan.jumlah_trafo_1997_keatas ?? 0)} trafo buatan ${TRAFO_FOCUS_YEAR} ke atas (${(s.pernyataan.tonase_trafo_1997_keatas_ton ?? 0).toLocaleString('id-ID')} ton).`
@@ -207,7 +216,11 @@ export const nationalColor = (s: PcbStatusCounts): NationalColor =>
 
 /** Transformers still needing something with no plan, or past their plan: how urgent a red company is. */
 export const openActions = (s: PcbStatusCounts) =>
-  (s.belum_uji - s.belum_uji_terjadwal) + (s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal);
+  (s.belum_uji - s.belum_uji_terjadwal) + (s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal) + (s.kelola ?? 0) - (s.kelola_selesai ?? 0) - (s.kelola_terjadwal ?? 0);
+
+/** Transformers no longer in use with no management plan yet. */
+export const manageOpenOf = (s: PcbStatusCounts) =>
+  (s.kelola ?? 0) - (s.kelola_selesai ?? 0) - (s.kelola_terjadwal ?? 0) - (s.kelola_lewat ?? 0);
 
 export async function fetchAllPcbStatus(supabase: SupabaseClient): Promise<Map<string, PcbStatusCounts>> {
   const { data, error } = SUMMARY_MODE

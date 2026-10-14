@@ -93,7 +93,7 @@ function TestAccounts({ scenarios, accounts, onSaved }: { scenarios: Scenario[];
   const made = scenarios.filter((scenario) => emails.has(scenario.email)).length;
 
   const run = async (reset: boolean) => {
-    if (reset && !window.confirm('Hapus semua data perusahaan uji (ZZ Uji A sampai E), lalu buat ulang dari awal? Data asli tidak tersentuh.')) return;
+    if (reset && !window.confirm('Hapus semua data perusahaan uji (ZZ Uji A sampai F), lalu buat ulang dari awal? Data asli tidak tersentuh.')) return;
     setBusy(reset ? 'reset' : 'create');
     setMessage(null);
     try {

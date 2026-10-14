@@ -6,7 +6,7 @@ import { buildCheckReport, insertBatchRows, transformRows } from '@/lib/import-t
  * The test companies and their accounts, one per scenario a company goes
  * through, for the trial period (until the login comes from PILAR / SIMPEL).
  * Fake ID SIMPEL (UJI-…) never meet a real one; the names start with "ZZ Uji"
- * so they sort last. B and D start with data, the others empty.
+ * so they sort last. B, D and F start with data, the others empty.
  */
 export type TestScenario = {
   idSimpel: string;
@@ -14,6 +14,8 @@ export type TestScenario = {
   name: string;
   purpose: string;
   seed: Partial<Record<InventoryCategory, Array<Record<string, string>>>>;
+  /** Rows of the form 3 storage logbook, days before today for its dates. */
+  storage?: Array<{ source: string; serial: string; daysAgo: number; tons: number }>;
 };
 
 const trafo = (serial: string, year: string, location: string, coordinate: string, extra: Record<string, string> = {}) => ({
@@ -52,7 +54,7 @@ export const TEST_SCENARIOS: TestScenario[] = [
   },
   {
     idSimpel: 'UJI-D', email: 'uji-d@pb3.com', name: 'ZZ Uji D - Status merah',
-    purpose: 'Status merah (belum diuji, > 50 ppm): mengisi rencana dan formulir 2-5 sampai statusnya turun.',
+    purpose: 'Status merah (belum diuji, > 50 ppm, trafo tidak digunakan): mengisi roadmap dan formulir 2 Pengurangan sampai statusnya turun.',
     seed: {
       transformator_digunakan: [
         trafo('UJI-D-001', '1978', 'Gardu Timur', '-7.2575, 112.7521'),
@@ -67,8 +69,21 @@ export const TEST_SCENARIOS: TestScenario[] = [
   },
   {
     idSimpel: 'UJI-E', email: 'uji-e@pb3.com', name: 'ZZ Uji E - Unggah Excel',
-    purpose: 'Mengisi lewat unggah template Excel, termasuk berkas yang sengaja salah untuk melihat pesan pemeriksaannya.',
+    purpose: 'Mengisi formulir 2, 3, 4.2, dan 5 lewat unggah template Excel, termasuk berkas yang sengaja salah untuk melihat pesan pemeriksaannya.',
     seed: {},
+  },
+  {
+    idSimpel: 'UJI-F', email: 'uji-f@pb3.com', name: 'ZZ Uji F - Penyimpan limbah PCBs',
+    purpose: 'Menyimpan limbah PCBs tanpa izin TPS, satu sudah > 365 hari: mengisi formulir 3 Penyimpanan, 4.2 Pengolahan, dan 5 Pelaporan.',
+    seed: {
+      transformator_tidak_digunakan: [
+        trafo('UJI-F-001', '1979', 'TPS Limbah B3', '-6.9175, 107.6191', { ...tested('320'), status_kondisi: 'Bocor', kondisi_di_dalam_alat: 'Minyak dielektrik penuh' }),
+      ],
+    },
+    storage: [
+      { source: 'Transformator utuh sudah tidak digunakan', serial: 'UJI-F-001', daysAgo: 400, tons: 1.4 },
+      { source: 'Minyak dielektrik yang sudah dikeluarkan dari transformator', serial: '', daysAgo: 70, tons: 0.6 },
+    ],
   },
 ];
 
@@ -88,4 +103,15 @@ export async function seedTestCompany(supabase: SupabaseClient, companyId: strin
     if (failure) throw new Error(`Gagal menyimpan data awal ${category}: ${failure.message}`);
     await supabase.from('import_batches').update({ status: 'imported', laporan_pemeriksaan: buildCheckReport(result, result.rows.length, mappings) }).eq('id', batch.id);
   }
+  if (scenario.storage?.length) {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    const { error } = await supabase.from('penyimpanan_logbook').insert(scenario.storage.map((row) => ({
+      company_id: companyId, kode_limbah: 'A101d', nama_limbah: WASTE_NAME, sumber_limbah: row.source, nomor_serial: row.serial || null,
+      tanggal_dihasilkan: daysAgo(row.daysAgo), jumlah_dihasilkan_ton: row.tons, jumlah_dikelola_ton: 0,
+    })));
+    if (error) throw new Error(`Gagal menyimpan logbook awal: ${error.message}`);
+  }
 }
+
+// As the form offers it (lib/form-fields.ts, form 3).
+const WASTE_NAME = 'Limbah yang mengandung senyawa POPs dan UPOPs antara lain polychlorinated biphenyls (PCBs), DDT, PCDD, PCDF';

@@ -7,7 +7,7 @@ import { formatPlanDate } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 import { useReadOnly } from '@/components/useAccess';
 
-type Need = 'uji' | 'penanganan';
+type Need = 'uji' | 'penanganan' | 'pengelolaan';
 type Category = 'transformator_digunakan' | 'transformator_tidak_digunakan';
 type FocusRow = {
   kategori: Category; id: string; nama_merek: string | null; nomor_serial: string | null; tahun_pembuatan: number | null;
@@ -19,10 +19,16 @@ type Plan = { id: string; kategori: Category | null; item_id: string | null; jen
 const PAGE = 100;
 const today = () => new Date().toISOString().slice(0, 10);
 const fmt = (value: number) => value.toLocaleString('id-ID');
-const NEEDS: Record<Need, string> = { uji: 'Uji PCBs', penanganan: 'Penanganan > 50 ppm' };
+const NEEDS: Record<Need, string> = { uji: 'Uji PCBs', penanganan: 'Penanganan > 50 ppm', pengelolaan: 'Pengelolaan trafo tidak digunakan' };
+// The three plans the roadmap asks for, each for one kind of transformer (migration 20261014000002).
+const PLAN_KINDS: Array<{ jenis: Need; kategori: Category; label: string }> = [
+  { jenis: 'uji', kategori: 'transformator_digunakan', label: 'Uji PCBs: trafo masih digunakan yang belum diuji' },
+  { jenis: 'penanganan', kategori: 'transformator_digunakan', label: 'Retrofilling / penggantian: trafo masih digunakan > 50 ppm' },
+  { jenis: 'pengelolaan', kategori: 'transformator_tidak_digunakan', label: 'Pengelolaan: trafo yang sudah tidak digunakan' },
+];
 const CATEGORY_LABEL: Record<Category, string> = { transformator_digunakan: 'Digunakan', transformator_tidak_digunakan: 'Tidak digunakan' };
 const FILTERS = [
-  ['all', 'Semua yang perlu tindakan'], ['uji', 'Belum diuji'], ['penanganan', '> 50 ppm'], ['noplan', 'Tanpa rencana'], ['late', 'Lewat tanggal'],
+  ['all', 'Semua yang perlu tindakan'], ['uji', 'Belum diuji'], ['penanganan', '> 50 ppm'], ['pengelolaan', 'Tidak digunakan'], ['noplan', 'Tanpa rencana'], ['late', 'Lewat tanggal'],
 ] as const;
 type Filter = (typeof FILTERS)[number][0];
 
@@ -39,7 +45,6 @@ function planState(plan: { rencana_tanggal: string | null; rencana_selesai?: str
 /** A plan for every transformer of the company still needing it. */
 function CompanyPlanForm({ supabase, companyId, onSaved }: { supabase: SupabaseClient; companyId: string; onSaved: () => void }) {
   const [jenis, setJenis] = useState<Need>('uji');
-  const [kategori, setKategori] = useState<Category | ''>('');
   const [date, setDate] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,7 +54,8 @@ function CompanyPlanForm({ supabase, companyId, onSaved }: { supabase: SupabaseC
     if (!date) return setError('Isi tanggal rencana.');
     setBusy(true);
     setError(null);
-    const { error: saveError } = await supabase.from('equipment_plans').insert({ company_id: companyId, jenis, kategori: kategori || null, rencana_tanggal: date, catatan: note.trim() || null });
+    const kategori = PLAN_KINDS.find((kind) => kind.jenis === jenis)!.kategori;
+    const { error: saveError } = await supabase.from('equipment_plans').insert({ company_id: companyId, jenis, kategori, rencana_tanggal: date, catatan: note.trim() || null });
     setBusy(false);
     if (saveError) return setError(saveError.message);
     setDate('');
@@ -61,18 +67,15 @@ function CompanyPlanForm({ supabase, companyId, onSaved }: { supabase: SupabaseC
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <h2 className="text-base font-semibold text-slate-900">Rencana untuk semua trafo</h2>
       <p className="mt-1 text-xs text-slate-500">Satu tanggal target untuk semua trafo sebelum {TRAFO_FOCUS_YEAR} yang masih membutuhkannya, misalnya &quot;semua yang belum diuji, selesai diuji Juni 2027&quot;. Rencana per trafo (di daftar bawah) didahulukan.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+      <ul className="mt-3 space-y-1 text-xs text-slate-600">
+        <li><span className="font-semibold text-slate-800">Trafo masih digunakan, belum diuji:</span> kapan diuji.</li>
+        <li><span className="font-semibold text-slate-800">Trafo masih digunakan, &gt; 50 ppm:</span> kapan diretrofilling atau diganti.</li>
+        <li><span className="font-semibold text-slate-800">Trafo sudah tidak digunakan:</span> kapan dikelola (berapa pun hasil ujinya).</li>
+      </ul>
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <label className="text-xs font-medium text-slate-600">Rencana
           <select value={jenis} onChange={(event) => setJenis(event.target.value as Need)} className={`${inputClass} mt-1 w-full`}>
-            <option value="uji">Uji PCBs (yang belum diuji)</option>
-            <option value="penanganan">Penanganan (yang &gt; 50 ppm)</option>
-          </select>
-        </label>
-        <label className="text-xs font-medium text-slate-600">Trafo
-          <select value={kategori} onChange={(event) => setKategori(event.target.value as Category | '')} className={`${inputClass} mt-1 w-full`}>
-            <option value="">Semua</option>
-            <option value="transformator_digunakan">Masih digunakan</option>
-            <option value="transformator_tidak_digunakan">Tidak digunakan</option>
+            {PLAN_KINDS.map((kind) => <option key={kind.jenis} value={kind.jenis}>{kind.label}</option>)}
           </select>
         </label>
         <label className="text-xs font-medium text-slate-600">Tanggal target
@@ -135,8 +138,8 @@ function PlanList({ supabase, companyId, reloadKey, onChange, readOnly }: { supa
               {plan.catatan && <div className="text-xs text-slate-500">{plan.catatan}</div>}
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${state.className}`}>{state.label}</span>
-            {/* A test is done by its result in the data; a handling is marked by hand. */}
-            {!readOnly && plan.jenis === 'penanganan' && !plan.selesai_at && <button type="button" onClick={() => finish(group)} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><CheckCircle2 className="h-3.5 w-3.5" /> Tandai selesai</button>}
+            {/* A test is done by its result in the data; a handling or a management is marked by hand. */}
+            {!readOnly && plan.jenis !== 'uji' && !plan.selesai_at && <button type="button" onClick={() => finish(group)} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><CheckCircle2 className="h-3.5 w-3.5" /> Tandai selesai</button>}
             {!readOnly && <button type="button" onClick={() => remove(group)} aria-label="Hapus rencana" className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" /></button>}
           </div>
         );
@@ -159,7 +162,7 @@ function FocusList({ supabase, companyId, reloadKey, onChange, readOnly }: { sup
   useEffect(() => {
     let active = true;
     let request = supabase.rpc('company_focus_transformers', { p_company_id: companyId }).not('kebutuhan', 'is', null);
-    if (filter === 'uji' || filter === 'penanganan') request = request.eq('kebutuhan', filter);
+    if (filter === 'uji' || filter === 'penanganan' || filter === 'pengelolaan') request = request.eq('kebutuhan', filter);
     if (filter === 'noplan') request = request.is('rencana_tanggal', null);
     if (filter === 'late') request = request.lt('rencana_tanggal', today()).is('rencana_selesai', null);
     request.order('kebutuhan', { ascending: false }).order('tahun_pembuatan', { nullsFirst: true }).range(0, limit)
@@ -226,7 +229,7 @@ function FocusList({ supabase, companyId, reloadKey, onChange, readOnly }: { sup
                       <td className="px-3 py-2.5 tabular-nums">{row.tahun_pembuatan ?? <span className="text-amber-700">tidak ada</span>}</td>
                       <td className="max-w-56 px-3 py-2.5 text-slate-600"><span className="line-clamp-2">{[row.unit, row.lokasi].filter(Boolean).join(' · ') || '–'}</span></td>
                       <td className="px-3 py-2.5 text-slate-600">{CATEGORY_LABEL[row.kategori]}</td>
-                      <td className="px-3 py-2.5 font-medium text-slate-800">{row.kebutuhan === 'uji' ? 'Uji' : `Penanganan (${row.ppm?.toLocaleString('id-ID')} ppm)`}</td>
+                      <td className="px-3 py-2.5 font-medium text-slate-800">{row.kebutuhan === 'uji' ? 'Uji' : row.kebutuhan === 'pengelolaan' ? `Pengelolaan${row.ppm !== null ? ` (${row.ppm.toLocaleString('id-ID')} ppm)` : ' (belum diuji)'}` : `Penanganan (${row.ppm?.toLocaleString('id-ID')} ppm)`}</td>
                       <td className="px-3 py-2.5"><span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${state.className}`}>{state.label}</span>{row.rencana_tanggal && !row.rencana_untuk_alat && <span className="mt-0.5 block text-[10px] text-slate-400">rencana semua trafo</span>}</td>
                     </tr>
                   );

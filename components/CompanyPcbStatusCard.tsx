@@ -67,8 +67,8 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             {counts.rencana_berikut && <span className="flex items-center gap-1.5 text-slate-600"><CalendarClock className="h-3.5 w-3.5" /> Rencana terdekat: {formatPlanDate(counts.rencana_berikut)}</span>}
             {onRoadmap
-              ? <button type="button" onClick={onRoadmap} className="font-semibold text-emerald-800 underline">Atur roadmap uji dan penanganan</button>
-              : roadmapLink && <Link href={`/roadmap?company=${companyId}`} className="font-semibold text-emerald-800 underline">Atur roadmap uji dan penanganan</Link>}
+              ? <button type="button" onClick={onRoadmap} className="font-semibold text-emerald-800 underline">Atur roadmap</button>
+              : roadmapLink && <Link href={`/roadmap?company=${companyId}`} className="font-semibold text-emerald-800 underline">Atur roadmap</Link>}
           </div>
         </div>
       </div>

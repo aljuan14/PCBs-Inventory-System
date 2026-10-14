@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ChevronRight, Loader2, ShieldAlert } from 'lucide-react';
-import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, nationalColor, onlyPaperwork, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
+import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, manageOpenOf, nationalColor, onlyPaperwork, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 
 const ORDER: NationalColor[] = ['red', 'yellow', 'green', 'empty'];
@@ -50,8 +50,10 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
     untestedOpen: sum.untestedOpen + s.belum_uji - s.belum_uji_terjadwal - s.belum_uji_lewat,
     high: sum.high + s.tinggi,
     highOpen: sum.highOpen + s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal - s.tinggi_lewat,
-    late: sum.late + s.belum_uji_lewat + s.tinggi_lewat,
-  }), { focus: 0, untested: 0, untestedOpen: 0, high: 0, highOpen: 0, late: 0 }), [rows]);
+    unused: sum.unused + (s.kelola ?? 0),
+    unusedOpen: sum.unusedOpen + manageOpenOf(s),
+    late: sum.late + s.belum_uji_lewat + s.tinggi_lewat + (s.kelola_lewat ?? 0),
+  }), { focus: 0, untested: 0, untestedOpen: 0, high: 0, highOpen: 0, unused: 0, unusedOpen: 0, late: 0 }), [rows]);
 
   if (!statuses) return <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Menghitung status PCBs perusahaan…</div>;
   if (statuses.error) return <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">Status PCBs perusahaan gagal dimuat: {statuses.error}</p>;
@@ -62,8 +64,9 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
   const visible = showAll ? list : list.slice(0, SHOWN);
   const figures: Array<[string, number, string | null]> = [
     [`Trafo sebelum ${TRAFO_FOCUS_YEAR} / tanpa tahun`, totals.focus, null],
-    ['Belum diuji', totals.untested, totals.untestedOpen ? `${fmt(totals.untestedOpen)} tanpa rencana` : null],
-    ['> 50 ppm', totals.high, totals.highOpen ? `${fmt(totals.highOpen)} tanpa rencana` : null],
+    ['Belum diuji (masih digunakan)', totals.untested, totals.untestedOpen ? `${fmt(totals.untestedOpen)} tanpa rencana` : null],
+    ['> 50 ppm (masih digunakan)', totals.high, totals.highOpen ? `${fmt(totals.highOpen)} tanpa rencana` : null],
+    ['Tidak digunakan, perlu dikelola', totals.unused, totals.unusedOpen ? `${fmt(totals.unusedOpen)} tanpa rencana` : null],
     ['Rencana lewat tanggal', totals.late, null],
   ];
 
@@ -73,7 +76,7 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
         <div>
           <h2 className="text-base font-semibold text-slate-900">Status PCBs perusahaan</h2>
-          <p className="text-xs text-slate-500">Untuk trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun. Merah: ada yang belum diuji atau &gt; 50 ppm tanpa rencana, atau rencananya lewat tanggal.</p>
+          <p className="text-xs text-slate-500">Untuk trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun. Merah: ada trafo belum diuji, &gt; 50 ppm, atau tidak digunakan yang belum punya rencana, atau rencananya lewat tanggal.</p>
         </div>
       </div>
 
@@ -95,7 +98,7 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
         })}
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-100 pt-4 sm:grid-cols-4">
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-100 pt-4 sm:grid-cols-5">
         {figures.map(([label, value, note]) => (
           <div key={label}>
             <dt className="text-[11px] font-medium text-slate-500">{label}</dt>

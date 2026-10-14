@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CalendarClock, ChevronRight, ListChecks, Loader2 } from 'lucide-react';
-import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, formatPlanDate, hasInventory, nationalColor, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
+import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, formatPlanDate, hasInventory, manageOpenOf, nationalColor, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
 
 type Company = { id: string; name: string };
 type Row = { id: string; name: string; counts: PcbStatusCounts; color: NationalColor };
@@ -116,7 +116,7 @@ export function RoadmapSchedule({ supabase, companies, onPick }: { supabase: Sup
 
   const today = new Date(new Date().toISOString().slice(0, 10)).getTime();
   const daysTo = (date: string | null) => (date ? Math.round((new Date(date).getTime() - today) / DAY) : null);
-  const late = (s: PcbStatusCounts) => s.belum_uji_lewat + s.tinggi_lewat;
+  const late = (s: PcbStatusCounts) => s.belum_uji_lewat + s.tinggi_lewat + (s.kelola_lewat ?? 0);
   const noPlan = (s: PcbStatusCounts) => openActions(s) - late(s);
   const all = rows ?? [];
   const lists: Record<ScheduleFilter, Row[]> = {
@@ -136,7 +136,7 @@ export function RoadmapSchedule({ supabase, companies, onPick }: { supabase: Sup
         <div className="flex items-start gap-3">
           <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Jadwal uji &amp; penanganan, semua perusahaan</h2>
+            <h2 className="text-base font-semibold text-slate-900">Jadwal uji, penanganan &amp; pengelolaan, semua perusahaan</h2>
             <p className="text-xs text-slate-500">Untuk trafo buatan sebelum 1997 atau tanpa tahun. Klik perusahaan untuk membuka roadmap-nya.</p>
           </div>
         </div>
@@ -154,7 +154,7 @@ export function RoadmapSchedule({ supabase, companies, onPick }: { supabase: Sup
           : visible.map((row) => {
             const s = row.counts;
             const detail = filter === 'late' ? `${fmt(late(s))} trafo lewat tanggal rencana`
-              : filter === 'noplan' ? `${fmt(noPlan(s))} trafo belum punya rencana (${fmt(s.belum_uji - s.belum_uji_terjadwal - s.belum_uji_lewat)} uji, ${fmt(s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal - s.tinggi_lewat)} penanganan)`
+              : filter === 'noplan' ? `${fmt(noPlan(s))} trafo belum punya rencana (${fmt(s.belum_uji - s.belum_uji_terjadwal - s.belum_uji_lewat)} uji, ${fmt(s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal - s.tinggi_lewat)} penanganan, ${fmt(manageOpenOf(s))} pengelolaan)`
                 : `Rencana terdekat ${formatPlanDate(s.rencana_berikut!)} (${fmt(daysTo(s.rencana_berikut)!)} hari lagi)`;
             return (
               <button key={row.id} type="button" onClick={() => onPick(row.id)} className="flex w-full items-center gap-3 border-b border-slate-100 px-5 py-2.5 text-left last:border-0 hover:bg-slate-50">

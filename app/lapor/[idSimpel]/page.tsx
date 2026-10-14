@@ -3,11 +3,35 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Building2, ChevronRight, Loader2 } from 'lucide-react';
+import { Building2, ChevronRight, Loader2, LogOut } from 'lucide-react';
 import CompanyReport from '@/components/CompanyReport';
 import { createClient } from '@/lib/supabase/client';
 
 type Company = { id: string; nama_perusahaan: string; alamat: string | null };
+
+/** The account signed in and its way out: this page has no menu (and so no "Keluar" of its own). */
+function AccountBar() {
+  const router = useRouter();
+  const [email, setEmail] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  useEffect(() => {
+    createClient().auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null));
+  }, []);
+  const signOut = async () => {
+    setSigningOut(true);
+    await createClient().auth.signOut();
+    router.replace('/login');
+    router.refresh();
+  };
+  return (
+    <div className="flex items-center gap-3">
+      {email && <span className="max-w-56 truncate text-xs text-slate-500" title={email}>{email}</span>}
+      <button type="button" onClick={signOut} disabled={signingOut} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+        {signingOut ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />} Keluar
+      </button>
+    </div>
+  );
+}
 
 /**
  * A company's own report page, reached by its ID SIMPEL: the way in from
@@ -42,6 +66,7 @@ function LaporContent() {
           <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-slate-900">{picked?.nama_perusahaan ?? 'Perusahaan'}</h1>
           <p className="text-xs text-slate-500">ID SIMPEL <span className="font-mono font-semibold text-slate-700">{id}</span>{list && list.length > 1 && picked && <> · <button type="button" onClick={() => router.replace(`/lapor/${encodeURIComponent(id)}`)} className="font-semibold text-emerald-700 underline">ganti unit</button></>}</p>
         </div>
+        <AccountBar />
       </header>
 
       {list === null ? (

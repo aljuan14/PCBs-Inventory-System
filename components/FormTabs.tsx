@@ -23,7 +23,7 @@ const GROUPS: Array<{ title: string; items: Item[] }> = [
     { key: 'pengolahan', code: '4.2', label: 'Pengolahan' },
     { key: 'pelaporan', code: '5', label: 'Pelaporan' },
   ] },
-  { title: 'Rencana', items: [{ key: 'roadmap', code: null, label: 'Roadmap uji & penanganan' }] },
+  { title: 'Rencana', items: [{ key: 'roadmap', code: null, label: 'Roadmap rencana' }] },
 ];
 
 /**
