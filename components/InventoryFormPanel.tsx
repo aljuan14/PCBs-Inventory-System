@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import EvidencePanel from '@/components/EvidencePanel';
+import InventoryUpload from '@/components/InventoryUpload';
 import StoredEntriesPanel from '@/components/StoredEntriesPanel';
 import FormEditor from '@/components/FormEditor';
 import { MAX_FORM_ROWS, entryErrors, formSpec, isTrafo, TRAFO_FOCUS_YEAR, type EntryCheck, type FormEntry } from '@/lib/form-fields';
@@ -113,6 +114,8 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
           <button type="button" onClick={() => setEditing({ id: newId(), values: {} })} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> Tambah isian</button>
         )}
       </div>
+
+      <InventoryUpload companyId={companyId} category={category} />
 
       {isTrafo(category) && noTrafoBefore1997 && (
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"><Info className="mt-0.5 h-4 w-4 shrink-0" /> Menurut pernyataannya, perusahaan ini tidak memiliki trafo buatan sebelum {TRAFO_FOCUS_YEAR}. Ubah pernyataan dulu bila ternyata ada.</p>

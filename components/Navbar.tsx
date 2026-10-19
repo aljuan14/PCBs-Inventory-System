@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, CalendarClock, Fingerprint, UserCog, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
+import { Building2, CalendarClock, FileCheck2, Fingerprint, UserCog, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
 import { SUMMARY_MODE } from '@/lib/data-mode';
@@ -17,10 +17,11 @@ const categoryIcons = {
   minyak_dielektrik: Droplets,
 };
 
-function NavLink({ href, icon: Icon, label, active }: { href: string; icon: typeof Grid2X2; label: string; active: boolean }) {
+function NavLink({ href, icon: Icon, label, active, badge }: { href: string; icon: typeof Grid2X2; label: string; active: boolean; badge?: number }) {
   return (
     <Link href={href} aria-current={active ? 'page' : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${active ? 'bg-slate-200/80 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}>
-      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-emerald-700' : 'text-slate-400'}`} /> {label}
+      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-emerald-700' : 'text-slate-400'}`} /> <span className="min-w-0 flex-1">{label}</span>
+      {badge ? <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold tabular-nums text-white" title={`${badge} menunggu`}>{badge}</span> : null}
     </Link>
   );
 }
@@ -33,6 +34,15 @@ export default function Navbar() {
   const [signingOut, setSigningOut] = useState(false);
   const access = useAccess();
   const readOnly = access?.peran === 'pemantau';
+  // Company uploads waiting for the admin (migration 20261014000006), looked at again on each page.
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    if (access?.peran !== 'admin') return;
+    let active = true;
+    Promise.resolve(createClient().from('unggahan_perusahaan').select('id', { count: 'exact', head: true }).eq('status', 'menunggu'))
+      .then(({ count, error }) => { if (active) setWaiting(error ? 0 : count ?? 0); });
+    return () => { active = false; };
+  }, [access?.peran, pathname]);
 
   useEffect(() => {
     if (pathname === '/login') return;
@@ -53,7 +63,7 @@ export default function Navbar() {
   // Menus by what they are for. Reporting, incoming data and administration
   // work on the rows: not on the web (summary mode). A pemantau account gets
   // the menus that only read (readable); the accounts page is the admin's.
-  type Item = { href: string; label: string; icon: typeof Grid2X2; active?: boolean; readable?: boolean; adminOnly?: boolean };
+  type Item = { href: string; label: string; icon: typeof Grid2X2; active?: boolean; readable?: boolean; adminOnly?: boolean; badge?: number };
   const groups: Array<{ title: string; rowsOnly?: boolean; items: Item[] }> = [
     { title: 'Inventarisasi', items: INVENTORY_CATEGORIES.map((category) => ({ href: `/dashboard/${category.key.replaceAll('_', '-')}`, label: category.shortLabel, icon: categoryIcons[category.key], readable: true })) },
     { title: 'Pelaporan', rowsOnly: true, items: [
@@ -61,7 +71,8 @@ export default function Navbar() {
       { href: '/roadmap', label: 'Roadmap', icon: CalendarClock, readable: true },
     ] },
     { title: 'Data masuk', rowsOnly: true, items: [
-      { href: '/upload', label: 'Upload data', icon: UploadCloud, active: isActive('/upload') && !isActive('/upload/riwayat') },
+      { href: '/upload', label: 'Upload data', icon: UploadCloud, active: isActive('/upload') && !isActive('/upload/riwayat') && !isActive('/upload/pemeriksaan') },
+      { href: '/upload/pemeriksaan', label: 'Unggahan perusahaan', icon: FileCheck2, adminOnly: true, badge: waiting },
       { href: '/upload/riwayat', label: 'Riwayat upload', icon: History },
       { href: '/kualitas-data', label: 'Kualitas data', icon: ClipboardCheck, readable: true },
     ] },
@@ -86,7 +97,7 @@ export default function Navbar() {
           <div key={group.title} className="mt-5">
             <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.title}</div>
             <div className="space-y-0.5">
-              {group.items.map((item) => <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} active={item.active ?? isActive(item.href)} />)}
+              {group.items.map((item) => <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} active={item.active ?? isActive(item.href)} badge={item.badge} />)}
             </div>
           </div>
         ))}

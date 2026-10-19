@@ -58,8 +58,8 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Peran akun (migrasi 20261013000011). Akun perusahaan hanya membuka laporannya sendiri
-  // (/lapor/<ID SIMPEL>) dan API formulir; akun tanpa peran tidak membuka apa pun.
+  // Peran akun (migrasi 20261013000011). Akun perusahaan hanya membuka halamannya sendiri
+  // (/lapor/<ID SIMPEL>/…) dan API formulir serta unggahan; akun tanpa peran tidak membuka apa pun.
   // Batas datanya dijaga di database (RLS); ini hanya mengarahkan halaman.
   const { data: access, error: accessError } = await supabase.rpc('my_access');
   // Belum ada fungsinya (database web sebelum migrasi itu dijalankan): perilaku lama. Aman,
@@ -78,7 +78,9 @@ export async function proxy(request: NextRequest) {
   }
   if (role?.peran === 'perusahaan' && role.id_simpel) {
     const own = `/lapor/${encodeURIComponent(role.id_simpel)}`;
-    if (pathname === own || pathname === '/api/formulir') return response;
+    // Halamannya sendiri (beranda, formulir, roadmap, unggah, bantuan) dan API yang dipakainya;
+    // memeriksa unggahan (/api/unggahan/<id>) adalah tugas admin.
+    if (pathname === own || pathname.startsWith(`${own}/`) || COMPANY_APIS.includes(pathname)) return response;
     if (pathname.startsWith('/api/')) {
       return withCookies(NextResponse.json({ error: 'Akun perusahaan tidak dapat mengakses fitur ini.' }, { status: 403 }), response);
     }
@@ -90,6 +92,9 @@ export async function proxy(request: NextRequest) {
   return withCookies(new NextResponse('Akun ini belum diberi peran. Hubungi admin Direktorat Pengelolaan B3.', { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } }), response);
 }
 
+/** API yang dipakai akun perusahaan: isian formulir dan unggahan Excel-nya. */
+const COMPANY_APIS = ['/api/formulir', '/api/unggahan'];
+
 /** Halaman untuk mengubah data: tidak dibuka akun pemantau (Riwayat upload ada di bawah /upload). */
 const WRITE_PATHS = ['/formulir', '/upload', '/id-simpel', '/akun', '/lapor'];
 
@@ -100,5 +105,5 @@ function withCookies(target: NextResponse, source: NextResponse) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|template/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 };
