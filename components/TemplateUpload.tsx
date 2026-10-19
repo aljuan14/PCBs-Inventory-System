@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
+import AddDataCard, { ManualChoice, UploadChoice } from '@/components/AddDataCard';
 import UploadRules from '@/components/UploadRules';
 import { applyToTrafo, recordOf } from '@/components/ReductionFormPanel';
 import { checklistRow } from '@/lib/checklists';
 import { BALANCE_SECTIONS, STORAGE_SECTIONS, recordFromEntry } from '@/lib/form-fields';
-import { TEMPLATE_TITLES, readTemplate, type ParsedTemplate, type TemplateKind } from '@/lib/template-import';
+import { TEMPLATE_FILES } from '@/lib/templates';
+import { readTemplate, type ParsedTemplate, type TemplateKind } from '@/lib/template-import';
 import { checkFileRules, enforceUploadRules, type RuleCheck } from '@/lib/upload-rules';
 
 const fmt = (value: number) => value.toLocaleString('id-ID');
@@ -17,13 +19,22 @@ const TABLES: Partial<Record<TemplateKind, { table: string; fields: typeof STORA
   pelaporan: { table: 'pelaporan_neraca', fields: BALANCE_SECTIONS.flatMap((section) => section.fields) },
 };
 
+/** The card's title and its form choice, by form. */
+const CARD: Record<TemplateKind, { title: string; manual: string; hint: string; upload: string }> = {
+  pengurangan: { title: 'Tambah log perawatan trafo · formulir 2', manual: 'Isi lewat formulir', hint: 'Pilih trafo, lalu isi perawatannya.', upload: 'Banyak log sekaligus, diperiksa otomatis dulu.' },
+  penyimpanan: { title: 'Tambah logbook penyimpanan · formulir 3', manual: 'Isi lewat formulir', hint: 'Satu baris per limbah yang disimpan.', upload: 'Logbook dan ketentuan sekaligus, diperiksa otomatis dulu.' },
+  pengolahan: { title: 'Isi ketentuan pengolahan · formulir 4.2', manual: 'Isi daftar ketentuan', hint: 'Jawab Ya atau Tidak di bawah.', upload: 'Jawaban ketentuan dari template, diperiksa otomatis dulu.' },
+  pelaporan: { title: 'Tambah neraca pelaporan · formulir 5', manual: 'Isi lewat formulir', hint: 'Satu baris per jenis limbah.', upload: 'Banyak baris sekaligus, diperiksa otomatis dulu.' },
+};
+
 type Ready = { fileName: string; rules: RuleCheck[]; parsed: ParsedTemplate; trafoIds: Map<number, string> };
 
 /**
  * Upload of a filled-in official template (forms 2, 3, 4.2, 5): read in the
  * browser, checked like the web form, shown, then stored as if typed in.
+ * With `onManual` it is the form's "add data" card, beside filling the form.
  */
-export default function TemplateUpload({ supabase, companyId, kind, onImported }: { supabase: SupabaseClient; companyId: string; kind: TemplateKind; onImported: () => void }) {
+export default function TemplateUpload({ supabase, companyId, kind, onImported, onManual }: { supabase: SupabaseClient; companyId: string; kind: TemplateKind; onImported: () => void; /** Opens the form (or brings the checklist into view). */ onManual?: () => void }) {
   const [busy, setBusy] = useState<'read' | 'save' | null>(null);
   const [ready, setReady] = useState<Ready | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,27 +109,22 @@ export default function TemplateUpload({ supabase, companyId, kind, onImported }
     }
   };
 
+  const card = CARD[kind];
   const broken = ready ? ready.parsed.rows.filter((row) => row.errors.length) : [];
   const checklistProblems = ready?.parsed.checklist?.problems ?? [];
   const nothing = ready !== null && ready.parsed.rows.length === 0 && !ready.parsed.checklist;
   const canSave = ready !== null && broken.length === 0 && checklistProblems.length === 0 && !nothing;
 
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <FileSpreadsheet className="hidden h-5 w-5 shrink-0 text-emerald-700 sm:block" />
-        <p className="min-w-0 flex-1 text-xs text-slate-600">Sudah mengisi template Excel <span className="font-semibold text-slate-800">{TEMPLATE_TITLES[kind]}</span>? Unggah di sini, isinya diperiksa dan ditampilkan dulu sebelum disimpan.</p>
-        <label className={`flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 ${busy ? 'pointer-events-none opacity-50' : ''}`}>
-          {busy === 'read' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Unggah template
-          <input type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) choose(file); }} />
-        </label>
-      </div>
-
-      {error && <p className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {error}</p>}
-      {done && <p className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> {done}</p>}
+    <AddDataCard
+      title={onManual ? card.title : undefined}
+      manual={onManual && <ManualChoice label={card.manual} hint={card.hint} onClick={onManual} />}
+      upload={<UploadChoice hint={card.upload} accept=".xlsx" busy={busy !== null} template={TEMPLATE_FILES.find((item) => item.form === kind)?.file} onFile={choose} />}>
+      {error && <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {error}</p>}
+      {done && <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> {done}</p>}
 
       {ready && (
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-slate-900">{ready.fileName}</p>
             <button type="button" onClick={() => setReady(null)} aria-label="Batal" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>
@@ -159,6 +165,6 @@ export default function TemplateUpload({ supabase, companyId, kind, onImported }
           </button>
         </div>
       )}
-    </div>
+    </AddDataCard>
   );
 }

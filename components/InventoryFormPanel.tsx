@@ -37,10 +37,9 @@ type Result = { saved: boolean; savedRows?: number; blocked: number; checks: Ent
  * One form (1.1–1.4) of a company: a list of entries kept as a draft in the
  * browser, each typed in the editor, then checked and sent together.
  */
-export default function InventoryFormPanel({ companyId, category, storedCount, noTrafoBefore1997, onSaved }: {
+export default function InventoryFormPanel({ companyId, category, noTrafoBefore1997, onSaved }: {
   companyId: string;
   category: InventoryCategory;
-  storedCount: number | null;
   /** The company stated it has no transformer made before 1997. */
   noTrafoBefore1997: boolean;
   onSaved: () => void;
@@ -111,16 +110,6 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">Formulir {spec.code}: {spec.title}</h2>
-          <p className="text-xs text-slate-500">
-            {storedCount === null ? 'Menghitung data tersimpan…' : `Sudah tersimpan di database: ${storedCount.toLocaleString('id-ID')} unit.`}
-            {isTrafo(category) && ` Hanya trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui.`}
-          </p>
-        </div>
-      </div>
-
       <InventoryUpload companyId={companyId} category={category} onManual={() => setEditing({ id: newId(), values: {} })} manualFull={entries.length >= MAX_FORM_ROWS} />
 
       {isTrafo(category) && noTrafoBefore1997 && (

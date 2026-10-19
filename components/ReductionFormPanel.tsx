@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ArrowRight, Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ArrowRight, Loader2, Pencil, Search, Trash2 } from 'lucide-react';
+import type { AddCard } from '@/components/AddDataCard';
 import FormEditor from '@/components/FormEditor';
 import { newId } from '@/components/InventoryFormPanel';
 import { parseDMSCoordinate } from '@/lib/dms';
@@ -129,7 +130,7 @@ function TrafoPicker({ supabase, companyId, onPick, onManual }: { supabase: Supa
  * transformers in use. An entry made for a listed transformer can also write
  * the maintenance and the after-test into it, so its PCBs status follows.
  */
-export default function ReductionFormPanel({ supabase, companyId, onSaved, refreshKey = 0 }: { supabase: SupabaseClient; companyId: string; onSaved: () => void; refreshKey?: number }) {
+export default function ReductionFormPanel({ supabase, companyId, onSaved, refreshKey = 0, addCard }: { supabase: SupabaseClient; companyId: string; onSaved: () => void; refreshKey?: number; /** The add-data card, opening the transformer picker. */ addCard?: AddCard }) {
   const [logs, setLogs] = useState<{ key: number; rows: Log[] } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [step, setStep] = useState<'list' | 'pick' | 'edit'>('list');
@@ -203,13 +204,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
   const rows = logs?.key === reloadKey ? logs.rows : null;
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">Formulir 2: Pengurangan PCBs</h2>
-          <p className="text-xs text-slate-500">Log perawatan trafo yang masih digunakan, mis. retrofilling, dengan hasil uji sebelum dan sesudahnya (Pasal 13–14 Permen LHK 29/2020).</p>
-        </div>
-        {step !== 'pick' && <button type="button" onClick={() => { setStep('pick'); setMessage(null); }} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> Tambah log perawatan</button>}
-      </div>
+      {addCard?.(() => { setStep('pick'); setMessage(null); })}
 
       {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">{message}</p>}
       {error && step !== 'edit' && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>}

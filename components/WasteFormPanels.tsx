@@ -2,10 +2,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import ChecklistPanel from '@/components/ChecklistPanel';
+import type { AddCard } from '@/components/AddDataCard';
 import RecordLogPanel, { shortDate, sumOf, tons } from '@/components/RecordLogPanel';
 import { BALANCE_SECTIONS, STORAGE_SECTIONS, wasteEntryDefaults } from '@/lib/form-fields';
 
-type Props = { supabase: SupabaseClient; companyId: string; refreshKey?: number; onSaved?: () => void };
+type Props = { supabase: SupabaseClient; companyId: string; refreshKey?: number; onSaved?: () => void; /** The add-data card, given what opens the form. */ addCard?: AddCard };
 
 const DAY = 24 * 60 * 60 * 1000;
 /** Days stored: to the last handling, or still running to today. */
@@ -16,14 +17,11 @@ function storedDays(row: Record<string, unknown>) {
 }
 
 /** Form 3: the storage logbook and the storage checklist with the permit. */
-export function StorageFormPanel({ supabase, companyId, refreshKey = 0, onSaved }: Props) {
+export function StorageFormPanel({ supabase, companyId, refreshKey = 0, onSaved, addCard }: Props) {
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">Formulir 3: Penyimpanan PCBs</h2>
-        <p className="text-xs text-slate-500">Penyimpanan sementara transformator, kapasitor, dan minyak dielektrik yang sudah tidak digunakan (Pasal 15–16 Permen LHK 29/2020).</p>
-      </div>
       <RecordLogPanel
+        addCard={addCard}
         supabase={supabase}
         companyId={companyId}
         refreshKey={refreshKey}
@@ -55,27 +53,22 @@ export function StorageFormPanel({ supabase, companyId, refreshKey = 0, onSaved 
 }
 
 /** Form 4.2: processing by a licensed third party, as a checklist. */
-export function ProcessingFormPanel({ supabase, companyId, refreshKey = 0, onSaved }: Props) {
+export function ProcessingFormPanel({ supabase, companyId, refreshKey = 0, onSaved, addCard }: Props) {
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">Formulir 4.2: Pengolahan PCBs (untuk penghasil)</h2>
-        <p className="text-xs text-slate-500">Pengolahan peralatan dan minyak yang sudah tidak digunakan oleh pihak ketiga berizin (Pasal 17 Permen LHK 29/2020).</p>
-      </div>
-      <ChecklistPanel supabase={supabase} companyId={companyId} checklist="4_2_pengolahan" refreshKey={refreshKey} onSaved={onSaved} />
+      {/* Its form is the checklist itself: the card brings it into view. */}
+      {addCard?.(() => document.getElementById('ketentuan-pengolahan')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))}
+      <div id="ketentuan-pengolahan" className="scroll-mt-4"><ChecklistPanel supabase={supabase} companyId={companyId} checklist="4_2_pengolahan" refreshKey={refreshKey} onSaved={onSaved} /></div>
     </div>
   );
 }
 
 /** Form 5: the balance of PCBs waste; its processing checklist is the one of form 4.2. */
-export function ReportingFormPanel({ supabase, companyId, refreshKey = 0, onSaved }: Props) {
+export function ReportingFormPanel({ supabase, companyId, refreshKey = 0, onSaved, addCard }: Props) {
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">Formulir 5: Pelaporan PCBs</h2>
-        <p className="text-xs text-slate-500">Neraca pengelolaan PCBs. Tabel pelaporan pengolahan di template ini sama dengan ketentuan formulir 4.2, jadi cukup diisi di tab 4.2.</p>
-      </div>
       <RecordLogPanel
+        addCard={addCard}
         supabase={supabase}
         companyId={companyId}
         refreshKey={refreshKey}
@@ -83,7 +76,7 @@ export function ReportingFormPanel({ supabase, companyId, refreshKey = 0, onSave
         table="pelaporan_neraca"
         orderBy="created_at"
         title="Neraca pengelolaan PCBs"
-        description="Yang belum dikelola dihitung otomatis dari dihasilkan, dikelola, dan disimpan."
+        description="Yang belum dikelola dihitung otomatis dari dihasilkan, dikelola, dan disimpan. Tabel pelaporan pengolahan di template ini sama dengan ketentuan formulir 4.2, jadi cukup diisi di tab 4.2."
         addLabel="Tambah baris neraca"
         sections={BALANCE_SECTIONS}
         defaults={wasteEntryDefaults}
