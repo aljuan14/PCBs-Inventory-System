@@ -212,11 +212,11 @@ function TransformerColumn({ category, stats, grandTotal, scope, loading, onSele
   const counts: RiskCounts = riskCountsFor(stats, [category], scope);
   const statusTotal = RISK_CLASSES.reduce((sum, risk) => sum + counts[risk.key], 0);
   const statusTested = statusTotal - counts.untested;
-  // Three results only: at or under the 50 ppm threshold, above it, not tested.
+  // Three results only: under the 50 ppm threshold, at or over it, not tested.
   const [safe, , high, untested] = RISK_CLASSES;
   const scoped = SCOPE_FIGURES[scope].filters;
   const results: Segment[] = [
-    { key: 'upto50', label: 'Di bawah ambang', hint: '≤ 50 ppm', value: counts.safe + counts.moderate, color: safe.color, icon: safe.icon, iconClass: safe.iconClass, filters: { pcbRange: 'upto50', ...scoped } },
+    { key: 'below50', label: 'Di bawah ambang', hint: '< 50 ppm', value: counts.safe + counts.moderate, color: safe.color, icon: safe.icon, iconClass: safe.iconClass, filters: { pcbRange: 'below50', ...scoped } },
     { key: 'high', label: high.label, hint: high.range, value: counts.high, color: high.color, icon: high.icon, iconClass: high.iconClass, filters: { pcbRange: 'high', ...scoped } },
     { key: 'untested', label: untested.label, value: counts.untested, color: untested.color, icon: untested.icon, iconClass: untested.iconClass, filters: { pcbRange: 'untested', ...scoped } },
   ];

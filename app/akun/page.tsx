@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, FlaskConical, KeyRound, Loader2, Pencil, Plus, RotateCcw, Trash2, UserPlus, X } from 'lucide-react';
 import CompanyPicker from '@/components/CompanyPicker';
 import type { AccountRow } from '@/app/api/akun/route';
+import { alertDialog, confirmDialog } from '@/components/Dialog';
 
 type Peran = 'admin' | 'pemantau' | 'perusahaan';
 type Scenario = { idSimpel: string; email: string; name: string; purpose: string };
@@ -93,7 +94,7 @@ function TestAccounts({ scenarios, accounts, onSaved }: { scenarios: Scenario[];
   const made = scenarios.filter((scenario) => emails.has(scenario.email)).length;
 
   const run = async (reset: boolean) => {
-    if (reset && !window.confirm('Hapus semua data perusahaan uji (ZZ Uji A sampai F), lalu buat ulang dari awal? Data asli tidak tersentuh.')) return;
+    if (reset && !(await confirmDialog({ title: 'Ulang perusahaan uji dari awal?', message: 'Semua data perusahaan uji (ZZ Uji A sampai F) dihapus lalu dibuat ulang seperti semula. Data perusahaan asli tidak tersentuh.', tone: 'danger', confirmLabel: 'Hapus dan buat ulang', icon: RotateCcw }))) return;
     setBusy(reset ? 'reset' : 'create');
     setMessage(null);
     try {
@@ -197,12 +198,12 @@ export default function AccountsPage() {
   }, [reloadKey]);
 
   const remove = async (account: AccountRow) => {
-    if (!window.confirm(`Hapus akun ${account.email}? Pemiliknya tidak dapat login lagi. Data perusahaannya tidak ikut terhapus.`)) return;
+    if (!(await confirmDialog({ title: `Hapus akun ${account.email}?`, message: 'Pemiliknya tidak dapat login lagi. Data perusahaannya tidak ikut terhapus.', tone: 'danger', confirmLabel: 'Hapus akun' }))) return;
     try {
       await call('DELETE', { userId: account.id });
       reload();
     } catch (err) {
-      window.alert((err as Error).message);
+      await alertDialog({ title: 'Akun gagal dihapus', message: (err as Error).message });
     }
   };
 

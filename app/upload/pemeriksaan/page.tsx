@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ChevronDown, Download, Loader2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2, XCircle } from 'lucide-react';
+import { confirmDialog, promptDialog } from '@/components/Dialog';
 import { UPLOAD_STATUS, UploadFindings, UploadSample } from '@/components/InventoryUpload';
 import type { UploadMode, UploadSummary } from '@/lib/company-upload-shared';
 import { formSpec } from '@/lib/form-fields';
@@ -30,13 +31,30 @@ function UploadCard({ upload, onAnswered }: { upload: Upload; onAnswered: () => 
   const spec = formSpec(upload.kategori);
 
   const answer = async (action: 'terima' | 'tolak') => {
+    const company = upload.companies?.nama_perusahaan ?? 'perusahaan ini';
+    const about = (
+      <ul className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
+        <li><span className="text-slate-500">Perusahaan:</span> <span className="font-semibold">{company}</span></li>
+        <li><span className="text-slate-500">Formulir:</span> {spec.code} {spec.title}</li>
+        <li><span className="text-slate-500">Berkas:</span> {upload.nama_file}{summary ? ` · ${fmt(summary.rows)} baris` : ''}</li>
+      </ul>
+    );
     let catatan: string | undefined;
     if (action === 'tolak') {
-      catatan = window.prompt('Alasan penolakan (ditampilkan ke perusahaan):')?.trim();
+      catatan = (await promptDialog({
+        title: 'Tolak unggahan ini?',
+        message: <>{about}<p className="mt-3">Datanya tidak masuk ke inventaris. Alasan di bawah ditampilkan ke perusahaan agar berkasnya bisa diperbaiki.</p></>,
+        icon: XCircle, label: 'Alasan penolakan', placeholder: 'mis. Kolom PPM baris 8 berisi teks; isi angka hasil uji lalu kirim ulang.', confirmLabel: 'Tolak unggahan',
+      })) ?? undefined;
       if (!catatan) return;
-    } else if (!window.confirm(upload.mode === 'ganti'
-      ? `Terima dan GANTI semua data formulir ${spec.code} ${upload.companies?.nama_perusahaan ?? ''} dengan isi berkas ini?`
-      : `Terima dan tambahkan data berkas ini ke formulir ${spec.code} ${upload.companies?.nama_perusahaan ?? ''}?`)) return;
+    } else if (!(await confirmDialog({
+      title: upload.mode === 'ganti' ? `Terima dan ganti semua data formulir ${spec.code}?` : `Terima dan tambahkan ke formulir ${spec.code}?`,
+      message: <>{about}<p className="mt-3">{upload.mode === 'ganti'
+        ? <>Semua data formulir {spec.code} milik perusahaan ini <span className="font-semibold text-rose-700">dihapus</span> dan diganti isi berkas{summary ? ` (${fmt(summary.currentRows)} data lama saat dikirim)` : ''}. Tidak dapat dibatalkan.</>
+        : 'Isi berkas ditambahkan ke data formulir ini; baris yang sudah ada dilewati.'} Berkas dibaca ulang dan diperiksa saat diterima.</p></>,
+      tone: upload.mode === 'ganti' ? 'danger' : 'primary', icon: upload.mode === 'ganti' ? AlertTriangle : undefined,
+      confirmLabel: upload.mode === 'ganti' ? 'Terima dan ganti' : 'Terima',
+    }))) return;
     setBusy(action);
     setResult(null);
     const response = await fetch(`/api/unggahan/${upload.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, catatan }) });

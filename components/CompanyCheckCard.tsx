@@ -7,6 +7,7 @@ import { FEEDBACK_STATUSES, deriveStatus, formatDate } from '@/lib/company-statu
 import type { CheckReport } from '@/lib/import-transform';
 import { getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
+import { confirmDialog } from '@/components/Dialog';
 
 /** Clipboard API, falling back to a hidden textarea where the API is unavailable. */
 async function copyText(text: string) {
@@ -104,7 +105,7 @@ export default function CompanyCheckCard({ companyId, companyName, reloadKey = 0
   };
 
   const undoSend = async (entry: SendEntry) => {
-    if (!window.confirm(`Batalkan tanda terkirim tanggal ${formatDate(entry.sent_at)}?`)) return;
+    if (!(await confirmDialog({ title: 'Batalkan tanda terkirim?', message: `Tanda bahwa hasil pemeriksaan sudah dikirim ke perusahaan pada ${formatDate(entry.sent_at)} akan dihapus.`, tone: 'danger', confirmLabel: 'Batalkan tanda', icon: Undo2 }))) return;
     setSaving(true);
     const { error } = await supabase.from('company_feedback_log').delete().eq('id', entry.id);
     setSaving(false);

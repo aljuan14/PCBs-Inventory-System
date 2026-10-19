@@ -7,6 +7,7 @@ import { formSpec } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
 import { STORAGE_BUCKET, isExcelFileName } from '@/lib/upload-store';
+import { confirmDialog } from '@/components/Dialog';
 
 const fmt = (value: number) => value.toLocaleString('id-ID');
 const fmtDate = (value: string) => new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
@@ -147,7 +148,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
   };
 
   const cancel = async (upload: Sent) => {
-    if (!window.confirm('Batalkan unggahan ini? Datanya tidak akan diperiksa.')) return;
+    if (!(await confirmDialog({ title: 'Batalkan unggahan ini?', message: `${upload.nama_file} tidak jadi diperiksa KLH dan datanya tidak masuk. Unggah lagi kapan saja.`, tone: 'danger', confirmLabel: 'Batalkan unggahan', cancelLabel: 'Kembali', icon: X }))) return;
     setBusy('cancel');
     const { error: cancelError } = await supabase.from('unggahan_perusahaan').update({ status: 'dibatalkan' }).eq('id', upload.id);
     setBusy(null);

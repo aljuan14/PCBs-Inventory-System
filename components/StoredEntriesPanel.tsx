@@ -6,6 +6,7 @@ import FormEditor from '@/components/FormEditor';
 import { fieldErrors, formFields, formSpec, type FormEntry } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
+import { alertDialog, confirmDialog } from '@/components/Dialog';
 
 const PAGE = 50;
 type Row = Record<string, unknown> & { id: string };
@@ -75,9 +76,9 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
 
   const remove = async (row: Row) => {
     const name = text(oil ? row.merek_minyak_dielektrik : row.nama_merek) || 'data ini';
-    if (!window.confirm(`Hapus ${name}${row.nomor_serial ? ` (${row.nomor_serial})` : ''}? Tidak dapat dibatalkan.`)) return;
+    if (!(await confirmDialog({ title: `Hapus ${name}${row.nomor_serial ? ` (${row.nomor_serial})` : ''}?`, message: 'Data ini dihapus dari formulir dan tidak dapat dibatalkan.', tone: 'danger', confirmLabel: 'Hapus' }))) return;
     const { error, count } = await supabase.from(category).delete({ count: 'exact' }).eq('id', row.id);
-    if (error || count === 0) return window.alert(`Gagal menghapus: ${error?.message ?? 'data tidak ditemukan'}`);
+    if (error || count === 0) return alertDialog({ title: 'Gagal menghapus', message: error?.message ?? 'Data tidak ditemukan; mungkin sudah dihapus.' });
     setReloadKey((value) => value + 1);
     onChanged();
   };
@@ -102,16 +103,14 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
       </div>
 
       {editing && (
-        <div className="space-y-3 border-b border-slate-200 p-3 sm:p-4">
-          {errors.length > 0 && (
+        <FormEditor key={editing.id} sections={spec.sections} initial={entryOf(category, editing)} validate={(entry) => fieldErrors(formFields(category), entry)}
+          title={`Ubah data no. ${text(editing.no)}`} subtitle={`Formulir ${spec.code}: ${spec.title}`} saveLabel="Simpan perubahan" saving={saving} onSave={save} onCancel={() => { setEditing(null); setErrors([]); }}
+          notice={errors.length > 0 && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900">
               <p className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-4 w-4" /> Perubahan belum tersimpan:</p>
               <ul className="mt-1 list-disc pl-5">{errors.map((message) => <li key={message}>{message}</li>)}</ul>
             </div>
-          )}
-          <FormEditor key={editing.id} sections={spec.sections} initial={entryOf(category, editing)} validate={(entry) => fieldErrors(formFields(category), entry)}
-            title={`Ubah data no. ${text(editing.no)}`} saveLabel="Simpan perubahan" saving={saving} onSave={save} onCancel={() => { setEditing(null); setErrors([]); }} />
-        </div>
+          )} />
       )}
 
       {rows === null ? <p className="flex items-center gap-2 p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>

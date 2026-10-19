@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import CompanySortControl from '@/components/CompanySortControl';
 import { useCompanySort } from '@/components/useCompanySort';
 import { selectCompanies, sortCompanies } from '@/lib/company-sort';
+import { confirmDialog } from '@/components/Dialog';
 
 type Company = { id: string; nama_perusahaan: string; pilar_company_id: string | null; id_simpel: string | null; terakhir_diubah?: string | null };
 type Status = 'linked' | 'no_id' | 'exact' | 'candidates' | 'none';
@@ -199,10 +200,12 @@ export default function IdSimpelPage() {
     }
   };
   const link = (company: Company, entry: Candidate) => save([{ id: company.id, pilar_company_id: entry.record.id, id_simpel: entry.idSimpel }]);
-  const unlink = (company: Company) => { if (window.confirm(`Lepas hubungan ${company.nama_perusahaan} dengan PILAR?`)) save([{ id: company.id, pilar_company_id: null, id_simpel: null }]); };
-  const linkAllExact = () => {
+  const unlink = async (company: Company) => {
+    if (await confirmDialog({ title: 'Lepas hubungan dengan PILAR?', message: `${company.nama_perusahaan} tidak lagi terhubung ke ID SIMPEL-nya. Akun perusahaannya tidak dapat membuka laporan sampai dihubungkan lagi.`, tone: 'danger', confirmLabel: 'Lepas hubungan', icon: Link2Off })) save([{ id: company.id, pilar_company_id: null, id_simpel: null }]);
+  };
+  const linkAllExact = async () => {
     const exact = rows.filter((row) => row.status === 'exact' && row.exact);
-    if (!window.confirm(`Hubungkan ${fmt(exact.length)} perusahaan yang namanya cocok persis dengan satu ID SIMPEL? Periksa dulu daftarnya di pilihan "Cocok persis".`)) return;
+    if (!(await confirmDialog({ title: `Hubungkan ${fmt(exact.length)} perusahaan?`, message: 'Setiap perusahaan yang namanya cocok persis dengan satu ID SIMPEL akan dihubungkan. Periksa dulu daftarnya di pilihan "Cocok persis".', confirmLabel: 'Hubungkan semua' }))) return;
     save(exact.map((row) => ({ id: row.company.id, pilar_company_id: row.exact!.record.id, id_simpel: row.exact!.idSimpel })));
   };
 

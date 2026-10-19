@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
+import { DialogHost } from "@/components/Dialog";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 
@@ -37,6 +38,7 @@ export default function RootLayout({
       >
         <Navbar />
         <main className="min-w-0 flex-1">{children}</main>
+        <DialogHost />
       </body>
     </html>
   );

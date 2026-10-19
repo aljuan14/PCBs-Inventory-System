@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AlertTriangle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileSignature, Loader2, Upload, XCircle } from 'lucide-react';
 import { declaresNone, fetchPcbStatus, hasInventory, type PcbStatusCounts } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
+import { promptDialog } from '@/components/Dialog';
 
 export type CompanyStatement = {
   id: string;
@@ -135,7 +136,7 @@ export default function CompanyStatementCard({ supabase, companyId, reloadKey = 
 
   const verify = async (result: 'diterima' | 'ditolak') => {
     if (!statement) return;
-    const reason = result === 'ditolak' ? window.prompt('Alasan penolakan (ditampilkan ke perusahaan):')?.trim() : null;
+    const reason = result === 'ditolak' ? await promptDialog({ title: 'Tolak surat pernyataan?', message: 'Alasan di bawah ditampilkan ke perusahaan agar suratnya bisa diperbaiki dan diunggah ulang.', label: 'Alasan penolakan', placeholder: 'mis. Berkas bukan surat pernyataan / belum ditandatangani.', confirmLabel: 'Tolak surat', icon: XCircle }) : null;
     if (result === 'ditolak' && !reason) return;
     setSaving(true);
     const { error: verifyError } = await supabase.from('company_statements').update({ verifikasi: result, verifikasi_catatan: reason ?? null }).eq('id', statement.id);

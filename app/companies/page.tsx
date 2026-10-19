@@ -15,6 +15,7 @@ import CompanySortControl from '@/components/CompanySortControl';
 import { useCompanySort } from '@/components/useCompanySort';
 import { formatEdited, selectCompanies, sortCompanies } from '@/lib/company-sort';
 import { createClient } from '@/lib/supabase/client';
+import { alertDialog } from '@/components/Dialog';
 
 type Company = { id: string; nama_perusahaan: string; alamat?: string | null; id_simpel?: string | null; pilar_company_id?: string | null; terakhir_diubah?: string | null };
 
@@ -67,7 +68,7 @@ function DeleteCompanyDialog({ supabase, company, onClose, onDeleted }: { supaba
         const label = PROGRESS_LABELS[table] ?? getCategoryLabel(table as Parameters<typeof getCategoryLabel>[0]);
         setProgress(`Menghapus ${label}: ${formatNumber(deleted)} / ${formatNumber(total)}`);
       });
-      if (storageFailures > 0) window.alert(`${company.nama_perusahaan} terhapus, tetapi ${formatNumber(storageFailures)} berkas di Storage gagal dihapus.`);
+      if (storageFailures > 0) await alertDialog({ title: `${company.nama_perusahaan} terhapus`, message: `Tetapi ${formatNumber(storageFailures)} berkas di Storage gagal dihapus. Hapus manual di dashboard Supabase bila perlu.` });
       onDeleted();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

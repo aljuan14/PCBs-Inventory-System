@@ -7,6 +7,7 @@ import FormEditor from '@/components/FormEditor';
 import { newId } from '@/components/InventoryFormPanel';
 import { parseDMSCoordinate } from '@/lib/dms';
 import { REDUCTION_FIELDS, REDUCTION_SECTIONS, fieldErrors, type FormEntry } from '@/lib/form-fields';
+import { confirmDialog } from '@/components/Dialog';
 
 type Trafo = {
   id: string; nama_merek: string | null; nomor_serial: string | null; tahun_pembuatan: number | null; negara_asal: string | null;
@@ -58,7 +59,7 @@ export function recordOf(entry: FormEntry, companyId: string, itemId: string | n
  * Writes a maintenance log into its transformer: the latest maintenance
  * (columns 12-16 of form 1.1), the replacement oil as its oil brand, and the
  * after-test when there is one, so the PCBs status follows. An after-test of
- * 50 ppm or less also closes the transformer's open handling plans on the
+ * under 50 ppm also closes the transformer's open handling plans on the
  * maintenance date: the roadmap need not be marked by hand.
  */
 export async function applyToTrafo(supabase: SupabaseClient, trafoId: string, record: Record<string, string | number | null>) {
@@ -71,13 +72,13 @@ export async function applyToTrafo(supabase: SupabaseClient, trafoId: string, re
     Object.assign(changes, { uji_konsentrasi_ppm: record.uji_sesudah_ppm, uji_jenis: record.uji_sesudah_jenis, uji_metode: record.uji_sesudah_metode, uji_penyedia_jasa: record.uji_sesudah_penyedia_jasa });
   }
   const result = await supabase.from('transformator_digunakan').update(changes).eq('id', trafoId);
-  if (!result.error && typeof record.uji_sesudah_ppm === 'number' && record.uji_sesudah_ppm <= 50) {
+  if (!result.error && typeof record.uji_sesudah_ppm === 'number' && record.uji_sesudah_ppm < 50) {
     await supabase.from('equipment_plans').update({ selesai_at: record.perawatan_waktu }).eq('item_id', trafoId).eq('jenis', 'penanganan').is('selesai_at', null);
   }
   return result;
 }
 
-/** Transformers still in use, those over 50 ppm first; or those matching the search. */
+/** Transformers still in use, those of 50 ppm or more first; or those matching the search. */
 function TrafoPicker({ supabase, companyId, onPick, onManual }: { supabase: SupabaseClient; companyId: string; onPick: (trafo: Trafo) => void; onManual: () => void }) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<{ key: string; rows: Trafo[] } | null>(null);
@@ -112,7 +113,7 @@ function TrafoPicker({ supabase, companyId, onPick, onManual }: { supabase: Supa
                   <span className="block text-sm font-medium text-slate-900">{trafo.nama_merek || '–'} · {trafo.nomor_serial || 'tanpa no. serial'}</span>
                   <span className="block truncate text-xs text-slate-500">{[trafo.tahun_pembuatan ?? 'tahun ?', trafo.unit, trafo.lokasi_peralatan].filter(Boolean).join(' · ')}</span>
                 </span>
-                <span className={`shrink-0 text-xs font-semibold tabular-nums ${trafo.uji_konsentrasi_ppm !== null && trafo.uji_konsentrasi_ppm > 50 ? 'text-rose-700' : 'text-slate-500'}`}>{ppm(trafo.uji_konsentrasi_ppm)}</span>
+                <span className={`shrink-0 text-xs font-semibold tabular-nums ${trafo.uji_konsentrasi_ppm !== null && trafo.uji_konsentrasi_ppm >= 50 ? 'text-rose-700' : 'text-slate-500'}`}>{ppm(trafo.uji_konsentrasi_ppm)}</span>
               </button>
             ))}
       </div>
@@ -194,7 +195,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
   };
 
   const remove = async (log: Log) => {
-    if (!window.confirm('Hapus log perawatan ini? Data trafo yang sudah diperbarui tidak dikembalikan.')) return;
+    if (!(await confirmDialog({ title: 'Hapus log perawatan ini?', message: 'Data trafo yang sudah diperbarui dari log ini (perawatan terakhir, hasil uji) tidak dikembalikan.', tone: 'danger', confirmLabel: 'Hapus log' }))) return;
     await supabase.from('pengurangan_pcbs').delete().eq('id', log.id);
     setReloadKey((value) => value + 1);
   };
@@ -207,11 +208,11 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
           <h2 className="text-base font-semibold text-slate-900">Formulir 2: Pengurangan PCBs</h2>
           <p className="text-xs text-slate-500">Log perawatan trafo yang masih digunakan, mis. retrofilling, dengan hasil uji sebelum dan sesudahnya (Pasal 13–14 Permen LHK 29/2020).</p>
         </div>
-        {step === 'list' && <button type="button" onClick={() => { setStep('pick'); setMessage(null); }} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> Tambah log perawatan</button>}
+        {step !== 'pick' && <button type="button" onClick={() => { setStep('pick'); setMessage(null); }} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> Tambah log perawatan</button>}
       </div>
 
       {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">{message}</p>}
-      {error && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>}
+      {error && step !== 'edit' && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>}
 
       {step === 'pick' && (
         <>
@@ -227,10 +228,12 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
           initial={editing.entry}
           validate={(entry) => fieldErrors(REDUCTION_FIELDS, entry)}
           title={`${editing.logId ? 'Ubah log' : 'Log perawatan'}${editing.trafo ? `: ${editing.trafo.nama_merek ?? ''} ${editing.trafo.nomor_serial ?? ''}` : ' (trafo belum terdaftar)'}`}
+          subtitle="Formulir 2: Pengurangan PCBs"
           saveLabel="Simpan log"
+          notice={error && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">{error}</p>}
           saving={saving}
           onSave={save}
-          onCancel={() => { setEditing(null); setStep('list'); }}
+          onCancel={() => { setEditing(null); setStep('list'); setError(null); }}
         >
           {editing.trafo && (
             <label className="mt-3 flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
@@ -241,7 +244,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
         </FormEditor>
       )}
 
-      {step === 'list' && (rows === null ? <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat log…</p>
+      {step !== 'pick' && (rows === null ? <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat log…</p>
         : rows.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Belum ada log perawatan.</p> : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="w-full min-w-[680px] text-left text-xs">
@@ -254,7 +257,7 @@ export default function ReductionFormPanel({ supabase, companyId, onSaved, refre
                     <td className="whitespace-nowrap px-3 py-2.5 text-slate-700">{fmtDate(log.perawatan_waktu)}</td>
                     <td className="px-3 py-2.5 text-slate-800">{log.nama_merek || '–'}<span className="block text-slate-500">{log.nomor_serial || '–'}{!log.item_id && ' · belum terdaftar'}</span></td>
                     <td className="px-3 py-2.5 text-slate-700">{log.perawatan_jenis}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-700">{ppm(log.uji_sebelum_ppm)} <ArrowRight className="inline h-3 w-3 text-slate-400" /> <span className={log.uji_sesudah_ppm !== null && log.uji_sesudah_ppm <= 50 ? 'font-semibold text-emerald-700' : log.uji_sesudah_ppm !== null ? 'font-semibold text-rose-700' : ''}>{ppm(log.uji_sesudah_ppm)}</span></td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-700">{ppm(log.uji_sebelum_ppm)} <ArrowRight className="inline h-3 w-3 text-slate-400" /> <span className={log.uji_sesudah_ppm !== null && log.uji_sesudah_ppm < 50 ? 'font-semibold text-emerald-700' : log.uji_sesudah_ppm !== null ? 'font-semibold text-rose-700' : ''}>{ppm(log.uji_sesudah_ppm)}</span></td>
                     <td className="max-w-56 px-3 py-2.5 text-slate-600"><span className="line-clamp-2">{log.pengelolaan_limbah_b3 || '–'}</span></td>
                     <td className="px-3 py-2.5">
                       <div className="flex justify-end gap-1">

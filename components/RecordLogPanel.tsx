@@ -6,6 +6,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react';
 import FormEditor from '@/components/FormEditor';
 import { newId } from '@/components/InventoryFormPanel';
 import { fieldErrors, recordFromEntry, type FormEntry, type FormSection } from '@/lib/form-fields';
+import { confirmDialog } from '@/components/Dialog';
 
 export type LogColumn = { label: string; value: (row: Record<string, unknown>) => React.ReactNode; total?: (rows: Record<string, unknown>[]) => React.ReactNode; className?: string };
 
@@ -71,7 +72,7 @@ export default function RecordLogPanel({ supabase, companyId, table, orderBy, ti
   };
 
   const remove = async (id: unknown) => {
-    if (!window.confirm('Hapus baris ini?')) return;
+    if (!(await confirmDialog({ title: 'Hapus baris ini?', message: 'Baris ini dihapus dan tidak dapat dibatalkan.', tone: 'danger', confirmLabel: 'Hapus' }))) return;
     await supabase.from(table).delete().eq('id', id);
     setReloadKey((value) => value + 1);
     onSaved?.();
@@ -85,10 +86,11 @@ export default function RecordLogPanel({ supabase, companyId, table, orderBy, ti
           <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
           <p className="text-xs text-slate-500">{description}</p>
         </div>
-        {!editing && <button type="button" onClick={() => setEditing({ id: newId(), values: defaults() })} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> {addLabel}</button>}
+        <button type="button" onClick={() => { setEditing({ id: newId(), values: defaults() }); setError(null); }} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> {addLabel}</button>
       </div>
-      {error && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>}
-      {editing && <FormEditor key={editing.id} sections={sections} initial={editing} validate={validate} title={addLabel} saveLabel="Simpan" saving={saving} onSave={save} onCancel={() => setEditing(null)} />}
+      {error && !editing && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>}
+      {editing && <FormEditor key={editing.id} sections={sections} initial={editing} validate={validate} title={addLabel} subtitle={title} saveLabel="Simpan" saving={saving} onSave={save} onCancel={() => { setEditing(null); setError(null); }}
+        notice={error && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">{error}</p>} />}
       {list === null ? <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>
         : list.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm text-slate-500">Belum ada baris.</p> : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">

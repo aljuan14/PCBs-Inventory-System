@@ -6,6 +6,7 @@ import { CalendarPlus, Check, CheckCircle2, Loader2, Trash2, X } from 'lucide-re
 import { formatPlanDate } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 import { useReadOnly } from '@/components/useAccess';
+import { confirmDialog } from '@/components/Dialog';
 
 type Need = 'uji' | 'penanganan' | 'pengelolaan';
 type Category = 'transformator_digunakan' | 'transformator_tidak_digunakan';
@@ -24,7 +25,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const fmt = (value: number) => value.toLocaleString('id-ID');
 const CATEGORY_LABEL: Record<Category, string> = { transformator_digunakan: 'Digunakan', transformator_tidak_digunakan: 'Tidak digunakan' };
 const FILTERS = [
-  ['all', 'Semua'], ['uji', 'Belum diuji'], ['penanganan', '> 50 ppm'], ['pengelolaan', 'Tidak digunakan'], ['noplan', 'Tanpa rencana'], ['late', 'Lewat tanggal'],
+  ['all', 'Semua'], ['uji', 'Belum diuji'], ['penanganan', '≥ 50 ppm'], ['pengelolaan', 'Tidak digunakan'], ['noplan', 'Tanpa rencana'], ['late', 'Lewat tanggal'],
 ] as const;
 type Filter = (typeof FILTERS)[number][0];
 
@@ -32,6 +33,8 @@ const inputClass = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-s
 
 function planState(row: FocusRow) {
   if (!row.rencana_tanggal) return { label: 'Tanpa rencana', className: 'border-rose-200 bg-rose-50 text-rose-800' };
+  // A handling is done by its after-test under 50 ppm (form 2), when the transformer leaves this list; one marked done by hand is not.
+  if (row.rencana_selesai && row.kebutuhan === 'penanganan') return { label: 'Ditandai selesai, masih ≥ 50 ppm', className: 'border-amber-200 bg-amber-50 text-amber-900' };
   if (row.rencana_selesai) return { label: `Selesai ${formatPlanDate(row.rencana_selesai)}`, className: 'border-emerald-200 bg-emerald-50 text-emerald-800' };
   if (row.rencana_tanggal < today()) return { label: `Lewat: ${formatPlanDate(row.rencana_tanggal)}`, className: 'border-rose-200 bg-rose-50 text-rose-800' };
   return { label: formatPlanDate(row.rencana_tanggal), className: 'border-amber-200 bg-amber-50 text-amber-900' };
@@ -133,15 +136,19 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
 
   const chosen = [...picked.entries()];
   const withOwnPlan = chosen.filter(([, row]) => row.ownPlan);
-  // A test is done by its result in the data; handling and management are marked by hand.
-  const toFinish = withOwnPlan.filter(([, row]) => !row.done && row.kebutuhan !== 'uji');
+  // A test is done by its result in the data, a handling by its after-test under 50 ppm (form 2);
+  // only a management (handing a transformer no longer in use over) is marked done by hand.
+  const toFinish = withOwnPlan.filter(([, row]) => !row.done && row.kebutuhan === 'pengelolaan');
 
-  // Each ticked transformer gets the date; an open plan it had for the same need is replaced.
+  // Each ticked transformer gets the date; an open plan it had is replaced, and so is a handling
+  // marked done while the transformer is still 50 ppm or more (it would win over the new date).
   const setPlan = () => run('plan', async () => {
     const ids = chosen.map(([id]) => id);
     const results = [];
     for (let at = 0; at < ids.length; at += BATCH) {
-      results.push(await supabase.from('equipment_plans').delete().eq('company_id', companyId).in('item_id', ids.slice(at, at + BATCH)).is('selesai_at', null));
+      const slice = ids.slice(at, at + BATCH);
+      results.push(await supabase.from('equipment_plans').delete().eq('company_id', companyId).in('item_id', slice).is('selesai_at', null));
+      results.push(await supabase.from('equipment_plans').delete().eq('company_id', companyId).in('item_id', slice).eq('jenis', 'penanganan'));
     }
     for (let at = 0; at < chosen.length; at += BATCH) {
       results.push(await supabase.from('equipment_plans').insert(chosen.slice(at, at + BATCH).map(([id, row]) => ({ company_id: companyId, kategori: row.kategori, item_id: id, jenis: row.kebutuhan, rencana_tanggal: date }))));
@@ -149,8 +156,8 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
     return results;
   });
   const finishPlans = (planIds: string[]) => run('finish', async () => [await supabase.from('equipment_plans').update({ selesai_at: today() }).in('id', planIds)]);
-  const removePlans = (planIds: string[]) => {
-    if (!window.confirm(planIds.length === 1 ? 'Hapus rencana trafo ini?' : `Hapus rencana ${fmt(planIds.length)} trafo?`)) return;
+  const removePlans = async (planIds: string[]) => {
+    if (!(await confirmDialog({ title: planIds.length === 1 ? 'Hapus rencana trafo ini?' : `Hapus rencana ${fmt(planIds.length)} trafo?`, message: 'Trafonya kembali tanpa rencana dan status perusahaan bisa menjadi merah sampai diberi tanggal lagi.', tone: 'danger', confirmLabel: 'Hapus rencana' }))) return;
     run('remove', async () => [await supabase.from('equipment_plans').delete().in('id', planIds)]);
   };
 
@@ -160,7 +167,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
         <div>
           <h2 className="text-base font-semibold text-slate-900">Trafo yang perlu tindakan</h2>
           <p className="mt-1 text-xs text-slate-500">
-            Trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun: yang masih digunakan dan belum diuji (kapan diuji), yang masih digunakan &gt; 50 ppm (kapan diretrofilling atau diganti), dan yang sudah tidak digunakan (kapan dikelola).
+            Trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun: yang masih digunakan dan belum diuji (kapan diuji), yang masih digunakan ≥ 50 ppm (kapan diretrofilling atau diganti), dan yang sudah tidak digunakan (kapan dikelola).
             {!readOnly && ' Centang trafonya, lalu tetapkan tanggal rencana.'}
           </p>
         </div>
@@ -235,7 +242,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">
                           <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${state.className}`}>{state.label}</span>
-                          {!readOnly && own && !row.rencana_selesai && row.kebutuhan !== 'uji' && (
+                          {!readOnly && own && !row.rencana_selesai && row.kebutuhan === 'pengelolaan' && (
                             <button type="button" title="Tandai selesai" aria-label="Tandai selesai" disabled={busy !== null} onClick={() => finishPlans([own])} className="rounded-md p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700"><Check className="h-3.5 w-3.5" /></button>
                           )}
                           {!readOnly && own && (

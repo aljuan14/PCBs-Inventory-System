@@ -31,19 +31,20 @@ export const INVENTORY_CATEGORIES: Array<{
 /** Whether a category's KLHK template has a PCBs concentration column; kapasitor (1.3) does not, so its risk cannot be classified. */
 export const hasPcbConcentration = (category: InventoryCategory) => category !== 'kapasitor';
 
-// PCBs concentration classes: < 2, 2–50 and > 50 ppm. The same bounds are in
-// the table filter (inventory-query.ts) and inventory_stats (migration 20260929000001).
+// PCBs concentration classes: < 2, 2 to under 50, and 50 ppm or more (Permen LHK
+// 29/2020: only "di bawah" the 50 ppm Batas Konsentrasi is left out). The same
+// bounds are in the table filter (inventory-query.ts) and the SQL (migration 20261019000001).
 export type PcbClass = 'safe' | 'moderate' | 'high';
 
 export const PCB_CLASSES: Record<PcbClass, { label: string; range: string }> = {
   safe: { label: 'Bebas PCBs', range: '< 2 ppm' },
-  moderate: { label: 'Terkontaminasi PCBs', range: '2–50 ppm' },
-  high: { label: 'Mengandung PCBs', range: '> 50 ppm' },
+  moderate: { label: 'Terkontaminasi PCBs', range: '2 – < 50 ppm' },
+  high: { label: 'Mengandung PCBs', range: '≥ 50 ppm' },
 };
 
-export const pcbClassOf = (ppm: number): PcbClass => (ppm < 2 ? 'safe' : ppm <= 50 ? 'moderate' : 'high');
+export const pcbClassOf = (ppm: number): PcbClass => (ppm < 2 ? 'safe' : ppm < 50 ? 'moderate' : 'high');
 
-/** e.g. "Terkontaminasi PCBs (2–50 ppm)" */
+/** e.g. "Terkontaminasi PCBs (2 – < 50 ppm)" */
 export const pcbClassLabel = (pcbClass: PcbClass) => `${PCB_CLASSES[pcbClass].label} (${PCB_CLASSES[pcbClass].range})`;
 
 const field = (field_key: string, label: string, tipe_data: InventoryFieldType, wajib: boolean, group: InventoryField['group'] = 'Data umum'): InventoryField => ({ field_key, label, tipe_data, wajib, group });

@@ -54,7 +54,7 @@ export const TEST_SCENARIOS: TestScenario[] = [
   },
   {
     idSimpel: 'UJI-D', email: 'uji-d@pb3.com', name: 'ZZ Uji D - Status merah',
-    purpose: 'Status merah (belum diuji, > 50 ppm, trafo tidak digunakan): mengisi roadmap dan formulir 2 Pengurangan sampai statusnya turun.',
+    purpose: 'Status merah (belum diuji, ≥ 50 ppm, trafo tidak digunakan): mengisi roadmap dan formulir 2 Pengurangan sampai statusnya turun.',
     seed: {
       transformator_digunakan: [
         trafo('UJI-D-001', '1978', 'Gardu Timur', '-7.2575, 112.7521'),

@@ -200,7 +200,7 @@ function Findings({ entries, loading }: { entries: Pre1997Donut[]; loading?: boo
     <div className={CARD_CLASS}>
       <CardHeader
         title="Temuan PCBs ≥ 2 ppm · Trafo < 1997"
-        subtitle="Dihitung dari trafo buatan sebelum 1997 yang sudah diuji, bukan dari semua trafo · batas 50 ppm mengacu pada Konvensi Stockholm"
+        subtitle="Dihitung dari trafo buatan sebelum 1997 yang sudah diuji, bukan dari semua trafo · batas 50 ppm mengacu pada Permen LHK 29/2020 (50 ppm atau lebih mengandung PCBs)"
       />
       {loading ? (
         <div className="h-32 animate-pulse rounded-xl bg-slate-100" />

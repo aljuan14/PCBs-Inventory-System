@@ -54,7 +54,7 @@ export default function CompanyHelp() {
       <Section title={`Roadmap trafo buatan sebelum ${TRAFO_FOCUS_YEAR}`}>
         <ul className="list-disc space-y-1 pl-5">
           <li>Trafo <span className="font-semibold">masih digunakan dan belum diuji</span>: kapan akan diuji kandungan PCBs-nya.</li>
-          <li>Trafo <span className="font-semibold">masih digunakan, hasil uji di atas 50 ppm</span>: kapan akan diretrofilling atau diganti.</li>
+          <li>Trafo <span className="font-semibold">masih digunakan, hasil uji 50 ppm atau lebih</span>: kapan akan diretrofilling atau diganti.</li>
           <li>Trafo <span className="font-semibold">sudah tidak digunakan</span>: kapan akan dikelola (diserahkan ke pengolah berizin), berapa pun hasil ujinya.</li>
         </ul>
       </Section>

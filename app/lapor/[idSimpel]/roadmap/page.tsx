@@ -15,7 +15,7 @@ export default function CompanyRoadmap() {
     : href('/formulir', { ...(target.tab ? { tab: target.tab } : {}), ...(target.section ? { bagian: target.section } : {}) });
   return (
     <>
-      <PortalHeader title="Roadmap" description={`Untuk setiap trafo buatan sebelum ${TRAFO_FOCUS_YEAR} (atau tanpa tahun): kapan diuji bila belum diuji, kapan diretrofilling atau diganti bila di atas 50 ppm, dan kapan dikelola bila sudah tidak digunakan.`} />
+      <PortalHeader title="Roadmap" description={`Untuk setiap trafo buatan sebelum ${TRAFO_FOCUS_YEAR} (atau tanpa tahun): kapan diuji bila belum diuji, kapan diretrofilling atau diganti bila 50 ppm atau lebih, dan kapan dikelola bila sudah tidak digunakan.`} />
       <CompanyPcbStatusCard supabase={supabase} companyId={company.id} reloadKey={reloadKey} hrefFor={where} />
       <RoadmapPanels supabase={supabase} companyId={company.id} reloadKey={reloadKey} onChange={() => { setReloadKey((value) => value + 1); refresh(); }} />
     </>

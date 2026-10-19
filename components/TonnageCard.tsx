@@ -21,8 +21,8 @@ type Select = (filters: Partial<InventoryFilters>, type: CategoryFilter) => void
 // Checked with the dataviz palette validator (light surface); the grey is
 // neutral on purpose and every column is named under it.
 const LEVELS: Array<{ key: Level; label: string; range: string; color: string; pcbRange: InventoryFilters['pcbRange'] }> = [
-  { key: 'high', label: '> 50 ppm', range: 'mengandung PCBs', color: '#be123c', pcbRange: 'high' },
-  { key: 'low', label: '≤ 50 ppm', range: 'di bawah ambang', color: '#10b981', pcbRange: 'upto50' },
+  { key: 'high', label: '≥ 50 ppm', range: 'mengandung PCBs', color: '#be123c', pcbRange: 'high' },
+  { key: 'low', label: '< 50 ppm', range: 'di bawah ambang', color: '#10b981', pcbRange: 'below50' },
   { key: 'untested', label: 'Belum diuji', range: 'konsentrasi kosong', color: '#b4b2a9', pcbRange: 'untested' },
 ];
 

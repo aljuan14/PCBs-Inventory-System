@@ -19,7 +19,7 @@ function LockNote({ text = 'Pilih perusahaan di atas untuk mengisi.' }: { text?:
 function FormPreview({ sections }: { sections: FormSection[] }) {
   return (
     <fieldset disabled className="pointer-events-none select-none opacity-70" aria-label="Contoh formulir, terkunci">
-      <FormEditor sections={sections} initial={{ id: 'preview', values: {} }} validate={() => ({})} title="Contoh isian" saveLabel="Simpan" onSave={noop} onCancel={noop} />
+      <FormEditor sections={sections} initial={{ id: 'preview', values: {} }} validate={() => ({})} title="Contoh isian" saveLabel="Simpan" onSave={noop} onCancel={noop} inline />
     </fieldset>
   );
 }
@@ -62,9 +62,9 @@ function TabPreview({ tab }: { tab: ReportTab }) {
     return (
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          ['Rencana untuk semua trafo', 'Satu tanggal target untuk semua trafo yang belum diuji atau > 50 ppm.'],
-          ['Rencana tersimpan', 'Rencana yang sudah dibuat, dengan tanda terjadwal, lewat tanggal, atau selesai.'],
-          ['Trafo yang perlu tindakan', 'Trafo sebelum 1997 yang belum diuji atau > 50 ppm, dicentang untuk diberi tanggal.'],
+          ['Saring trafo', 'Belum diuji, ≥ 50 ppm, tidak digunakan, tanpa rencana, atau lewat tanggal, dengan jumlahnya.'],
+          ['Centang dan beri tanggal', 'Trafo sebelum 1997 yang dicentang diberi tanggal rencana; tanggal baru menggantikan yang lama.'],
+          ['Pantau rencananya', 'Tanggal, terjadwal atau lewat, dan selesai, langsung di baris trafonya.'],
         ].map(([title, text]) => (
           <div key={title} className="rounded-2xl border border-slate-200 bg-white p-4 opacity-80">
             <CalendarClock className="h-4 w-4 text-slate-400" />

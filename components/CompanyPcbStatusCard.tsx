@@ -105,8 +105,8 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
           <div>
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Trafo sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun · {fmt(counts.fokus)}</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Figure value={counts.aman} label="Aman (≤ 50 ppm)" tone="green" />
-              <Figure value={counts.tinggi} label="> 50 ppm" tone="red" done={counts.tinggi_selesai} doneLabel="sudah ditangani" />
+              <Figure value={counts.aman} label="Aman (< 50 ppm)" tone="green" />
+              <Figure value={counts.tinggi} label="≥ 50 ppm" tone="red" />
               <Figure value={counts.belum_uji} label="Belum diuji" tone="amber" />
               <Figure value={counts.kelola ?? 0} label="Tidak digunakan (wajib dikelola)" tone="red" done={counts.kelola_selesai ?? 0} doneLabel="sudah dikelola" />
             </div>

@@ -55,6 +55,8 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
   const [checks, setChecks] = useState<Map<string, EntryCheck>>(new Map());
   const [busy, setBusy] = useState<'check' | 'send' | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
+  // After "Simpan & tambah lagi": how many entries the list holds now.
+  const [added, setAdded] = useState<number | null>(null);
 
   const update = (next: FormEntry[]) => {
     setEntries(next);
@@ -66,6 +68,13 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
   const saveEntry = (entry: FormEntry) => {
     update(entries.some((item) => item.id === entry.id) ? entries.map((item) => (item.id === entry.id ? entry : item)) : [...entries, entry]);
     setEditing(null);
+    setAdded(null);
+  };
+  const saveAndNew = (entry: FormEntry) => {
+    const next = [...entries, entry];
+    update(next);
+    setAdded(next.length);
+    setEditing({ id: newId(), values: {} });
   };
   // A copy keeps the shared details (brand, oil, location) and clears what identifies the unit.
   const duplicate = (entry: FormEntry) => setEditing({ id: newId(), unknownYear: entry.unknownYear, values: { ...entry.values, nomor_serial: '', kode_alat: '', koordinat_raw: entry.values.koordinat_raw ?? '' } });
@@ -110,7 +119,7 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
             {isTrafo(category) && ` Hanya trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui.`}
           </p>
         </div>
-        {!editing && entries.length < MAX_FORM_ROWS && (
+        {entries.length < MAX_FORM_ROWS && (
           <button type="button" onClick={() => setEditing({ id: newId(), values: {} })} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> Tambah isian</button>
         )}
       </div>
@@ -123,11 +132,14 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
 
       {editing && (
         <FormEditor key={editing.id} sections={spec.sections} initial={editing} validate={(entry) => entryErrors(category, entry)}
-          title={entries.some((item) => item.id === editing.id) ? 'Ubah isian' : 'Isian baru'} saveLabel="Simpan ke daftar" onSave={saveEntry} onCancel={() => setEditing(null)} />
+          title={entries.some((item) => item.id === editing.id) ? 'Ubah isian' : 'Isian baru'} subtitle={`Formulir ${spec.code}: ${spec.title}`} saveLabel="Simpan ke daftar"
+          notice={added !== null && <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-800"><CheckCircle2 className="h-3.5 w-3.5" /> Isian sebelumnya masuk ke daftar ({added} isian). Lanjutkan isian berikutnya.</p>}
+          onSave={saveEntry} onSaveAndNew={entries.some((item) => item.id === editing.id) || entries.length + 1 >= MAX_FORM_ROWS ? undefined : saveAndNew}
+          onCancel={() => { setEditing(null); setAdded(null); }} />
       )}
 
       {entries.length === 0 ? (
-        !editing && <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Belum ada isian. Klik &quot;Tambah isian&quot; untuk mulai. Isian tersimpan sebagai draf di browser ini sampai dikirim.</p>
+        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Belum ada isian. Klik &quot;Tambah isian&quot; untuk mulai. Isian tersimpan sebagai draf di browser ini sampai dikirim.</p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full min-w-[640px] text-left text-xs">
@@ -169,7 +181,7 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
         </p>
       )}
 
-      {entries.length > 0 && !editing && (
+      {entries.length > 0 && (
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" disabled={busy !== null} onClick={() => submit(true)} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40">
             {busy === 'check' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Periksa {entries.length} isian

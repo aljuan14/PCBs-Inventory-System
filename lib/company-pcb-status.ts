@@ -9,16 +9,18 @@ import type { ReportTab } from '@/components/FormTabs';
  * of unknown year), from company_pcb_status (migration 20261013000001), and
  * the colour and messages shown on the status card:
  *
- * - red: a transformer not tested and with no plan, one over 50 ppm with no
+ * - red: a transformer not tested and with no plan, one of 50 ppm or more (the
+ *   Batas Konsentrasi of Permen LHK 29/2020) with no
  *   plan to handle it, a plan past its date, or PCBs waste stored without a
  *   valid TPS permit (form 3);
  * - yellow: everything left has a plan still ahead, the statement is
  *   missing or at odds with the data, the TPS permit ends within 90 days,
  *   waste stored over 365 days, a checklist point answered "tidak", or
  *   waste not handled yet in the balance (forms 3-5), or the supporting
- *   evidence of a form 1.x with data incomplete;
- * - green: nothing left to do (no focus transformer, or all tested within
- *   50 ppm or handled).
+ *   evidence of a form 1.x with data incomplete, or a transformer whose
+ *   handling was marked done while its last test is still 50 ppm or more;
+ * - green: nothing left to do (no focus transformer, or all tested under
+ *   50 ppm, or no longer in use and managed).
  */
 
 export type StatementRow = {
@@ -126,13 +128,15 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   const manageOpen = manageOpenOf(s);
 
   if (s.belum_uji_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.belum_uji_lewat)} trafo melewati tanggal rencana uji dan belum ada hasil ujinya.`, go: ROADMAP, action: 'Atur roadmap' });
-  if (s.tinggi_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.tinggi_lewat)} trafo > 50 ppm melewati tanggal rencana penanganan.`, go: ROADMAP, action: 'Atur roadmap' });
-  if (highOpen > 0) messages.push({ tone: 'red', text: `${fmt(highOpen)} trafo mengandung PCBs > 50 ppm tanpa rencana penanganan (penggantian, retrofilling, atau pengolahan).`, go: ROADMAP, action: 'Atur roadmap' });
+  if (s.tinggi_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.tinggi_lewat)} trafo ≥ 50 ppm melewati tanggal rencana penanganan.`, go: ROADMAP, action: 'Atur roadmap' });
+  if (highOpen > 0) messages.push({ tone: 'red', text: `${fmt(highOpen)} trafo mengandung PCBs (≥ 50 ppm) tanpa rencana penanganan (penggantian, retrofilling, atau pengolahan).`, go: ROADMAP, action: 'Atur roadmap' });
   if (untestedOpen > 0) messages.push({ tone: 'red', text: `${fmt(untestedOpen)} trafo belum diuji dan belum punya rencana uji.`, go: ROADMAP, action: 'Atur roadmap' });
   if ((s.kelola_lewat ?? 0) > 0) messages.push({ tone: 'red', text: `${fmt(s.kelola_lewat!)} trafo tidak digunakan melewati tanggal rencana pengelolaan.`, go: ROADMAP, action: 'Atur roadmap' });
   if (manageOpen > 0) messages.push({ tone: 'red', text: `${fmt(manageOpen)} trafo tidak digunakan belum punya rencana pengelolaan.`, go: ROADMAP, action: 'Atur roadmap' });
+  // A handling marked done, yet the last test is still 50 ppm or more: the transformer still contains PCBs.
+  if (s.tinggi_selesai > 0) messages.push({ tone: 'yellow', text: `${fmt(s.tinggi_selesai)} trafo ditandai sudah ditangani, tetapi hasil uji terakhirnya masih ≥ 50 ppm. Isi hasil uji sesudah penanganan (formulir 2), atau pindahkan ke formulir 1.2 bila trafonya sudah diganti.`, go: { tab: 'pengurangan' }, action: 'Isi formulir 2' });
   if (s.belum_uji_terjadwal > 0) messages.push({ tone: 'yellow', text: `${fmt(s.belum_uji_terjadwal)} trafo dijadwalkan diuji.`, go: ROADMAP, action: 'Lihat roadmap' });
-  if (s.tinggi_terjadwal > 0) messages.push({ tone: 'yellow', text: `${fmt(s.tinggi_terjadwal)} trafo > 50 ppm dijadwalkan ditangani.`, go: ROADMAP, action: 'Lihat roadmap' });
+  if (s.tinggi_terjadwal > 0) messages.push({ tone: 'yellow', text: `${fmt(s.tinggi_terjadwal)} trafo ≥ 50 ppm dijadwalkan ditangani.`, go: ROADMAP, action: 'Lihat roadmap' });
   if ((s.kelola_terjadwal ?? 0) > 0) messages.push({ tone: 'yellow', text: `${fmt(s.kelola_terjadwal!)} trafo tidak digunakan dijadwalkan dikelola.`, go: ROADMAP, action: 'Lihat roadmap' });
 
   // Forms 3-5: storage, its permit and checklists, the balance.
@@ -193,7 +197,7 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   messages.sort((a, b) => Number(b.tone === 'red') - Number(a.tone === 'red'));
   const color: StatusColor = messages.some((message) => message.tone === 'red') ? 'red' : messages.length > 0 ? 'yellow' : 'green';
   if (color === 'green') {
-    messages.push({ tone: 'green', text: !hasInventory(s) && statement && declaresNone(statement) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik (surat pernyataan diterima).' : s.fokus === 0 ? `Tidak ada trafo buatan sebelum ${TRAFO_FOCUS_YEAR}.` : `Semua trafo sebelum ${TRAFO_FOCUS_YEAR} sudah diuji ≤ 50 ppm atau sudah ditangani.` });
+    messages.push({ tone: 'green', text: !hasInventory(s) && statement && declaresNone(statement) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik (surat pernyataan diterima).' : s.fokus === 0 ? `Tidak ada trafo buatan sebelum ${TRAFO_FOCUS_YEAR}.` : `Semua trafo sebelum ${TRAFO_FOCUS_YEAR} sudah diuji di bawah 50 ppm, atau sudah tidak digunakan dan dikelola.` });
   }
   return { color, messages };
 }
@@ -211,7 +215,7 @@ export function summarySentence(s: PcbStatusCounts): string {
     : s.pernyataan && declaresNone(s.pernyataan) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik.'
       : 'Belum ada peralatan yang tercatat.';
   const focus = trafo > 0
-    ? ` ${fmt(s.fokus)} trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun: ${fmt(s.aman)} aman (≤ 50 ppm), ${fmt(s.tinggi)} > 50 ppm, ${fmt(s.belum_uji)} belum diuji${s.kelola ? `, ${fmt(s.kelola)} tidak digunakan (perlu dikelola)` : ''}.`
+    ? ` ${fmt(s.fokus)} trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun: ${fmt(s.aman)} aman (< 50 ppm), ${fmt(s.tinggi)} ≥ 50 ppm, ${fmt(s.belum_uji)} belum diuji${s.kelola ? `, ${fmt(s.kelola)} tidak digunakan (perlu dikelola)` : ''}.`
     : '';
   const after = s.pernyataan?.punya_trafo_1997_keatas
     ? ` Menurut pernyataan, ada ${fmt(s.pernyataan.jumlah_trafo_1997_keatas ?? 0)} trafo buatan ${TRAFO_FOCUS_YEAR} ke atas (${(s.pernyataan.tonase_trafo_1997_keatas_ton ?? 0).toLocaleString('id-ID')} ton).`

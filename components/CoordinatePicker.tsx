@@ -52,7 +52,7 @@ export default function CoordinatePicker({ initial, onPick, onClose }: { initial
   }, [basemap]);
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[1600] flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label="Pilih titik koordinat" className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <div>

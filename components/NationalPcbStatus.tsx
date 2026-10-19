@@ -65,7 +65,7 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
   const figures: Array<[string, number, string | null]> = [
     [`Trafo sebelum ${TRAFO_FOCUS_YEAR} / tanpa tahun`, totals.focus, null],
     ['Belum diuji (masih digunakan)', totals.untested, totals.untestedOpen ? `${fmt(totals.untestedOpen)} tanpa rencana` : null],
-    ['> 50 ppm (masih digunakan)', totals.high, totals.highOpen ? `${fmt(totals.highOpen)} tanpa rencana` : null],
+    ['≥ 50 ppm (masih digunakan)', totals.high, totals.highOpen ? `${fmt(totals.highOpen)} tanpa rencana` : null],
     ['Tidak digunakan, perlu dikelola', totals.unused, totals.unusedOpen ? `${fmt(totals.unusedOpen)} tanpa rencana` : null],
     ['Rencana lewat tanggal', totals.late, null],
   ];
@@ -76,7 +76,7 @@ export default function NationalPcbStatus({ supabase, companies, reloadKey, onSe
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
         <div>
           <h2 className="text-base font-semibold text-slate-900">Status PCBs perusahaan</h2>
-          <p className="text-xs text-slate-500">Untuk trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun. Merah: ada trafo belum diuji, &gt; 50 ppm, atau tidak digunakan yang belum punya rencana, atau rencananya lewat tanggal.</p>
+          <p className="text-xs text-slate-500">Untuk trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun. Merah: ada trafo belum diuji, ≥ 50 ppm, atau tidak digunakan yang belum punya rencana, atau rencananya lewat tanggal.</p>
         </div>
       </div>
 

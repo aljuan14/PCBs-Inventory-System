@@ -48,3 +48,9 @@ input, select, textarea, button {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* The form pop-up: the backdrop fades in, the panel rises a little. */
+@keyframes form-modal-fade { from { opacity: 0; } }
+@keyframes form-modal-rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
+.form-modal-backdrop { animation: form-modal-fade 150ms ease-out; }
+.form-modal-panel { animation: form-modal-rise 180ms ease-out; }
