@@ -34,13 +34,14 @@ export const REPORT_TABS: ReportTab[] = GROUPS.flatMap((group) => group.items.ma
  * three labelled rows (inventory forms, management forms, the roadmap); on a
  * phone one dropdown with the same groups.
  */
-export default function FormTabs({ value, onChange }: { value: ReportTab; onChange: (tab: ReportTab) => void }) {
+export default function FormTabs({ value, onChange, withRoadmap = true }: { value: ReportTab; onChange: (tab: ReportTab) => void; /** False where the roadmap has its own page (the company's area). */ withRoadmap?: boolean }) {
+  const groups = withRoadmap ? GROUPS : GROUPS.filter((group) => group.items.every((item) => item.key !== 'roadmap'));
   return (
     <>
       <label className="block sm:hidden">
         <span className="sr-only">Formulir</span>
         <select value={value} onChange={(event) => onChange(event.target.value as ReportTab)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-600">
-          {GROUPS.map((group) => (
+          {groups.map((group) => (
             <optgroup key={group.title} label={group.title}>
               {group.items.map((item) => <option key={item.key} value={item.key}>{item.code ? `${item.code} ` : ''}{item.label}</option>)}
             </optgroup>
@@ -48,7 +49,7 @@ export default function FormTabs({ value, onChange }: { value: ReportTab; onChan
         </select>
       </label>
       <div role="tablist" aria-label="Formulir" className="hidden space-y-2 sm:block">
-        {GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.title} className="grid grid-cols-[96px_minmax(0,1fr)] items-center gap-3">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{group.title}</span>
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">

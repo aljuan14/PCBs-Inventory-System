@@ -4,26 +4,13 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
+import { adminContactLink } from '@/lib/contact';
 import { createClient } from '@/lib/supabase/client';
 
 /** Hanya terima path internal, supaya ?next= tidak bisa dipakai untuk redirect ke situs lain. */
 function nextPath() {
   const next = new URLSearchParams(window.location.search).get('next');
   return next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
-}
-
-/**
- * The admin's contact for "Hubungi admin" (NEXT_PUBLIC_KONTAK_ADMIN, set in
- * Vercel, not in the public repo): a WhatsApp number (08… / 62…), an email,
- * or a link. Unset, the text stays plain.
- */
-function adminContactLink() {
-  const contact = process.env.NEXT_PUBLIC_KONTAK_ADMIN?.trim();
-  if (!contact) return null;
-  if (/^https?:\/\//i.test(contact)) return contact;
-  if (contact.includes('@')) return `mailto:${contact}`;
-  const digits = contact.replace(/\D/g, '').replace(/^0/, '62');
-  return digits ? `https://wa.me/${digits}?text=${encodeURIComponent('Halo admin, saya butuh bantuan akun Sistem Inventarisasi PCBs.')}` : null;
 }
 
 export default function LoginPage() {

@@ -23,19 +23,27 @@ import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
  * company. ?tab= and ?bagian= open a tab and scroll to a part of it (the
  * PCBs status links here from the dashboard and the roadmap).
  */
-export default function CompanyReport({ supabase, companyId }: { supabase: SupabaseClient; companyId: string }) {
+export default function CompanyReport({ supabase, companyId, onRoadmap, onChanged }: {
+  supabase: SupabaseClient;
+  companyId: string;
+  /** Where the roadmap has its own page (the company's area): its tab is left out and roadmap links go there. */
+  onRoadmap?: () => void;
+  /** After any save that may change the company's status. */
+  onChanged?: () => void;
+}) {
   const params = useSearchParams();
   // A form 1.x by its category, one of forms 2-5, or the roadmap.
   const [category, setCategory] = useState<ReportTab>(() => {
     const tab = params.get('tab');
-    return REPORT_TABS.includes(tab as ReportTab) ? tab as ReportTab : 'transformator_digunakan';
+    return REPORT_TABS.includes(tab as ReportTab) && !(onRoadmap && tab === 'roadmap') ? tab as ReportTab : 'transformator_digunakan';
   });
   // The part of the page to bring into view once it is there (a status message was clicked).
   const [scrollTo, setScrollTo] = useState<string | null>(() => params.get('bagian') ?? (params.get('tab') ? 'formulir' : null));
   const [statement, setStatement] = useState<CompanyStatement | null>(null);
   // Stored units per form, tagged with their company so another company's counts never show.
   const [counts, setCounts] = useState<{ companyId: string; values: Partial<Record<InventoryCategory, number>> } | null>(null);
-  const [reload, setReload] = useState(0);
+  const [reload, setReloadKey] = useState(0);
+  const setReload = useCallback((next: (value: number) => number) => { setReloadKey(next); onChanged?.(); }, [onChanged]);
   // Bumped after an Excel template is stored, so the panels below load it.
   const [imported, setImported] = useState(0);
 
@@ -51,6 +59,7 @@ export default function CompanyReport({ supabase, companyId }: { supabase: Supab
   const onStatement = useCallback((value: CompanyStatement | null) => setStatement(value), []);
 
   const go = (target: StatusTarget) => {
+    if (target.tab === 'roadmap' && onRoadmap) return onRoadmap();
     if (target.tab) setCategory(target.tab);
     setScrollTo(target.section ?? 'formulir');
   };
@@ -85,7 +94,7 @@ export default function CompanyReport({ supabase, companyId }: { supabase: Supab
       <div id="pernyataan" className="scroll-mt-4"><CompanyStatementCard supabase={supabase} companyId={companyId} reloadKey={reload} onStatement={onStatement} onSaved={() => setReload((value) => value + 1)} /></div>
 
       <section id="formulir" className="scroll-mt-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">
-            <FormTabs value={category} onChange={setCategory} />
+            <FormTabs value={category} onChange={setCategory} withRoadmap={!onRoadmap} />
             {OTHER_FORMS.some(([key]) => key === category) && (
               <TemplateUpload key={`${companyId}:${category}`} supabase={supabase} companyId={companyId} kind={category as OtherForm} onImported={() => { setImported((value) => value + 1); setReload((value) => value + 1); }} />
             )}

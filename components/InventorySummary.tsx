@@ -69,7 +69,7 @@ function Legend({ segments, total, active, setActive, onSelect }: { segments: Se
               {Icon && <Icon className={`h-3.5 w-3.5 shrink-0 ${segment.iconClass ?? ''}`} />}
               {/* The range on its own line, so a narrow card never cuts it off. */}
               <span className="min-w-0 flex-1 text-slate-600">
-                <span className="block truncate">{segment.label}</span>
+                <span className="block leading-snug">{segment.label}</span>
                 {segment.hint && <span className="block truncate text-[11px] leading-tight text-slate-400">{segment.hint}</span>}
               </span>
               <span className="font-semibold tabular-nums text-slate-800">{formatNumber(segment.value)}</span>
@@ -242,7 +242,7 @@ function TransformerColumn({ category, stats, grandTotal, scope, loading, onSele
       </button>
 
       <div className={CARD_CLASS}>
-        <CardTitle title="Menurut tahun produksi" subtitle="Klik untuk melihat datanya di tabel" />
+        <CardTitle title="Menurut tahun produksi" subtitle="Klik untuk melihat datanya" />
         <div className="mt-4">
           {loading ? <Skeleton className="h-36" /> : total === 0
             ? <p className="rounded-xl border border-dashed border-slate-200 py-10 text-center text-xs text-slate-500">Belum ada data.</p>

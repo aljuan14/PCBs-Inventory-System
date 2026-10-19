@@ -145,6 +145,8 @@ interface MapProps {
   height?: string;
   /** Clicking a point passes every point at its coordinates. */
   onSelectPoint?: (points: MapPoint[]) => void;
+  /** One company only (its own area): no company picker. */
+  fixedCompany?: boolean;
 }
 
 /**
@@ -154,7 +156,7 @@ interface MapProps {
  * single points. Only what is on screen is loaded (map_clusters, migration
  * 20261010000002).
  */
-export default function MapLeaflet({ supabase, companies, scope, onScopeChange, category, reloadKey = 0, height = '480px', onSelectPoint }: MapProps) {
+export default function MapLeaflet({ supabase, companies, scope, onScopeChange, category, reloadKey = 0, height = '480px', onSelectPoint, fixedCompany = false }: MapProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -377,7 +379,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
             {CATEGORY_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
         )}
-        <CompanyPicker companies={companies} value={companyValue} onChange={pickCompany} allLabel="Semua perusahaan" className="w-64" />
+        {!fixedCompany && <CompanyPicker companies={companies} value={companyValue} onChange={pickCompany} allLabel="Semua perusahaan" className="w-64" />}
         {hasPcb && (
           <select aria-label="Hasil uji minyak dielektrik" value={filters.pcbRange} onChange={(e) => setFilter('pcbRange', e.target.value as MapFilters['pcbRange'])} className={SELECT_CLASS}>
             {PCB_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
