@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, FileSpreadsheet, Info, Loader2, Send, Upload, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Download, FileSpreadsheet, Info, Loader2, PencilLine, Send, X, XCircle } from 'lucide-react';
 import { COMPANY_UPLOAD_FOLDER, MAX_COMPANY_UPLOAD_BYTES, type UploadMode, type UploadSummary } from '@/lib/company-upload-shared';
 import { formSpec } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
+import { TEMPLATE_FILES } from '@/lib/templates';
 import { STORAGE_BUCKET, isExcelFileName } from '@/lib/upload-store';
 import { confirmDialog } from '@/components/Dialog';
 
@@ -63,13 +64,29 @@ export function UploadSample({ summary }: { summary: UploadSummary }) {
   );
 }
 
+// Each choice its own colour, its icon, title and line centred.
+const tileClass = 'group flex flex-col items-center justify-center gap-2 rounded-2xl border px-4 py-5 text-center transition';
+const tileActive = 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md';
+
 /**
  * Upload of the official Excel template of a form 1.x by the company: read
  * and checked on the server (app/api/unggahan), shown, then sent to the admin
  * to add to or replace the company's rows of this form. Nothing changes
  * until the admin accepts it; the company sees its uploads and their answer.
+ * With `onManual` it is the form's "add data" card: filling the form one by
+ * one beside the upload.
  */
-export default function InventoryUpload({ companyId, category, readOnly = false, onSent }: { companyId: string; category: InventoryCategory; readOnly?: boolean; /** After an upload is sent or withdrawn. */ onSent?: () => void }) {
+export default function InventoryUpload({ companyId, category, readOnly = false, onSent, onManual, manualFull = false }: {
+  companyId: string;
+  category: InventoryCategory;
+  readOnly?: boolean;
+  /** After an upload is sent or withdrawn. */
+  onSent?: () => void;
+  /** Opens the form for one entry. */
+  onManual?: () => void;
+  /** The draft list holds as many entries as it may. */
+  manualFull?: boolean;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const spec = formSpec(category);
   const [sent, setSent] = useState<{ key: string; list: Sent[] } | null>(null);
@@ -79,6 +96,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
   const [checked, setChecked] = useState<Checked | null>(null);
   const [busy, setBusy] = useState<'check' | 'send' | 'cancel' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const listKey = `${companyId}|${category}|${reload}`;
 
   useEffect(() => {
@@ -158,22 +176,42 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
   };
 
   const summary = checked?.summary;
+  const template = TEMPLATE_FILES.find((item) => item.form === category);
   const blocking = summary?.issues.filter((issue) => issue.level === 'warning') ?? [];
 
   return (
-    <div className="space-y-3 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <FileSpreadsheet className="hidden h-5 w-5 shrink-0 text-emerald-700 sm:block" />
-        <p className="min-w-0 flex-1 text-xs text-slate-600">
-          Punya banyak data? Unggah <span className="font-semibold text-slate-800">template Excel formulir {spec.code}</span>. Isinya diperiksa dan ditampilkan dulu, lalu dikirim ke KLH untuk diperiksa sebelum masuk ke data.
-        </p>
-        {!readOnly && !waiting && (
-          <label className={`flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 ${busy ? 'pointer-events-none opacity-50' : ''}`}>
-            {busy === 'check' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Unggah template {spec.code}
-            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { const chosen = event.target.files?.[0]; event.target.value = ''; if (chosen) choose(chosen); }} />
-          </label>
-        )}
-      </div>
+    <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4">
+      {onManual && <h3 className="px-1 text-sm font-semibold text-slate-900">Tambah data formulir {spec.code}</h3>}
+      {!readOnly && (
+        <div className={`grid gap-3 ${onManual ? 'sm:grid-cols-2' : ''}`}>
+          {onManual && (
+            <button type="button" onClick={onManual} disabled={manualFull} className={`${tileClass} border-emerald-200 bg-emerald-50 ${manualFull ? 'opacity-50' : `${tileActive} hover:border-emerald-400`}`}>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-sm"><PencilLine className="h-5 w-5" /></span>
+              <span className="block text-sm font-semibold text-emerald-950">Isi lewat formulir</span>
+              <span className="block text-xs text-emerald-800/80">{manualFull ? 'Daftar draf penuh; kirim dulu.' : 'Satu per satu, untuk data sedikit.'}</span>
+            </button>
+          )}
+          {waiting ? (
+            <div className={`${tileClass} border-amber-200 bg-amber-50`}>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Clock className="h-5 w-5" /></span>
+              <span className="block text-sm font-semibold text-amber-950">Unggah template Excel</span>
+              <span className="block text-xs text-amber-800">Menunggu pemeriksaan KLH atas unggahan sebelumnya.</span>
+            </div>
+          ) : (
+            <label
+              onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(event) => { event.preventDefault(); setDragging(false); const chosen = event.dataTransfer.files?.[0]; if (chosen && !busy) choose(chosen); }}
+              className={`${tileClass} border-dashed ${dragging ? 'border-sky-500 bg-sky-100 ring-4 ring-sky-600/10' : 'border-sky-300 bg-sky-50'} ${busy ? 'pointer-events-none opacity-60' : `${tileActive} hover:border-sky-500`}`}>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-700 text-white shadow-sm">{busy === 'check' ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileSpreadsheet className="h-5 w-5" />}</span>
+              <span className="block text-sm font-semibold text-sky-950">{dragging ? 'Lepaskan berkas di sini' : 'Unggah template Excel'}</span>
+              <span className="block text-xs text-sky-800/80">Banyak data sekaligus, diperiksa KLH dulu. Klik atau seret berkas ke sini.</span>
+              {template && <a href={template.file} download onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1 text-xs font-semibold text-sky-800 underline-offset-2 hover:underline"><Download className="h-3.5 w-3.5" /> Unduh template</a>}
+              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { const chosen = event.target.files?.[0]; event.target.value = ''; if (chosen) choose(chosen); }} />
+            </label>
+          )}
+        </div>
+      )}
 
       {error && <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {error}</p>}
       {busy === 'check' && <p className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Membaca dan memeriksa {file?.name}…</p>}

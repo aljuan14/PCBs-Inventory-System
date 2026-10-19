@@ -102,7 +102,7 @@ export default function CompanyUploads() {
           <p className="text-xs text-slate-500">Pilih formulirnya, lalu unggah berkas template yang sudah diisi.</p>
         </div>
         <FormTabs value={form} onChange={setForm} withRoadmap={false} />
-        {template && <a href={template.file} download className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline"><Download className="h-3.5 w-3.5" /> Unduh template formulir {template.code}</a>}
+        {template && !isInventory(form) && <a href={template.file} download className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline"><Download className="h-3.5 w-3.5" /> Unduh template formulir {template.code}</a>}
         {isInventory(form)
           ? <InventoryUpload key={form} companyId={company.id} category={form} onSent={() => { setReloadKey((value) => value + 1); refresh(); }} />
           : <TemplateUpload key={form} supabase={supabase} companyId={company.id} kind={form as OtherForm} onImported={refresh} />}

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import EvidencePanel from '@/components/EvidencePanel';
 import InventoryUpload from '@/components/InventoryUpload';
 import StoredEntriesPanel from '@/components/StoredEntriesPanel';
@@ -119,12 +119,9 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
             {isTrafo(category) && ` Hanya trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui.`}
           </p>
         </div>
-        {entries.length < MAX_FORM_ROWS && (
-          <button type="button" onClick={() => setEditing({ id: newId(), values: {} })} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> Tambah isian</button>
-        )}
       </div>
 
-      <InventoryUpload companyId={companyId} category={category} />
+      <InventoryUpload companyId={companyId} category={category} onManual={() => setEditing({ id: newId(), values: {} })} manualFull={entries.length >= MAX_FORM_ROWS} />
 
       {isTrafo(category) && noTrafoBefore1997 && (
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"><Info className="mt-0.5 h-4 w-4 shrink-0" /> Menurut pernyataannya, perusahaan ini tidak memiliki trafo buatan sebelum {TRAFO_FOCUS_YEAR}. Ubah pernyataan dulu bila ternyata ada.</p>
@@ -138,9 +135,8 @@ export default function InventoryFormPanel({ companyId, category, storedCount, n
           onCancel={() => { setEditing(null); setAdded(null); }} />
       )}
 
-      {entries.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Belum ada isian. Klik &quot;Tambah isian&quot; untuk mulai. Isian tersimpan sebagai draf di browser ini sampai dikirim.</p>
-      ) : (
+      {entries.length > 0 && <p className="-mb-2 px-1 text-xs text-slate-500"><span className="font-semibold text-slate-800">Draf isian · {entries.length}</span> · tersimpan di browser ini sampai diperiksa dan dikirim.</p>}
+      {entries.length === 0 ? null : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
