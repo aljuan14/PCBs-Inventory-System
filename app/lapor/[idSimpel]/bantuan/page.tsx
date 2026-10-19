@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, CircleAlert, Download, FileText, MessageCircle } from 'lucide-react';
 import { PortalHeader, useCompanyPortal } from '@/components/company/CompanyPortal';
@@ -7,9 +8,20 @@ import { adminContactLink } from '@/lib/contact';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 import { REGULATION_FILE } from '@/lib/templates';
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+const HIGHLIGHT = ['ring-4', 'ring-emerald-500/40'];
+
+function Section({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLElement>(null);
+  // Opened by a link to it (#id, e.g. from the status card): outlined for a moment so the eye finds it.
+  useEffect(() => {
+    const element = ref.current;
+    if (!id || !element || window.location.hash !== `#${id}`) return;
+    element.classList.add(...HIGHLIGHT);
+    const timer = window.setTimeout(() => element.classList.remove(...HIGHLIGHT), 2500);
+    return () => window.clearTimeout(timer);
+  }, [id]);
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5">
+    <section ref={ref} id={id} className="scroll-mt-4 rounded-2xl border border-slate-200 bg-white p-5 transition-shadow duration-700">
       <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       <div className="mt-3 space-y-2 text-sm text-slate-700">{children}</div>
     </section>
@@ -44,7 +56,7 @@ export default function CompanyHelp() {
         </ol>
       </Section>
 
-      <Section title="Arti status PCBs">
+      <Section id="arti-status" title="Arti status PCBs">
         <p className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" /><span><span className="font-semibold text-rose-800">Perlu tindakan (merah)</span>: ada trafo yang belum punya rencana atau sudah lewat tanggal rencananya, atau menyimpan limbah PCBs tanpa izin TPS.</span></p>
         <p className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><span><span className="font-semibold text-amber-900">Perlu perhatian (kuning)</span>: semua sudah terjadwal, tetapi ada yang perlu dilengkapi, misalnya bukti dukung, izin yang hampir berakhir, atau tahun pembuatan yang kosong.</span></p>
         <p className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /><span><span className="font-semibold text-emerald-800">Aman (hijau)</span>: tidak ada yang perlu dilakukan.</span></p>

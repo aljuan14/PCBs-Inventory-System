@@ -118,7 +118,7 @@ export default function CompanyHome() {
   return (
     <>
       <PortalHeader title="Beranda" description="Status laporan PCBs perusahaan, ringkasan peralatan, dan letaknya di peta." />
-      <CompanyPcbStatusCard supabase={supabase} companyId={company.id} hrefFor={where} showOwned={false} />
+      <CompanyPcbStatusCard supabase={supabase} companyId={company.id} hrefFor={where} showOwned={false} helpHref={`${href('/bantuan')}#arti-status`} />
       <UploadsToWatch />
 
       {loaded === null ? <div className="h-48 animate-pulse rounded-2xl bg-slate-100" />

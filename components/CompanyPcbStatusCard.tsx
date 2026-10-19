@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { AlertTriangle, CalendarClock, CheckCircle2, ChevronRight, CircleAlert, Loader2 } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronRight, CircleAlert, HelpCircle, Loader2 } from 'lucide-react';
 import { STATUS_COLORS, evaluateStatus, fetchPcbStatus, formatPlanDate, type PcbStatusCounts, type StatusColor, type StatusTarget } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 
 const ICONS: Record<StatusColor, typeof CircleAlert> = { red: CircleAlert, yellow: AlertTriangle, green: CheckCircle2 };
 const fmt = (value: number) => value.toLocaleString('id-ID');
+// Each group of figures in a card of its own.
+const groupClass = 'rounded-2xl border border-slate-200/70 bg-white/50 p-3';
 
 /**
  * Where a message is fixed, from a page other than the report: the report on
@@ -44,7 +46,7 @@ function Figure({ value, label, tone, done = 0, doneLabel }: { value: number; la
  * each item leading to where it is fixed. In the company's report `onGo`
  * opens the tab there; elsewhere `hrefFor` links to the report.
  */
-export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 0, onGo, hrefFor, showOwned = true }: {
+export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 0, onGo, hrefFor, showOwned = true, helpHref }: {
   supabase: SupabaseClient;
   companyId: string;
   reloadKey?: number;
@@ -54,6 +56,8 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
   hrefFor?: (target: StatusTarget) => string | null;
   /** False where the equipment counts show elsewhere on the page (the company's home). */
   showOwned?: boolean;
+  /** Where the colours are explained (the company's help page). */
+  helpHref?: string;
 }) {
   const [result, setResult] = useState<{ key: string; counts?: PcbStatusCounts; error?: string } | null>(null);
   const requestKey = `${companyId}|${reloadKey}`;
@@ -87,13 +91,14 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status PCBs</p>
           <p className={`text-lg font-semibold ${style.text}`}>{style.label}</p>
+          {helpHref && <Link href={helpHref} className="inline-flex items-center gap-1 text-xs text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"><HelpCircle className="h-3.5 w-3.5" /> Untuk penjelasan status PCBs, klik di sini</Link>}
         </div>
         {counts.rencana_berikut && <span className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs text-slate-600"><CalendarClock className="h-3.5 w-3.5" /> Rencana terdekat {formatPlanDate(counts.rencana_berikut)}</span>}
       </div>
 
       <div className={`mt-4 grid gap-3 ${showOwned ? 'lg:grid-cols-2' : ''}`}>
-        {showOwned && <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Peralatan tercatat</p>
+        {showOwned && <div className={groupClass}>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Peralatan tercatat</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Figure value={counts.trafo_digunakan} label="Trafo digunakan" />
             <Figure value={counts.trafo_tidak_digunakan} label="Trafo tidak digunakan" />
@@ -102,8 +107,8 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
           </div>
         </div>}
         {counts.fokus > 0 && (
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Trafo sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun · {fmt(counts.fokus)}</p>
+          <div className={groupClass}>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Trafo sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun · {fmt(counts.fokus)}</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Figure value={counts.aman} label="Aman (< 50 ppm)" tone="green" />
               <Figure value={counts.tinggi} label="≥ 50 ppm" tone="red" />

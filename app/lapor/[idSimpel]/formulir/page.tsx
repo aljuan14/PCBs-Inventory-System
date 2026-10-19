@@ -11,7 +11,7 @@ export default function CompanyForms() {
   return (
     <>
       <PortalHeader title="Isi formulir" description="Isi satu per satu lewat formulir, atau unggah template Excel di tiap formulir. Data tersimpan dapat diubah kapan saja." />
-      <CompanyReport key={company.id} supabase={supabase} companyId={company.id} onRoadmap={() => router.push(href('/roadmap'))} onChanged={refresh} />
+      <CompanyReport key={company.id} supabase={supabase} companyId={company.id} onRoadmap={() => router.push(href('/roadmap'))} onChanged={refresh} helpHref={`${href('/bantuan')}#arti-status`} />
     </>
   );
 }
