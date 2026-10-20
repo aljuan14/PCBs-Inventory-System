@@ -16,22 +16,23 @@ import FormTabs, { REPORT_TABS, type OtherForm, type ReportTab } from '@/compone
 
 
 /**
- * Everything a company reports, for one company: its PCBs status, the
+ * Everything a company reports, for one company: its PCBs status (on the
+ * admin's side; the company sees it on its home), the
  * statement, then the forms (1.1-1.4 entry by entry, 2 maintenance log, 3
  * storage, 4.2 processing, 5 balance). Shown to the admin on "Isi formulir"
  * and to the company itself on /lapor/<ID SIMPEL>. The parent keys it by
  * company. ?tab= and ?bagian= open a tab and scroll to a part of it (the
  * PCBs status links here from the dashboard and the roadmap).
  */
-export default function CompanyReport({ supabase, companyId, onRoadmap, onChanged, helpHref }: {
+export default function CompanyReport({ supabase, companyId, onRoadmap, onChanged, showStatus = true }: {
   supabase: SupabaseClient;
   companyId: string;
   /** Where the roadmap has its own page (the company's area): its tab is left out and roadmap links go there. */
   onRoadmap?: () => void;
   /** After any save that may change the company's status. */
   onChanged?: () => void;
-  /** Where the status colours are explained (the company's help page). */
-  helpHref?: string;
+  /** False where the status shows elsewhere (the company's home). */
+  showStatus?: boolean;
 }) {
   const params = useSearchParams();
   // A form 1.x by its category, one of forms 2-5, or the roadmap.
@@ -87,7 +88,7 @@ export default function CompanyReport({ supabase, companyId, onRoadmap, onChange
 
   return (
     <div className="space-y-6">
-      <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reload} onGo={go} helpHref={helpHref} />
+      {showStatus && <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reload} onGo={go} />}
       <div id="pernyataan" className="scroll-mt-4"><CompanyStatementCard supabase={supabase} companyId={companyId} reloadKey={reload} onStatement={onStatement} onSaved={() => setReload((value) => value + 1)} /></div>
 
       <section id="formulir" className="scroll-mt-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">

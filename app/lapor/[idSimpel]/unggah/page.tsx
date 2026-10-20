@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Download, FileSpreadsheet, Info } from 'lucide-react';
-import FormTabs, { type OtherForm, type ReportTab } from '@/components/FormTabs';
-import InventoryUpload, { UPLOAD_STATUS } from '@/components/InventoryUpload';
-import TemplateUpload from '@/components/TemplateUpload';
+import type { OtherForm } from '@/components/FormTabs';
+import { UPLOAD_STATUS } from '@/components/InventoryUpload';
 import { PortalHeader, useCompanyPortal } from '@/components/company/CompanyPortal';
 import type { UploadMode, UploadSummary } from '@/lib/company-upload-shared';
 import { formSpec } from '@/lib/form-fields';
@@ -15,13 +15,13 @@ type Upload = { id: string; kategori: InventoryCategory; mode: UploadMode; nama_
 
 const fmt = (value: number) => value.toLocaleString('id-ID');
 const fmtDate = (value: string) => new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
-const isInventory = (form: ReportTab): form is InventoryCategory => INVENTORY_CATEGORIES.some((category) => category.key === form);
+const isInventory = (form: InventoryCategory | OtherForm): form is InventoryCategory => INVENTORY_CATEGORIES.some((category) => category.key === form);
 
 /** Every Excel upload of forms 1.1–1.4 the company sent, with the admin's answer. */
-function UploadHistory({ reloadKey }: { reloadKey: number }) {
+function UploadHistory() {
   const { supabase, company } = useCompanyPortal();
   const [uploads, setUploads] = useState<{ key: string; list: Upload[] } | null>(null);
-  const key = `${company.id}|${reloadKey}`;
+  const key = company.id;
   useEffect(() => {
     let active = true;
     supabase.from('unggahan_perusahaan').select('id, kategori, mode, nama_file, status, catatan, created_at, diperiksa_at, ringkasan').eq('company_id', company.id).order('created_at', { ascending: false }).limit(100)
@@ -67,46 +67,45 @@ function UploadHistory({ reloadKey }: { reloadKey: number }) {
   );
 }
 
+/** The templates in the two groups of the form tabs. */
+const TEMPLATE_GROUPS = [
+  { title: 'Inventarisasi', description: 'Formulir 1.1–1.4: peralatan yang dimiliki. Unggahan diperiksa KLH dulu.', files: TEMPLATE_FILES.filter((entry) => isInventory(entry.form)) },
+  { title: 'Pengelolaan', description: 'Formulir 2–5: perawatan, penyimpanan, pengolahan, dan neraca. Unggahan langsung tersimpan.', files: TEMPLATE_FILES.filter((entry) => !isInventory(entry.form)) },
+];
+
 /**
- * Excel in one place: the official templates to download, the upload of the
- * form picked (1.1–1.4 checked by KLH first, 2–5 stored at once, as in the
- * form tabs), and the history of the uploads sent.
+ * The official templates to download, in the two groups of forms, and the
+ * history of the uploads sent. Uploading itself is done on each form's card
+ * on Isi formulir.
  */
 export default function CompanyUploads() {
-  const { supabase, company, refresh } = useCompanyPortal();
-  const [form, setForm] = useState<ReportTab>('transformator_digunakan');
-  const [reloadKey, setReloadKey] = useState(0);
+  const { href } = useCompanyPortal();
 
   return (
     <>
-      <PortalHeader title="Unggah Excel" description="Untuk data dalam jumlah banyak: unduh template resmi, isi tanpa mengubah judul kolomnya, lalu unggah di formulir yang sesuai." />
+      <PortalHeader title="Template & riwayat" description="Unduh template resmi, isi tanpa mengubah judul kolomnya, lalu unggah di card Tambah data pada formulir yang sesuai." />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Template resmi</h2>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {TEMPLATE_FILES.map((entry) => (
-            <a key={entry.form} href={entry.file} download className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-xs hover:border-emerald-300 hover:bg-emerald-50/50">
-              <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-700" />
-              <span className="min-w-0 flex-1"><span className="font-bold text-slate-900">{entry.code}</span> <span className="text-slate-700">{entry.title}</span></span>
-              <Download className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            </a>
-          ))}
-        </div>
-        <p className="mt-3 flex items-start gap-1.5 text-[11px] text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Baris contoh di template (bertanda CONTOH) tidak ikut terbaca. Jangan memindah, menghapus, atau mengganti nama kolom.</p>
-      </section>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {TEMPLATE_GROUPS.map((group) => (
+          <section key={group.title} className="rounded-2xl border border-slate-200 bg-white p-5">
+            <h2 className="text-sm font-semibold text-slate-900">Template {group.title.toLowerCase()}</h2>
+            <p className="text-xs text-slate-500">{group.description}</p>
+            <ul className="mt-3 space-y-2">
+              {group.files.map((entry) => (
+                <li key={entry.form} className="flex items-center gap-2 rounded-xl border border-slate-200 py-1.5 pl-3 pr-1.5 text-xs">
+                  <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-700" />
+                  <span className="min-w-0 flex-1"><span className="font-bold text-slate-900">{entry.code}</span> <span className="text-slate-700">{entry.title}</span></span>
+                  <Link href={href('/formulir', { tab: entry.form })} className="shrink-0 rounded-lg px-2 py-1.5 font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900">Buka formulir</Link>
+                  <a href={entry.file} download className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 font-semibold text-emerald-800 hover:bg-emerald-100"><Download className="h-3.5 w-3.5" /> Unduh</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <p className="-mt-2 flex items-start gap-1.5 text-[11px] text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Baris contoh di template (bertanda CONTOH) tidak ikut terbaca. Jangan memindah, menghapus, atau mengganti nama kolom.</p>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">Unggah ke formulir</h2>
-          <p className="text-xs text-slate-500">Pilih formulirnya, lalu unggah berkas template yang sudah diisi.</p>
-        </div>
-        <FormTabs value={form} onChange={setForm} withRoadmap={false} />
-        {isInventory(form)
-          ? <InventoryUpload key={form} companyId={company.id} category={form} onSent={() => { setReloadKey((value) => value + 1); refresh(); }} />
-          : <TemplateUpload key={form} supabase={supabase} companyId={company.id} kind={form as OtherForm} onImported={refresh} />}
-      </section>
-
-      <UploadHistory reloadKey={reloadKey} />
+      <UploadHistory />
     </>
   );
 }

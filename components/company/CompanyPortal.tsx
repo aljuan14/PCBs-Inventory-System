@@ -52,7 +52,7 @@ const MENU = [
   { path: '', label: 'Beranda', icon: Home },
   { path: '/formulir', label: 'Isi formulir', icon: ClipboardPen },
   { path: '/roadmap', label: 'Roadmap', icon: CalendarClock, badge: 'roadmap' as const },
-  { path: '/unggah', label: 'Unggah Excel', icon: FileSpreadsheet, badge: 'unggah' as const },
+  { path: '/unggah', label: 'Template & riwayat', icon: FileSpreadsheet, badge: 'unggah' as const },
   { path: '/bantuan', label: 'Bantuan', icon: LifeBuoy },
 ];
 
@@ -93,7 +93,7 @@ function SignOut() {
 
 /**
  * A company's own area (/lapor/<ID SIMPEL>/…): its sidebar (Beranda, Isi
- * formulir, Roadmap, Unggah Excel, Bantuan) around the page,
+ * formulir, Roadmap, Template & riwayat, Bantuan) around the page,
  * which reads the company from useCompanyPortal. Units sharing an ID SIMPEL
  * are picked first (?unit=), and the pick stays on every link. The admin sees
  * the same area, with a way back to the admin pages.

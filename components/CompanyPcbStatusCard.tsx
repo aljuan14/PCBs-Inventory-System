@@ -46,7 +46,7 @@ function Figure({ value, label, tone, done = 0, doneLabel }: { value: number; la
  * each item leading to where it is fixed. In the company's report `onGo`
  * opens the tab there; elsewhere `hrefFor` links to the report.
  */
-export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 0, onGo, hrefFor, showOwned = true, helpHref }: {
+export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 0, onGo, hrefFor, helpHref }: {
   supabase: SupabaseClient;
   companyId: string;
   reloadKey?: number;
@@ -54,8 +54,6 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
   onGo?: (target: StatusTarget) => void;
   /** Where to fix a message on another page; null leaves it as text. */
   hrefFor?: (target: StatusTarget) => string | null;
-  /** False where the equipment counts show elsewhere on the page (the company's home). */
-  showOwned?: boolean;
   /** Where the colours are explained (the company's help page). */
   helpHref?: string;
 }) {
@@ -96,8 +94,8 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
         {counts.rencana_berikut && <span className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs text-slate-600"><CalendarClock className="h-3.5 w-3.5" /> Rencana terdekat {formatPlanDate(counts.rencana_berikut)}</span>}
       </div>
 
-      <div className={`mt-4 grid gap-3 ${showOwned ? 'lg:grid-cols-2' : ''}`}>
-        {showOwned && <div className={groupClass}>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className={groupClass}>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Peralatan tercatat</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Figure value={counts.trafo_digunakan} label="Trafo digunakan" />
@@ -105,7 +103,7 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
             <Figure value={counts.kapasitor} label="Kapasitor" />
             <Figure value={counts.minyak} label="Data minyak" />
           </div>
-        </div>}
+        </div>
         {counts.fokus > 0 && (
           <div className={groupClass}>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Trafo sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun · {fmt(counts.fokus)}</p>

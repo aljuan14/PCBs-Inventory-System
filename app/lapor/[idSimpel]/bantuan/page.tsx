@@ -31,8 +31,8 @@ function Section({ id, title, children }: { id?: string; title: string; children
 const FAQ: Array<[string, string]> = [
   ['Perusahaan kami tidak memiliki trafo, kapasitor, maupun minyak dielektrik. Apa yang diisi?', 'Di menu Isi formulir, pilih "Tidak memiliki peralatan" pada bagian Kepemilikan peralatan dan unggah surat pernyataan yang ditandatangani. KLH akan memverifikasi suratnya.'],
   ['Trafo kami buatan 1997 ke atas. Apakah harus diisi satu per satu?', `Tidak. Formulir 1.1 dan 1.2 hanya untuk trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui. Trafo ${TRAFO_FOCUS_YEAR} ke atas cukup jumlah dan tonasenya di bagian Kepemilikan peralatan.`],
-  ['Kenapa unggahan Excel kami belum masuk ke data?', 'Unggahan formulir 1.1–1.4 diperiksa KLH dulu. Statusnya terlihat di menu Unggah Excel: menunggu, diterima, atau ditolak beserta alasannya.'],
-  ['Unggahan kami ditolak karena "bukan template resmi". Kenapa?', 'Sistem mengenali kolom dari judulnya. Unduh template resmi di menu Unggah Excel dan jangan memindah, menghapus, atau mengganti nama kolomnya.'],
+  ['Kenapa unggahan Excel kami belum masuk ke data?', 'Unggahan formulir 1.1–1.4 diperiksa KLH dulu. Statusnya terlihat di card Tambah data pada formulirnya dan di menu Template & riwayat: menunggu, diterima, atau ditolak beserta alasannya.'],
+  ['Unggahan kami ditolak karena "bukan template resmi". Kenapa?', 'Sistem mengenali kolom dari judulnya. Unduh template resmi di menu Template & riwayat dan jangan memindah, menghapus, atau mengganti nama kolomnya.'],
   ['Titik trafo kami muncul di laut pada peta.', 'Biasanya karena lintang selatan ditulis tanpa tanda minus. Tulis koordinat seperti -6.2088, 106.8456, lalu perbaiki di formulir (Data tersimpan, tombol ubah).'],
   ['Data yang sudah tersimpan salah. Bagaimana mengubahnya?', 'Buka formulirnya di menu Isi formulir, lalu di bagian Data tersimpan klik ikon ubah pada baris yang salah.'],
 ];
@@ -49,7 +49,7 @@ export default function CompanyHelp() {
       <Section title="Langkah melapor">
         <ol className="list-decimal space-y-1.5 pl-5">
           <li><span className="font-semibold">Kepemilikan peralatan</span> di menu <Link href={href('/formulir', { bagian: 'pernyataan' })} className="font-semibold text-emerald-700 underline">Isi formulir</Link>: nyatakan apakah perusahaan memiliki peralatan yang berpotensi mengandung PCBs.</li>
-          <li><span className="font-semibold">Formulir 1.1–1.4</span>: data trafo yang masih digunakan, trafo yang tidak digunakan, kapasitor, dan minyak dielektrik. Isi satu per satu atau <Link href={href('/unggah')} className="font-semibold text-emerald-700 underline">unggah template Excel</Link>.</li>
+          <li><span className="font-semibold">Formulir 1.1–1.4</span>: data trafo yang masih digunakan, trafo yang tidak digunakan, kapasitor, dan minyak dielektrik. Isi satu per satu atau unggah <Link href={href('/unggah')} className="font-semibold text-emerald-700 underline">template Excel</Link> di card Tambah data tiap formulir.</li>
           <li><span className="font-semibold">Bukti dukung</span>: tempel tautan Google Drive untuk dokumentasi di bawah setiap formulir 1.x.</li>
           <li><span className="font-semibold"><Link href={href('/roadmap')} className="text-emerald-700 underline">Roadmap</Link></span>: beri tanggal rencana untuk trafo buatan sebelum {TRAFO_FOCUS_YEAR}.</li>
           <li><span className="font-semibold">Formulir 2–5</span> bila ada kegiatannya: perawatan (pengurangan), penyimpanan limbah, pengolahan, dan neraca pelaporan.</li>

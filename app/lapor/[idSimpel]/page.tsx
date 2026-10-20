@@ -76,7 +76,7 @@ function StartHere() {
       <p className="mx-auto mt-1 max-w-xl text-sm text-slate-500">Mulai dengan mengisi kepemilikan peralatan dan formulir 1.1–1.4, satu per satu atau dengan template Excel. Ringkasan, grafik, dan peta akan muncul di sini setelah ada data.</p>
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         <Link href={href('/formulir')} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><ClipboardPen className="h-4 w-4" /> Isi formulir</Link>
-        <Link href={href('/unggah')} className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FileSpreadsheet className="h-4 w-4" /> Unggah Excel</Link>
+        <Link href={href('/unggah')} className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FileSpreadsheet className="h-4 w-4" /> Template Excel</Link>
       </div>
     </section>
   );
@@ -118,7 +118,7 @@ export default function CompanyHome() {
   return (
     <>
       <PortalHeader title="Beranda" description="Status laporan PCBs perusahaan, ringkasan peralatan, dan letaknya di peta." />
-      <CompanyPcbStatusCard supabase={supabase} companyId={company.id} hrefFor={where} showOwned={false} helpHref={`${href('/bantuan')}#arti-status`} />
+      <CompanyPcbStatusCard supabase={supabase} companyId={company.id} hrefFor={where} helpHref={`${href('/bantuan')}#arti-status`} />
       <UploadsToWatch />
 
       {loaded === null ? <div className="h-48 animate-pulse rounded-2xl bg-slate-100" />
