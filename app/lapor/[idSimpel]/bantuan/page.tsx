@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, BookOpen, CalendarClock, CheckCircle2, ChevronDown, CircleAlert, ClipboardPen, Download, FileSpreadsheet, FileText,
-  Gauge, HelpCircle, Lightbulb, ListOrdered, MapPin, MessageCircle, Paperclip, Search, X,
+  Gauge, HelpCircle, Lightbulb, ListOrdered, MapPin, MessageCircle, Paperclip, Plus, Search, X,
 } from 'lucide-react';
 import { PortalHeader, PortalSubnav, useCompanyPortal } from '@/components/company/CompanyPortal';
 import { adminContactLink } from '@/lib/contact';
@@ -148,22 +148,25 @@ function FaqList() {
         <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">Tidak ada pertanyaan yang cocok dengan &ldquo;{query}&rdquo;. Coba kata lain, atau hubungi admin di bagian bawah halaman.</p>
       ) : groups.map((group) => (
         <div key={group.title}>
-          <h3 className="mb-2 mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{group.title}</h3>
-          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+          <h3 className="mb-3 mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{group.title}</h3>
+          <ul className="space-y-3">
             {group.items.map((item) => {
               const expanded = searching || open.has(item.id);
               return (
-                <li key={item.id} id={`faq-${item.id}`} className="scroll-mt-4">
-                  <button type="button" onClick={() => toggle(item.id)} aria-expanded={expanded} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${expanded ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
-                    <span className="min-w-0 flex-1 text-sm font-medium text-slate-900">{item.q}</span>
-                    <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180 text-emerald-700' : ''}`} />
+                <li key={item.id} id={`faq-${item.id}`} className={`scroll-mt-4 overflow-hidden rounded-2xl border bg-white transition-shadow duration-300 ${expanded ? 'border-emerald-200 shadow-[0_12px_32px_-12px_rgba(15,23,42,0.18)]' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <button type="button" onClick={() => toggle(item.id)} aria-expanded={expanded} className={`flex w-full items-center gap-4 px-6 py-4 text-left ${expanded ? 'bg-gradient-to-b from-slate-50 to-white' : ''}`}>
+                    <span className={`min-w-0 flex-1 text-[15px] font-semibold transition-colors ${expanded ? 'text-emerald-700' : 'text-slate-900'}`}>{item.q}</span>
+                    {expanded ? <ChevronDown className="h-5 w-5 shrink-0 text-emerald-700" /> : <Plus className="h-5 w-5 shrink-0 text-slate-800" strokeWidth={2.5} />}
                   </button>
-                  {expanded && (
-                    <div className="space-y-2 bg-slate-50 px-4 pb-4 text-sm leading-relaxed text-slate-600">
-                      <p>{item.a}</p>
-                      {item.go && <Link href={href(item.go.path, item.go.query)} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">{item.go.label} →</Link>}
+                  {/* Opens smoothly: the row grows from 0fr to 1fr. */}
+                  <div inert={!expanded} className={`grid transition-[grid-template-rows] duration-300 ease-out ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                    <div className="overflow-hidden">
+                      <div className="space-y-3 px-6 pb-5 text-sm leading-7 text-slate-500">
+                        <p>{item.a}</p>
+                        {item.go && <Link href={href(item.go.path, item.go.query)} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">{item.go.label} →</Link>}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </li>
               );
             })}
