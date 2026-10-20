@@ -13,7 +13,7 @@ type Category = 'transformator_digunakan' | 'transformator_tidak_digunakan';
 type FocusRow = {
   kategori: Category; id: string; nama_merek: string | null; nomor_serial: string | null; tahun_pembuatan: number | null;
   lokasi: string | null; unit: string | null; ppm: number | null; kebutuhan: Need | null;
-  rencana_id: string | null; rencana_untuk_alat: boolean | null; rencana_tanggal: string | null; rencana_selesai: string | null;
+  rencana_id: string | null; rencana_untuk_alat: boolean | null; rencana_tanggal: string | null; rencana_selesai: string | null; rencana_catatan: string | null;
 };
 /** What a ticked transformer needs to be planned, and its own plan if it has one. */
 type Picked = { kategori: Category; kebutuhan: Need; ownPlan: string | null; done: boolean };
@@ -71,6 +71,8 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
   const [counts, setCounts] = useState<{ key: string; values: Partial<Record<Filter, number>> } | null>(null);
   const [picked, setPicked] = useState<Map<string, Picked>>(new Map());
   const [date, setDate] = useState('');
+  // An optional note going with the date, e.g. why it is set so.
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestKey = `${companyId}|${reloadKey}|${filter}|${limit}`;
@@ -131,6 +133,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
     if (failed) return setError(failed.message);
     setPicked(new Map());
     setDate('');
+    setNote('');
     onChange();
   };
 
@@ -151,7 +154,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
       results.push(await supabase.from('equipment_plans').delete().eq('company_id', companyId).in('item_id', slice).eq('jenis', 'penanganan'));
     }
     for (let at = 0; at < chosen.length; at += BATCH) {
-      results.push(await supabase.from('equipment_plans').insert(chosen.slice(at, at + BATCH).map(([id, row]) => ({ company_id: companyId, kategori: row.kategori, item_id: id, jenis: row.kebutuhan, rencana_tanggal: date }))));
+      results.push(await supabase.from('equipment_plans').insert(chosen.slice(at, at + BATCH).map(([id, row]) => ({ company_id: companyId, kategori: row.kategori, item_id: id, jenis: row.kebutuhan, rencana_tanggal: date, catatan: note.trim() || null }))));
     }
     return results;
   });
@@ -190,10 +193,12 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
             <div className="flex flex-wrap items-end gap-3">
               <span className="self-center text-xs font-semibold text-emerald-900">{fmt(picked.size)} trafo dipilih</span>
               <label className="text-xs font-medium text-slate-600">Tanggal rencana<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`${inputClass} mt-1 block`} /></label>
+              <label className="min-w-56 flex-1 text-xs font-medium text-slate-600">Keterangan <span className="font-normal text-slate-400">(opsional)</span>
+                <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} placeholder="mis. menunggu jadwal laboratorium, anggaran tahun depan" className={`${inputClass} mt-1 block w-full`} />
+              </label>
               <button type="button" disabled={!date || busy !== null} onClick={setPlan} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40">
                 {busy === 'plan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />} Tetapkan rencana
               </button>
-              <span className="flex-1" />
               {toFinish.length > 0 && (
                 <button type="button" disabled={busy !== null} onClick={() => finishPlans(toFinish.map(([, row]) => row.ownPlan!))} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40">
                   <CheckCircle2 className="h-4 w-4" /> Tandai selesai ({fmt(toFinish.length)})
@@ -249,6 +254,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
                             <button type="button" title="Hapus rencana" aria-label="Hapus rencana" disabled={busy !== null} onClick={() => removePlans([own])} className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><X className="h-3.5 w-3.5" /></button>
                           )}
                         </div>
+                        {row.rencana_catatan && <span title={row.rencana_catatan} className="mt-1 line-clamp-2 block max-w-64 text-[11px] text-slate-500">{row.rencana_catatan}</span>}
                         {row.rencana_tanggal && !own && <span className="mt-0.5 block text-[10px] text-slate-400">rencana bersama (lama)</span>}
                       </td>
                     </tr>

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarClock, FileSignature, Lock, Plus, ShieldCheck } from 'lucide-react';
+import { FileSignature, Lock } from 'lucide-react';
+import AddDataCard, { ManualChoice, UploadChoice } from '@/components/AddDataCard';
 import FormEditor from '@/components/FormEditor';
 import FormTabs, { OTHER_FORMS, type ReportTab } from '@/components/FormTabs';
 import { CHECKLISTS, type ChecklistKey } from '@/lib/checklists';
@@ -42,6 +43,15 @@ function ChecklistPreview({ checklist }: { checklist: ChecklistKey }) {
   );
 }
 
+/** The card that adds data, its two choices shown but closed. */
+function LockedAddCard() {
+  return (
+    <div className="pointer-events-none select-none" aria-hidden>
+      <AddDataCard manual={<ManualChoice hint="Satu per satu, untuk data sedikit." disabled onClick={noop} />} upload={<div className="grid opacity-50"><UploadChoice hint="Banyak data sekaligus." onFile={noop} /></div>} />
+    </div>
+  );
+}
+
 function TabPreview({ tab }: { tab: ReportTab }) {
   const spec = FORM_SPECS.find((form) => form.category === tab);
   if (spec) {
@@ -50,28 +60,11 @@ function TabPreview({ tab }: { tab: ReportTab }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Formulir {spec.code}: {spec.title}</h2>
-            <p className="text-xs text-slate-500">Diisi satu per satu{tab.startsWith('transformator') ? `, hanya trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui` : ''}. Di bawahnya: data tersimpan dan bukti dukung.</p>
+            <p className="text-xs text-slate-500">Isi lewat formulir atau unggah template Excel{tab.startsWith('transformator') ? `, hanya trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui` : ''}. Di bawahnya: data tersimpan dan bukti dukung.</p>
           </div>
-          <button type="button" disabled className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white opacity-40"><Plus className="h-4 w-4" /> Tambah isian</button>
         </div>
+        <LockedAddCard />
         <FormPreview sections={spec.sections} />
-      </div>
-    );
-  }
-  if (tab === 'roadmap') {
-    return (
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[
-          ['Saring trafo', 'Belum diuji, ≥ 50 ppm, tidak digunakan, tanpa rencana, atau lewat tanggal, dengan jumlahnya.'],
-          ['Centang dan beri tanggal', 'Trafo sebelum 1997 yang dicentang diberi tanggal rencana; tanggal baru menggantikan yang lama.'],
-          ['Pantau rencananya', 'Tanggal, terjadwal atau lewat, dan selesai, langsung di baris trafonya.'],
-        ].map(([title, text]) => (
-          <div key={title} className="rounded-2xl border border-slate-200 bg-white p-4 opacity-80">
-            <CalendarClock className="h-4 w-4 text-slate-400" />
-            <p className="mt-2 text-sm font-semibold text-slate-800">{title}</p>
-            <p className="mt-1 text-xs text-slate-500">{text}</p>
-          </div>
-        ))}
       </div>
     );
   }
@@ -88,30 +81,14 @@ function TabPreview({ tab }: { tab: ReportTab }) {
 }
 
 /**
- * A company's report before a company is picked (Isi formulir): the status,
- * the statement and every form laid out as they will be, locked. The tabs
+ * A company's report before a company is picked (Isi formulir): the statement
+ * and every form laid out as they will be, locked. The tabs
  * still open, to show what each form asks.
  */
 export default function LockedReport() {
   const [tab, setTab] = useState<ReportTab>('transformator_digunakan');
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="flex shrink-0 items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400"><ShieldCheck className="h-5 w-5" /></span>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status PCBs</p>
-              <p className="text-lg font-semibold text-slate-400">–</p>
-            </div>
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <p className="text-sm text-slate-500">Ringkasan peralatan perusahaan dan lampu merah / kuning / hijau beserta apa yang harus dilakukan.</p>
-            <LockNote text="Tampil setelah perusahaan dipilih." />
-          </div>
-        </div>
-      </section>
-
       <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><FileSignature className="h-4 w-4" /></div>
@@ -131,7 +108,7 @@ export default function LockedReport() {
       </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">
-        <FormTabs value={tab} onChange={setTab} />
+        <FormTabs value={tab} onChange={setTab} withRoadmap={false} />
         <LockNote text="Pratinjau formulir. Pilih perusahaan di atas untuk mengisinya." />
         <TabPreview tab={tab} />
       </section>

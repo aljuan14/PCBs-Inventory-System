@@ -13,8 +13,9 @@ import { createClient } from '@/lib/supabase/client';
 import { loadCompanyOptions } from '@/lib/company-sort';
 
 /**
- * The admin filling in a company's report (components/CompanyReport.tsx);
- * the company itself reaches the same on /lapor/<ID SIMPEL>. Before a company
+ * The admin filling in a company's report (components/CompanyReport.tsx), as
+ * the company sees it on /lapor/<ID SIMPEL>: the status is on the dashboard,
+ * the roadmap on its own page. Before a company
  * is picked: the companies needing attention and the report laid out, locked.
  * The company is in the address (?company=) and remembered for next time.
  */
@@ -47,7 +48,7 @@ function FormulirContent() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Pelaporan</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Isi formulir</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-500">
-          Laporan inventarisasi PCBs langsung lewat formulir, sesuai template KLHK. Isiannya diperiksa dengan aturan yang sama seperti unggahan Excel.
+          Isi satu per satu lewat formulir, atau unggah template Excel di tiap formulir. Data tersimpan dapat diubah kapan saja. Status PCBs perusahaan ada di Dashboard, roadmap di menu Roadmap.
         </p>
       </header>
 
@@ -57,7 +58,7 @@ function FormulirContent() {
         {companyId && <button type="button" onClick={() => pick(null)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800"><X className="h-3.5 w-3.5" /> Semua perusahaan</button>}
       </div>
 
-      {companyId ? <CompanyReport key={companyId} supabase={supabase} companyId={companyId} /> : (
+      {companyId ? <CompanyReport key={companyId} supabase={supabase} companyId={companyId} onRoadmap={() => router.push(`/roadmap?company=${companyId}`)} showStatus={false} /> : (
         <>
           {companies && <CompanyAttentionList supabase={supabase} companies={companies} onPick={pick} />}
           <LockedReport />

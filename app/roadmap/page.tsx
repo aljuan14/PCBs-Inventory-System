@@ -4,8 +4,6 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import CompanyPicker from '@/components/CompanyPicker';
-import CompanyPcbStatusCard, { reportHref } from '@/components/CompanyPcbStatusCard';
-import { useReadOnly } from '@/components/useAccess';
 import type { CompanyOption } from '@/components/DataTable';
 import RoadmapPanels from '@/components/RoadmapPanels';
 import { RoadmapSchedule } from '@/components/CompanyOverviewLists';
@@ -21,7 +19,6 @@ function RoadmapContent() {
   const companyId = params.get('company');
   const [companies, setCompanies] = useState<CompanyOption[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const readOnly = useReadOnly();
   const reload = useCallback(() => setReloadKey((value) => value + 1), []);
 
   useEffect(() => {
@@ -46,7 +43,7 @@ function RoadmapContent() {
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Pelaporan</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Roadmap uji, penanganan &amp; pengelolaan</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-500">Untuk trafo sebelum {TRAFO_FOCUS_YEAR}: trafo masih digunakan yang belum diuji (kapan diuji) atau ≥ 50 ppm (kapan diretrofilling atau diganti), dan trafo yang sudah tidak digunakan (kapan dikelola). Status perusahaan menjadi merah bila ada yang belum punya rencana atau lewat tanggalnya.</p>
+        <p className="mt-2 max-w-3xl text-sm text-slate-500">Untuk trafo sebelum {TRAFO_FOCUS_YEAR}: trafo masih digunakan yang belum diuji (kapan diuji) atau ≥ 50 ppm (kapan diretrofilling atau diganti), dan trafo yang sudah tidak digunakan (kapan dikelola). Status perusahaan (di Dashboard) menjadi merah bila ada yang belum punya rencana atau lewat tanggalnya.</p>
       </header>
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
         <span className="text-sm font-semibold text-slate-700">Perusahaan</span>
@@ -55,10 +52,7 @@ function RoadmapContent() {
       </div>
       {!companyId && companies && <RoadmapSchedule supabase={supabase} companies={companies} onPick={pick} />}
       {companyId && (
-        <>
-          <CompanyPcbStatusCard supabase={supabase} companyId={companyId} reloadKey={reloadKey} hrefFor={(target) => reportHref(companyId, target, { readOnly, onRoadmap: true })} />
-          <RoadmapPanels supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={reload} />
-        </>
+        <RoadmapPanels supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={reload} />
       )}
     </div>
   );
