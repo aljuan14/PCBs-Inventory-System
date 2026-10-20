@@ -38,8 +38,8 @@ const FAQ_GROUPS: Array<{ title: string; items: Faq[] }> = [
     { id: 'belum-diuji', q: 'Trafo kami belum pernah diuji kandungan PCBs-nya. Apa yang diisi?', a: 'Kosongkan bagian hasil uji. Trafo tersebut dihitung "Belum diuji" dan perlu diberi tanggal rencana uji di menu Roadmap. Setelah diuji, ubah datanya dan isi jenis uji, metode, penyedia jasa, serta konsentrasi PCBs (ppm).' },
   ] },
   { title: 'Template Excel', items: [
-    { id: 'unggah-belum-masuk', q: 'Kenapa unggahan Excel kami belum masuk ke data?', a: 'Unggahan formulir 1.1–1.4 diperiksa KLH dulu sebelum masuk ke data. Statusnya (menunggu, diterima, atau ditolak beserta alasannya) terlihat di card Tambah data pada formulirnya dan di menu Template & riwayat. Unggahan formulir 2–5 langsung tersimpan setelah lolos pemeriksaan otomatis.', go: { label: 'Lihat riwayat unggahan', path: '/unggah' } },
-    { id: 'bukan-template', q: 'Unggahan kami ditolak karena "bukan template resmi". Kenapa?', a: 'Sistem mengenali kolom dari judulnya. Unduh template resmi di menu Template & riwayat, isi mulai baris di bawah contoh, dan jangan memindah, menghapus, menggabungkan, atau mengganti nama kolomnya.', go: { label: 'Unduh template resmi', path: '/unggah' } },
+    { id: 'unggah-belum-masuk', q: 'Kenapa unggahan Excel kami belum masuk ke data?', a: 'Unggahan formulir 1.1–1.4 diperiksa KLH dulu sebelum masuk ke data. Statusnya (menunggu, diterima, atau ditolak beserta alasannya) terlihat di card Tambah data pada formulirnya dan di menu Riwayat unggahan. Unggahan formulir 2–5 langsung tersimpan setelah lolos pemeriksaan otomatis.', go: { label: 'Lihat riwayat unggahan', path: '/unggah' } },
+    { id: 'bukan-template', q: 'Unggahan kami ditolak karena "bukan template resmi". Kenapa?', a: 'Sistem mengenali kolom dari judulnya. Unduh template resmi di menu Template Excel, isi mulai baris di bawah contoh, dan jangan memindah, menghapus, menggabungkan, atau mengganti nama kolomnya.', go: { label: 'Unduh template resmi', path: '/template' } },
     { id: 'tambah-ganti', q: 'Apa beda "Menambahkan" dan "Mengganti semua" saat mengunggah formulir 1.1–1.4?', a: '"Menambahkan" memasukkan baris baru dan melewati baris yang sudah ada di data perusahaan. "Mengganti semua" menghapus seluruh data formulir itu (termasuk yang diisi lewat formulir) lalu menggantinya dengan isi berkas. Gunakan "Mengganti semua" hanya bila berkas Excel Anda adalah daftar lengkap terbaru.' },
     { id: 'batal-unggah', q: 'Kami salah mengunggah berkas. Bisakah dibatalkan?', a: 'Selama statusnya masih "Menunggu pemeriksaan KLH", unggahan bisa dibatalkan dari daftar unggahan di card Tambah data formulirnya. Satu formulir hanya bisa punya satu unggahan yang menunggu; batalkan dulu yang lama bila ingin mengirim berkas pengganti.' },
     { id: 'baris-error', q: 'Muncul pesan "Baris 12: …" setelah memilih berkas.', a: `Itu hasil pemeriksaan otomatis: baris tersebut belum lengkap atau isinya tidak sesuai (misalnya tahun bukan angka, koordinat tidak terbaca). Perbaiki di Excel lalu unggah lagi. Baris contoh bertanda CONTOH tidak ikut terbaca. Ukuran berkas maksimal ${UPLOAD_MB} MB.` },
@@ -325,7 +325,7 @@ export default function CompanyHelp() {
 
         <Section id="excel" title="Template Excel" description="Untuk data dalam jumlah banyak.">
           <ol className="list-decimal space-y-1 pl-5">
-            <li>Unduh template resmi di menu <Link href={href('/unggah')} className={linkClass}>Template &amp; riwayat</Link> atau lewat tautan &ldquo;Unduh template&rdquo; di card Tambah data.</li>
+            <li>Unduh template resmi di menu <Link href={href('/template')} className={linkClass}>Template Excel</Link> atau lewat tautan &ldquo;Unduh template&rdquo; di card Tambah data.</li>
             <li>Isi mulai baris di bawah contoh. Baris bertanda CONTOH tidak ikut terbaca.</li>
             <li>Di tab formulir yang sesuai, klik atau seret berkas ke kotak &ldquo;Unggah template Excel&rdquo; (maksimal {UPLOAD_MB} MB).</li>
             <li>Periksa ringkasannya: jumlah baris terbaca dan baris yang perlu diperbaiki. Perbaiki di Excel bila ada yang salah, lalu unggah lagi.</li>
@@ -399,7 +399,7 @@ export default function CompanyHelp() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <a href={REGULATION_FILE.file} target="_blank" rel="noreferrer" className="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-800 hover:border-emerald-300 hover:bg-emerald-50/50"><FileText className="h-4 w-4 shrink-0 text-emerald-700" /> {REGULATION_FILE.title}</a>
-              <Link href={href('/unggah')} className="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-800 hover:border-emerald-300 hover:bg-emerald-50/50"><Download className="h-4 w-4 shrink-0 text-emerald-700" /> Template Excel formulir 1.1–5</Link>
+              <Link href={href('/template')} className="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-800 hover:border-emerald-300 hover:bg-emerald-50/50"><Download className="h-4 w-4 shrink-0 text-emerald-700" /> Template Excel formulir 1.1–5</Link>
             </div>
             <div className="rounded-xl bg-slate-50 p-4">
               <p className="font-semibold text-slate-900">Admin Inventarisasi PCBs</p>

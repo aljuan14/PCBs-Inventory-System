@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ArrowLeft, Building2, CalendarClock, ChevronRight, ClipboardPen, FileSpreadsheet, Home, LifeBuoy, Loader2, LogOut, Repeat } from 'lucide-react';
+import { ArrowLeft, Building2, CalendarClock, ChevronRight, ClipboardPen, FileSpreadsheet, History, Home, LifeBuoy, Loader2, LogOut, Repeat } from 'lucide-react';
 import { useAccess } from '@/components/useAccess';
 import { fetchPcbStatus, manageOpenOf } from '@/lib/company-pcb-status';
 import { createClient } from '@/lib/supabase/client';
@@ -28,16 +28,22 @@ type Portal = {
 
 const PortalContext = createContext<Portal | null>(null);
 
-// Where a page puts its own column beside the sidebar (PortalSubnav).
-const SubnavSlot = createContext<HTMLDivElement | null>(null);
+// Where a page puts its own column beside the sidebar (PortalSubnav), and how it says the column is there.
+const SubnavSlot = createContext<{ slot: HTMLDivElement | null; setShown: (shown: boolean) => void }>({ slot: null, setShown: () => {} });
 
 /** A page's own column right beside the sidebar, staying put while the page scrolls, its content centred top to bottom (wide screens only). */
 export function PortalSubnav({ children }: { children: React.ReactNode }) {
-  const slot = useContext(SubnavSlot);
+  const { slot, setShown } = useContext(SubnavSlot);
+  // The page then sits right beside the column instead of centred (CompanyPortal).
+  useEffect(() => {
+    setShown(true);
+    return () => setShown(false);
+  }, [setShown]);
   if (!slot) return null;
   return createPortal(
-    // Centred top to bottom; my-auto, not justify-center, so a list taller than the screen scrolls from its top.
-    <div className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col overflow-y-auto px-4 py-6 lg:flex print:hidden"><div className="my-auto">{children}</div></div>,
+    // As wide as its content. Centred top to bottom; my-auto, not justify-center, so a list
+    // taller than the screen scrolls from its top.
+    <div className="sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto py-6 pl-5 pr-1 lg:flex print:hidden"><div className="my-auto">{children}</div></div>,
     slot,
   );
 }
@@ -67,7 +73,8 @@ const MENU = [
   { path: '', label: 'Beranda', icon: Home },
   { path: '/formulir', label: 'Isi formulir', icon: ClipboardPen },
   { path: '/roadmap', label: 'Roadmap', icon: CalendarClock, badge: 'roadmap' as const },
-  { path: '/unggah', label: 'Template & riwayat', icon: FileSpreadsheet, badge: 'unggah' as const },
+  { path: '/template', label: 'Template Excel', icon: FileSpreadsheet },
+  { path: '/unggah', label: 'Riwayat unggahan', icon: History, badge: 'unggah' as const },
   { path: '/bantuan', label: 'Bantuan', icon: LifeBuoy },
 ];
 
@@ -108,7 +115,7 @@ function SignOut() {
 
 /**
  * A company's own area (/lapor/<ID SIMPEL>/…): its sidebar (Beranda, Isi
- * formulir, Roadmap, Template & riwayat, Bantuan) around the page,
+ * formulir, Roadmap, Template Excel, Riwayat unggahan, Bantuan) around the page,
  * which reads the company from useCompanyPortal. Units sharing an ID SIMPEL
  * are picked first (?unit=), and the pick stays on every link. The admin sees
  * the same area, with a way back to the admin pages.
@@ -126,6 +133,8 @@ export default function CompanyPortal({ children }: { children: React.ReactNode 
   const [email, setEmail] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [subnavSlot, setSubnavSlot] = useState<HTMLDivElement | null>(null);
+  const [subnavShown, setSubnavShown] = useState(false);
+  const subnav = useMemo(() => ({ slot: subnavSlot, setShown: setSubnavShown }), [subnavSlot]);
 
   useEffect(() => {
     let active = true;
@@ -181,7 +190,7 @@ export default function CompanyPortal({ children }: { children: React.ReactNode 
 
   return (
     <PortalContext.Provider value={portal}>
-      <SubnavSlot.Provider value={subnavSlot}>
+      <SubnavSlot.Provider value={subnav}>
       <div className="flex min-h-screen">
         <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-[#fbfcfa] px-4 py-5 print:hidden">
           <div className="flex items-center gap-3 px-2 pb-5">
@@ -221,7 +230,7 @@ export default function CompanyPortal({ children }: { children: React.ReactNode 
         </aside>
         <div ref={setSubnavSlot} className="contents" />
         <div key={company.id} className="min-w-0 flex-1">
-          <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 lg:px-8">{children}</div>
+          <div className={`mx-auto max-w-5xl space-y-6 px-5 py-8 lg:px-8 ${subnavShown ? 'lg:ml-0 lg:pl-14' : ''}`}>{children}</div>
         </div>
       </div>
       </SubnavSlot.Provider>
