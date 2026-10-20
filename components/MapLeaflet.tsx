@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { DivIcon, LayerGroup, Map as LeafletMap } from 'leaflet';
+import type { Canvas, DivIcon, LayerGroup, Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { House, Loader2, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
 import { INVENTORY_CATEGORIES, PCB_CLASSES, getCategoryColor, getCategoryLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
@@ -26,6 +26,8 @@ export interface MapPoint {
 }
 
 type ColorMode = 'pcb' | 'category';
+/** Dots: many small dots, one per nearby data (fine cells); groups: numbered bubbles (coarse cells). */
+type ViewMode = 'dots' | 'groups';
 type PcbKey = 'high' | 'moderate' | 'safe' | 'untested';
 
 // The same colours as the Status PCBs donuts (RISK_CLASSES in DashboardCharts).
@@ -47,12 +49,16 @@ const CELL_CATEGORIES: Array<{ key: keyof MapCell; category: InventoryCategory }
 // zoom the map out to the whole world.
 const INDONESIA: [[number, number], [number, number]] = [[-11, 95], [6, 141]];
 const FIT_BOX = { south: -15, west: 90, north: 10, east: 145 };
-// Single points are drawn once at most this many are in view; above it, cells.
+// Single points are drawn once at most this many are in view; above it, cells (dots or bubbles).
 const POINT_LIMIT = 1500;
-// Grid cell of about 60 px at a zoom level.
-const cellSize = (zoom: number) => Math.min(5, Math.max(0.0005, 84 / 2 ** zoom));
-// Summary mode: the levels prepared by summary_build (migration 20261010000003).
-const summaryLevel = (zoom: number) => Math.min(11, Math.max(4, Math.round(zoom)));
+// Grid cell of about 60 px at a zoom level (groups), or of about 6 px (dots).
+const cellSize = (zoom: number, view: ViewMode) => view === 'dots'
+  ? Math.min(1, Math.max(0.0001, 84 / 10 / 2 ** zoom))
+  : Math.min(5, Math.max(0.0005, 84 / 2 ** zoom));
+// Summary mode: the levels prepared by summary_build (migration 20261010000003); dots three levels finer (cells an eighth the size).
+const summaryLevel = (zoom: number, view: ViewMode) => Math.min(11, Math.max(4, Math.round(zoom) + (view === 'dots' ? 3 : 0)));
+// A dot's radius grows a little with what it holds: 3 px for one, up to 6 px.
+const dotRadius = (total: number) => Math.min(6, 3 + Math.log2(total) * 0.5);
 
 
 
@@ -152,8 +158,9 @@ interface MapProps {
 /**
  * Inventory map: filters above, satellite imagery (or a clean basemap), and every
  * point with coordinates. Zoomed out it shows the points summed per grid
- * cell as bubbles split by PCBs class or category; zoomed in far enough, the
- * single points. Only what is on screen is loaded (map_clusters, migration
+ * cell: as many small dots, one per fine cell in the colour most of it has
+ * (Titik, the default), or as numbered bubbles split by PCBs class or
+ * category (Kelompok); zoomed in far enough, the single points. Only what is on screen is loaded (map_clusters, migration
  * 20261010000002).
  */
 export default function MapLeaflet({ supabase, companies, scope, onScopeChange, category, reloadKey = 0, height = '480px', onSelectPoint, fixedCompany = false }: MapProps) {
@@ -162,6 +169,8 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   const mapRef = useRef<LeafletMap | null>(null);
   const leafletRef = useRef<typeof import('leaflet') | null>(null);
   const layerRef = useRef<LayerGroup | null>(null);
+  // Thousands of dots are drawn on one canvas, not as as many page elements.
+  const canvasRef = useRef<Canvas | null>(null);
   const basemapLayers = useRef<Partial<Record<Basemap, LayerGroup>>>({});
   const requestRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -175,6 +184,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   const [ownCompany, setOwnCompany] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>(category === 'kapasitor' ? 'category' : 'pcb');
   const [basemap, setBasemap] = useState<Basemap>('satellite');
+  const [view, setView] = useState<ViewMode>('dots');
   const [fullscreen, setFullscreen] = useState(false);
   const [shown, setShown] = useState<Shown | null>(null);
   const [loading, setLoading] = useState(false);
@@ -203,6 +213,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
       }
       basemapLayers.current.satellite!.addTo(map);
       layerRef.current = L.layerGroup().addTo(map);
+      canvasRef.current = L.canvas({ padding: 0.5 });
       mapRef.current = map;
       setReady(true);
     });
@@ -227,15 +238,14 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
     const map = mapRef.current;
     if (!map) return;
     const request = ++requestRef.current;
-    const view = map.getBounds();
     // A margin around the view so a small pan does not empty its edges.
-    const padded = view.pad(0.25);
+    const padded = map.getBounds().pad(0.25);
     const bounds: MapBounds = [Math.max(-180, padded.getWest()), Math.max(-90, padded.getSouth()), Math.min(180, padded.getEast()), Math.min(90, padded.getNorth())];
     setLoading(true);
     try {
       const cells = SUMMARY_MODE
-        ? await fetchSummaryCells(supabase, filters, effectiveScope, bounds, summaryLevel(map.getZoom()))
-        : await fetchMapCells(supabase, filters, effectiveScope, bounds, cellSize(map.getZoom()));
+        ? await fetchSummaryCells(supabase, filters, effectiveScope, bounds, summaryLevel(map.getZoom(), view))
+        : await fetchMapCells(supabase, filters, effectiveScope, bounds, cellSize(map.getZoom(), view));
       const total = cells.reduce((sum, cell) => sum + cell.total, 0);
       let next: Shown = { mode: 'cells', cells, total };
       // The web has the cells only, never the single points.
@@ -266,7 +276,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
     } finally {
       if (request === requestRef.current) setLoading(false);
     }
-  }, [supabase, filters, effectiveScope, companyNames]);
+  }, [supabase, filters, effectiveScope, companyNames, view]);
 
   const schedule = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -313,11 +323,28 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
     const map = mapRef.current;
     if (!L || !layer || !map || !shown) return;
     layer.clearLayers();
+    const renderer = canvasRef.current ?? undefined;
+    const zoomInto = (cell: MapCell) => {
+      const spread = cell.north - cell.south > 1e-6 || cell.east - cell.west > 1e-6;
+      if (spread) map.fitBounds([[cell.south, cell.west], [cell.north, cell.east]], { padding: [40, 40], maxZoom: 18 });
+      else map.setView([cell.lat, cell.lng], Math.min(map.getZoom() + 3, 18));
+    };
+    if (shown.mode === 'cells' && view === 'dots') {
+      // One dot per fine cell, in the colour most of its data has.
+      for (const cell of shown.cells) {
+        const color = cellShares(cell, colorMode).reduce((top, share) => (share.count > top.count ? share : top), { color: '#64748b', count: 0, label: '' }).color;
+        L.circleMarker([cell.lat, cell.lng], { renderer, radius: dotRadius(cell.total), fillColor: color, color: '#fff', weight: 1, fillOpacity: 0.85 })
+          .bindTooltip(cellTooltip(cell, colorMode), { direction: 'top', opacity: 1 })
+          .on('click', () => zoomInto(cell))
+          .addTo(layer);
+      }
+      return;
+    }
     if (shown.mode === 'cells') {
       for (const cell of shown.cells) {
         if (cell.total === 1) {
           const color = cellShares(cell, colorMode).find((share) => share.count > 0)?.color ?? '#64748b';
-          L.circleMarker([cell.lat, cell.lng], { radius: 5, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.9 })
+          L.circleMarker([cell.lat, cell.lng], { renderer, radius: 5, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.9 })
             .bindTooltip(cellTooltip(cell, colorMode), { direction: 'top', opacity: 1 })
             .on('click', () => map.setView([cell.lat, cell.lng], Math.min(map.getZoom() + 3, 18)))
             .addTo(layer);
@@ -327,11 +354,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
         const icon: DivIcon = L.divIcon({ html: cellIconHtml(cell, colorMode, size), className: '', iconSize: [size, size] });
         L.marker([cell.lat, cell.lng], { icon })
           .bindTooltip(cellTooltip(cell, colorMode), { direction: 'top', offset: [0, -size / 2], opacity: 1 })
-          .on('click', () => {
-            const spread = cell.north - cell.south > 1e-6 || cell.east - cell.west > 1e-6;
-            if (spread) map.fitBounds([[cell.south, cell.west], [cell.north, cell.east]], { padding: [40, 40], maxZoom: 18 });
-            else map.setView([cell.lat, cell.lng], Math.min(map.getZoom() + 3, 18));
-          })
+          .on('click', () => zoomInto(cell))
           .addTo(layer);
       }
       return;
@@ -341,12 +364,12 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
     const selectable = Boolean(onSelectRef.current);
     for (const group of pointsAt.values()) {
       const [point] = group;
-      L.circleMarker([point.latitude, point.longitude], { radius: group.length > 1 ? 9 : 7, fillColor: pointColor(point, colorMode), color: '#fff', weight: 2, fillOpacity: 0.9 })
+      L.circleMarker([point.latitude, point.longitude], { renderer, radius: group.length > 1 ? 9 : 7, fillColor: pointColor(point, colorMode), color: '#fff', weight: 2, fillOpacity: 0.9 })
         .bindTooltip(pointTooltip(point, group.length, selectable), { direction: 'top', offset: [0, -6], opacity: 1 })
         .on('click', () => onSelectRef.current?.(group))
         .addTo(layer);
     }
-  }, [shown, colorMode]);
+  }, [shown, colorMode, view]);
 
   // Full screen for the map card; Leaflet must remeasure afterwards.
   useEffect(() => {
@@ -395,16 +418,26 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
             <RotateCcw className="h-3.5 w-3.5" /> Reset
           </button>
         )}
-        {!category && (
-          <div role="group" aria-label="Warna titik" className="ml-auto flex items-center gap-2 text-[11px] font-semibold text-slate-500">
-            Warna:
+        <div className="ml-auto flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-500">
+          <div role="group" aria-label="Tampilan peta" className="flex items-center gap-2">
+            Tampilan:
             <div className="flex rounded-lg bg-slate-100 p-0.5">
-              {([['pcb', 'Hasil uji'], ['category', 'Kategori']] as const).map(([key, label]) => (
-                <button key={key} type="button" aria-pressed={colorMode === key} onClick={() => setColorMode(key)} className={`rounded-md px-2.5 py-1 transition-colors ${colorMode === key ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-700'}`}>{label}</button>
+              {([['dots', 'Titik'], ['groups', 'Kelompok']] as const).map(([key, label]) => (
+                <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)} className={`rounded-md px-2.5 py-1 transition-colors ${view === key ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-700'}`}>{label}</button>
               ))}
             </div>
           </div>
-        )}
+          {!category && (
+            <div role="group" aria-label="Warna titik" className="flex items-center gap-2">
+              Warna:
+              <div className="flex rounded-lg bg-slate-100 p-0.5">
+                {([['pcb', 'Hasil uji'], ['category', 'Kategori']] as const).map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={colorMode === key} onClick={() => setColorMode(key)} className={`rounded-md px-2.5 py-1 transition-colors ${colorMode === key ? 'bg-white text-slate-900 shadow-xs' : 'hover:text-slate-700'}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="relative isolate overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
@@ -428,7 +461,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
                 <div key={entry.key} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: entry.color }} />{entry.label}</div>
               ))}
             </div>
-            {shown?.mode === 'cells' && <div className="mt-2 border-t border-slate-100 pt-1.5 text-slate-500">Lingkaran berangka = jumlah data di area itu</div>}
+            {shown?.mode === 'cells' && <div className="mt-2 border-t border-slate-100 pt-1.5 text-slate-500">{view === 'dots' ? 'Titik besar = lebih banyak data di sekitarnya' : 'Lingkaran berangka = jumlah data di area itu'}</div>}
           </div>
         )}
 
@@ -440,7 +473,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
           ? `${error}. Pastikan migrasi ${SUMMARY_MODE ? '20261010000003_web_summary' : '20261010000002_map_clusters'} sudah dijalankan.`
           : !shown ? 'Memuat peta…'
             : shown.mode === 'cells'
-              ? `${formatNumber(shown.total)} data berkoordinat di area ini, dikelompokkan per wilayah${SUMMARY_MODE ? '' : ' · perbesar peta untuk melihat titik satuan'}.`
+              ? `${formatNumber(shown.total)} data berkoordinat di area ini${view === 'dots' ? ', data yang berdekatan digambar sebagai satu titik' : ', dikelompokkan per wilayah'}${SUMMARY_MODE ? '' : ' · perbesar peta untuk melihat titik satuan'}.`
               : shown.points.length === 0
                 ? 'Tidak ada data berkoordinat di area ini untuk filter yang dipilih.'
                 : `Menampilkan ${formatNumber(shown.points.length)} titik di area ini${shown.truncated ? ' (dibatasi; perbesar peta untuk melihat semuanya)' : ''}${onSelectPoint ? ' · klik titik untuk melihat datanya di tabel' : ''}.`}
