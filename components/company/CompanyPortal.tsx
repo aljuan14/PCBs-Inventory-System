@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -26,6 +27,20 @@ type Portal = {
 };
 
 const PortalContext = createContext<Portal | null>(null);
+
+// Where a page puts its own column beside the sidebar (PortalSubnav).
+const SubnavSlot = createContext<HTMLDivElement | null>(null);
+
+/** A page's own column right beside the sidebar, staying put while the page scrolls, its content centred top to bottom (wide screens only). */
+export function PortalSubnav({ children }: { children: React.ReactNode }) {
+  const slot = useContext(SubnavSlot);
+  if (!slot) return null;
+  return createPortal(
+    // Centred top to bottom; my-auto, not justify-center, so a list taller than the screen scrolls from its top.
+    <div className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col overflow-y-auto px-4 py-6 lg:flex print:hidden"><div className="my-auto">{children}</div></div>,
+    slot,
+  );
+}
 
 export function useCompanyPortal() {
   const portal = useContext(PortalContext);
@@ -110,6 +125,7 @@ export default function CompanyPortal({ children }: { children: React.ReactNode 
   const [loaded, setLoaded] = useState<{ key: string; list: PortalCompany[] } | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [subnavSlot, setSubnavSlot] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -165,6 +181,7 @@ export default function CompanyPortal({ children }: { children: React.ReactNode 
 
   return (
     <PortalContext.Provider value={portal}>
+      <SubnavSlot.Provider value={subnavSlot}>
       <div className="flex min-h-screen">
         <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-[#fbfcfa] px-4 py-5 print:hidden">
           <div className="flex items-center gap-3 px-2 pb-5">
@@ -202,10 +219,12 @@ export default function CompanyPortal({ children }: { children: React.ReactNode 
             <SignOut />
           </div>
         </aside>
+        <div ref={setSubnavSlot} className="contents" />
         <div key={company.id} className="min-w-0 flex-1">
           <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 lg:px-8">{children}</div>
         </div>
       </div>
+      </SubnavSlot.Provider>
     </PortalContext.Provider>
   );
 }
