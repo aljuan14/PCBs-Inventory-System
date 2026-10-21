@@ -165,6 +165,8 @@ export async function PATCH(req: NextRequest) {
       changes.koordinat_lat = item.koordinat_lat ?? null;
       changes.koordinat_lng = item.koordinat_lng ?? null;
     }
+    // The total in kg is not on the form but follows its weights (lib/import-transform).
+    if ('berat_ton' in changes && 'berat_kering_kg' in changes) changes.berat_total_kg = item.berat_total_kg ?? null;
     const edited = new Set([...fields.map((field) => field.key), 'koordinat']);
     const kept = ((current.catatan_impor ?? []) as ImportNote[]).filter((note) => !edited.has(note.kolom));
     const fresh = (item.catatan_impor ?? []) as ImportNote[];

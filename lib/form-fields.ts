@@ -49,6 +49,13 @@ const UNIT_SECTION = (): FormSection => ({
     { key: 'kode_alat', label: 'Kode alat', input: 'text', hint: 'Kode internal peralatan' },
   ],
 });
+// The weight in its two parts (as the PLN form reports it) and the total; the
+// total may be left empty when both parts are filled in (lib/import-transform).
+const WEIGHT_INPUTS = (): FormField[] => [
+  { key: 'berat_kering_kg', label: 'Berat kering (tanpa minyak)', input: 'number', unit: 'kg', hint: 'Inti, kumparan, dan tangki' },
+  { key: 'berat_minyak_kg', label: 'Berat minyak', input: 'number', unit: 'kg' },
+  { key: 'berat_ton', label: 'Berat total transformator', input: 'number', unit: 'ton', hint: 'Boleh kosong bila berat kering dan minyak diisi' },
+];
 const MAINTENANCE_TYPES = ['Purifikasi', 'Retrofilling (penggantian minyak dielektrik)', 'Penambahan minyak dielektrik', 'Filtrasi'];
 
 const trafoGeneral = (): FormSection => ({
@@ -89,7 +96,7 @@ export const FORM_SPECS: FormSpec[] = [
       {
         title: 'Berat & peralatan tanggap darurat',
         fields: [
-          { key: 'berat_ton', label: 'Berat transformator', input: 'number', unit: 'ton' },
+          ...WEIGHT_INPUTS(),
           { key: 'peralatan_tanggap_darurat', label: 'Peralatan tanggap darurat', input: 'text', options: ['Hydrant, APAR', 'APAR', 'APAR, serbuk kayu', 'Hydrant, APAR, serbuk kayu'] },
         ],
       },
@@ -117,7 +124,7 @@ export const FORM_SPECS: FormSpec[] = [
       {
         title: 'Kondisi & lainnya',
         fields: [
-          { key: 'berat_ton', label: 'Berat transformator', input: 'number', unit: 'ton' },
+          ...WEIGHT_INPUTS(),
           { key: 'status_kondisi', label: 'Status / kondisi', input: 'text', options: ['Baik', 'Rusak', 'Bocor', 'Rusak dan bocor'], hint: 'Ada kerusakan dan/atau kebocoran?' },
           { key: 'waktu_terakhir_digunakan', label: 'Waktu terakhir digunakan', input: 'date' },
           { key: 'peralatan_tanggap_darurat', label: 'Peralatan tanggap darurat', input: 'text', options: ['Hydrant, APAR', 'APAR', 'APAR, serbuk kayu'] },

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Building2, RotateCw, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { ALL_SCOPE, fetchCompanyUnits, type DashboardScope, type UnitSummary } from '@/lib/inventory-query';
@@ -12,9 +12,10 @@ const SELECT_CLASS = 'min-w-0 rounded-xl border border-slate-200 bg-white px-3 p
 
 /**
  * Company › unit › sub-unit filter for a whole dashboard (PLN: Unit Induk ›
- * Unit Pelaksana). Units are listed once a company is chosen.
+ * Unit Pelaksana). Units are listed once a company is chosen. Further filter
+ * rows (children) sit in the same card under a line, their labels in line.
  */
-export default function DashboardScopeFilter({ companies, scope, onChange, reloadKey = 0, statuses = null }: { companies: CompanyOption[]; scope: DashboardScope; onChange: (scope: DashboardScope) => void; reloadKey?: number; statuses?: Map<string, CompanyStatus> | null }) {
+export default function DashboardScopeFilter({ companies, scope, onChange, reloadKey = 0, statuses = null, children }: { companies: CompanyOption[]; scope: DashboardScope; onChange: (scope: DashboardScope) => void; reloadKey?: number; statuses?: Map<string, CompanyStatus> | null; children?: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const [units, setUnits] = useState<{ companyId: string; rows: UnitSummary[]; failed?: boolean } | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -40,8 +41,8 @@ export default function DashboardScopeFilter({ companies, scope, onChange, reloa
   const subUnitOptions = companyUnits.filter((row) => row.unit === scope.unit && row.sub_unit);
   const unitsFailed = units?.companyId === scope.companyId && units.failed;
 
-  return <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-    <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-slate-500"><Building2 className="h-3.5 w-3.5" /><span>Tampilkan data:</span></div>
+  return <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">
+    <FilterRow icon={<Building2 className="h-4 w-4" />} label="Tampilkan data">
     <CompanyPicker companies={companies} value={scope.companyId} statuses={statuses} onChange={(companyId) => onChange({ companyId, unit: null, subUnit: null })} />
     {unitOptions.length > 0 && (
       <select aria-label="Unit" value={scope.unit ?? 'all'} onChange={(e) => onChange({ ...scope, unit: e.target.value === 'all' ? null : e.target.value, subUnit: null })} className={SELECT_CLASS}>
@@ -63,5 +64,15 @@ export default function DashboardScopeFilter({ companies, scope, onChange, reloa
     {scope.companyId && (
       <button type="button" onClick={() => onChange(ALL_SCOPE)} className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800"><X className="h-3 w-3" /> Semua data</button>
     )}
+    </FilterRow>
+    {children}
+  </div>;
+}
+
+/** One row of the filter card: an icon and label in a fixed column, then its controls. */
+export function FilterRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
+    <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-slate-800 sm:w-40"><span className="text-emerald-700">{icon}</span>{label}</div>
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">{children}</div>
   </div>;
 }

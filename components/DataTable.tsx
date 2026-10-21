@@ -529,7 +529,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
   const focused = (column: FocusColumn) => focus.has(column);
   // Every column is shown and the table scrolls sideways; the import findings
   // column only while a finding filter is on.
-  const tableColumnCount = 14 + Number(focused('temuan'));
+  const tableColumnCount = 16 + Number(focused('temuan'));
   const th = (column?: FocusColumn) => `whitespace-nowrap py-3.5 px-4${column && focused(column) ? ' bg-emerald-50 text-emerald-800' : ''}`;
   const td = (column?: FocusColumn) => `py-3.5 px-4${column && focused(column) ? ' bg-emerald-50/50' : ''}`;
   // No and brand stay on the left and the actions on the right while scrolling;
@@ -752,7 +752,9 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
               <th className={th('tahun')}>Tahun</th>
               <th className={th('daya')}>Daya (kVA)</th>
               <th className={th('volume')}>Volume (L)</th>
-              <th className={th()}>Berat (kg)</th>
+              <th className={th()}>Berat kering (kg)</th>
+              <th className={th()}>Berat minyak (kg)</th>
+              <th className={th()}>Berat total (kg)</th>
               <th className={th('pcb')}>Hasil Uji Minyak (ppm)</th>
               <th className={th()}>Status</th>
               <th className={th('tanggal')}>Diinput</th>
@@ -768,7 +770,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                 </td>
               </tr>
             ) : (
-              paginatedItems.map((item) => {
+              paginatedItems.map((item, index) => {
                 // PCB status pill
                 let pcbIcon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />;
                 let pcbBadge = 'bg-emerald-50 text-emerald-800 border-emerald-200/80';
@@ -796,7 +798,8 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                 const importNotes = (details[item.id]?.catatan_impor ?? []) as ImportNoteRow[];
                 return (
                   <Fragment key={item.id}>
-                  <tr key={item.id} className="bg-white transition-colors hover:bg-slate-50">
+                  {/* Every other row a faint grey, so a row reads straight across; opaque, as the sticky cells inherit it. */}
+                  <tr key={item.id} className={`transition-colors hover:bg-slate-100 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}>
                     <td className={`${td()} ${STICKY_NO} bg-inherit font-medium`}>{item.no ?? '-'}</td>
                     <td className={`${td()} ${STICKY_NAME} ${stickyCell(focused('kode') ? 'kode' : 'merek')}`}>
                       <button type="button" onClick={() => toggleDetails(item)} className={`text-left font-bold hover:text-emerald-700 ${item.name ? 'text-slate-900' : 'italic text-slate-400'}`}>{item.name || 'Merek tidak tercatat'}</button>
@@ -824,12 +827,10 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                     <td className={`${td('tahun')} tabular-nums`}>{item.year ?? <span className="italic text-slate-400">tidak tercatat</span>}</td>
                     <td className={`${td('daya')} whitespace-nowrap`}>{item.type.startsWith('transformator') ? item.capacity || '-' : '-'}</td>
                     <td className={`${td('volume')} whitespace-nowrap`}>{item.type === 'minyak_dielektrik' ? item.capacity || '-' : '-'}</td>
-                    <td className={`${td()} whitespace-nowrap tabular-nums`}>
-                      {item.weightTotal !== null && item.weightTotal !== undefined ? formatKg(item.weightTotal) : '-'}
-                      {(item.weightDry !== null && item.weightDry !== undefined) || (item.weightOil !== null && item.weightOil !== undefined) ? (
-                        <div className="mt-0.5 text-[11px] text-slate-500">kering {formatKg(item.weightDry)} · minyak {formatKg(item.weightOil)}</div>
-                      ) : null}
-                    </td>
+                    {/* Weight in its parts and the total, each its own column ("-" where not reported). */}
+                    {[item.weightDry, item.weightOil, item.weightTotal].map((weight, column) => (
+                      <td key={column} className={`${td()} whitespace-nowrap tabular-nums ${column === 2 ? 'font-medium text-slate-800' : ''}`}>{formatKg(weight)}</td>
+                    ))}
                     <td className={td('pcb')}>
                       <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${pcbBadge}`}>
                         {pcbIcon}

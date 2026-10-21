@@ -356,6 +356,8 @@ function checkWeights(
       item[key] = null;
     }
   }
+  // A total in tons alone (the KLHK template, the form) is the total in kg too, so it is checked against the parts.
+  if (typeof item.berat_total_kg !== 'number' && typeof item.berat_ton === 'number') item.berat_total_kg = item.berat_ton * 1000;
   const dry = item.berat_kering_kg;
   const oil = item.berat_minyak_kg;
   const total = item.berat_total_kg;

@@ -137,54 +137,60 @@ const YEAR_OPTIONS: { key: YearScope; label: string; hint: string; color: string
 ];
 
 /**
- * The same switch floating on the right edge, for when the bar at the top
- * has scrolled away: the choice stays in sight beside the cards it drives.
- * Hidden on small screens for now.
+ * The three year buttons apart, each in its own colour: tinted when off,
+ * filled when chosen, so the choice reads at a glance.
+ */
+function YearButtons({ value, onChange, focusable = true }: { value: YearScope; onChange: (value: YearScope) => void; focusable?: boolean }) {
+  return (
+    <>
+      {YEAR_OPTIONS.map((option) => {
+        const on = value === option.key;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            tabIndex={focusable ? 0 : -1}
+            aria-pressed={on}
+            title={option.hint}
+            onClick={() => onChange(option.key)}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${on ? 'text-white shadow-sm' : 'bg-white hover:-translate-y-px hover:shadow-xs'}`}
+            style={on ? { backgroundColor: option.color, borderColor: option.color } : { color: option.color, borderColor: `${option.color}55` }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: on ? '#ffffff' : option.color }} />
+            {option.label}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * The same switch floating at the top centre of the cards, for when the bar
+ * has scrolled away: it rides down with the page while the cards it drives
+ * are in view. Place it as the first child of those cards' box.
  */
 export function YearRail({ value, onChange, visible }: { value: YearScope; onChange: (value: YearScope) => void; visible: boolean }) {
   return (
-    <div
-      role="group"
-      aria-label="Tahun pembuatan"
-      aria-hidden={!visible}
-      className={`fixed right-3 top-1/2 z-30 hidden -translate-y-1/2 flex-col gap-1 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-lg backdrop-blur transition-all duration-200 lg:flex ${visible ? 'opacity-100' : 'pointer-events-none translate-x-4 opacity-0'}`}
-    >
-      <span className="px-1 pb-0.5 pt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tahun</span>
-      {YEAR_OPTIONS.map((option) => (
-        <button
-          key={option.key}
-          type="button"
-          tabIndex={visible ? 0 : -1}
-          aria-pressed={value === option.key}
-          title={option.hint}
-          onClick={() => onChange(option.key)}
-          className={`flex w-16 flex-col items-center gap-1 rounded-xl px-1.5 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-emerald-500 ${value === option.key ? 'text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
-          style={value === option.key ? { backgroundColor: option.color } : undefined}
-        >
-          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: value === option.key ? '#ffffff' : option.color }} />
-          {option.label}
-        </button>
-      ))}
+    <div className="pointer-events-none sticky top-3 z-30 mb-0 flex h-0 justify-center">
+      <div
+        role="group"
+        aria-label="Tahun pembuatan"
+        aria-hidden={!visible}
+        className={`flex h-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 py-1.5 pl-4 pr-1.5 shadow-lg backdrop-blur transition-all duration-200 ${visible ? 'pointer-events-auto visible opacity-100' : 'invisible -translate-y-3 opacity-0'}`}
+      >
+        <span className="mr-1 text-xs font-semibold text-slate-700">Tahun pembuatan</span>
+        <YearButtons value={value} onChange={onChange} focusable={visible} />
+      </div>
     </div>
   );
 }
 
 /** The dashboard's one production-year switch: all, before 1997, 1997 on. */
 export function YearToggle({ value, onChange }: { value: YearScope; onChange: (value: YearScope) => void }) {
-  const options: { key: YearScope; label: string }[] = [{ key: 'all', label: 'Semua' }, { key: 'pre1997', label: '< 1997' }, { key: 'from1997', label: '≥ 1997' }];
   return (
-    <div role="group" aria-label="Tahun pembuatan" className="flex shrink-0 rounded-lg bg-slate-100 p-0.5">
-      {options.map((option) => (
-        <button
-          key={option.key}
-          type="button"
-          aria-pressed={value === option.key}
-          onClick={() => onChange(option.key)}
-          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-emerald-500 ${value === option.key ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-        >
-          {option.label}
-        </button>
-      ))}
+    <div role="group" aria-label="Tahun pembuatan" className="flex shrink-0 gap-1.5">
+      <YearButtons value={value} onChange={onChange} />
     </div>
   );
 }
