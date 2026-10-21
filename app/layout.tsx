@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import { DialogHost } from "@/components/Dialog";
+import Preloader from "@/components/Preloader";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 
@@ -29,9 +30,14 @@ export default function RootLayout({
     <html
       lang="id"
       data-theme="light"
+      suppressHydrationWarning
       style={{ colorScheme: 'light' }}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      {/* The preloader only once per browser session: marked before the first paint. */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: "try{if(sessionStorage.getItem('pcbs-preloader'))document.documentElement.dataset.preloaded='1'}catch(e){}" }} />
+      </head>
       <body 
         style={{ colorScheme: 'light' }}
         className="min-h-full flex bg-[#f4f5f2] text-slate-900 font-sans"
@@ -39,6 +45,7 @@ export default function RootLayout({
         <Navbar />
         <main className="min-w-0 flex-1">{children}</main>
         <DialogHost />
+        <Preloader />
       </body>
     </html>
   );
