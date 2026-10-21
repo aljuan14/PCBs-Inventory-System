@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, CalendarClock, FileCheck2, Fingerprint, UserCog, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
+import { BookOpen, Building2, CalendarClock, FileCheck2, Fingerprint, UserCog, ClipboardCheck, ClipboardPen, Droplets, Grid2X2, History, Layers3, LogOut, UploadCloud, Zap, ZapOff } from 'lucide-react';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
 import { SUMMARY_MODE } from '@/lib/data-mode';
@@ -80,6 +80,9 @@ export default function Navbar() {
       { href: '/companies', label: 'Perusahaan', icon: Building2, readable: true },
       { href: '/id-simpel', label: 'ID SIMPEL', icon: Fingerprint },
       { href: '/akun', label: 'Akun pengguna', icon: UserCog, adminOnly: true },
+    ] },
+    { title: 'Bantuan', items: [
+      { href: '/panduan', label: 'Panduan admin', icon: BookOpen, readable: true },
     ] },
   ];
 
