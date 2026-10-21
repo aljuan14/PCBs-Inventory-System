@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ClipboardPen, FileSpreadsheet, Info, MapPinOff } from 'lucide-react';
+import { ClipboardPen, FileSpreadsheet, Info, MapPinOff, Pencil, Trash2 } from 'lucide-react';
 import CompanyPcbStatusCard from '@/components/CompanyPcbStatusCard';
+import DataTable, { type InventoryItem, type TablePreset } from '@/components/DataTable';
+import { StoredEntryEditor, removeStoredEntry, type StoredRow } from '@/components/StoredEntryEditor';
 import InventorySummary, { YearToggle } from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
 import { PortalHeader, useCompanyPortal } from '@/components/company/CompanyPortal';
@@ -13,7 +14,7 @@ import { UPLOAD_STATUS } from '@/components/InventoryUpload';
 import type { StatusTarget } from '@/lib/company-pcb-status';
 import { formSpec } from '@/lib/form-fields';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
-import { fetchInventoryStats, sumStats, type CategoryFilter, type InventoryStats, type YearScope } from '@/lib/inventory-query';
+import { fetchInventoryStats, sumStats, type CategoryFilter, type InventoryFilters, type InventoryStats, type YearScope } from '@/lib/inventory-query';
 
 // Leaflet needs the window.
 const MapLeaflet = dynamic(() => import('@/components/MapLeaflet'), { ssr: false });
@@ -84,17 +85,20 @@ function StartHere() {
 
 /**
  * The company's home, its own dashboard: the PCBs status with what to do
- * (each item leading to where it is done), uploads to watch, its equipment
- * by production year with the oil test results and tonnage (one year
- * switch), and its equipment on the map. A figure opens the form it comes from.
+ * (each item leading to where it is done), uploads to watch, the table of
+ * all its equipment, its equipment by production year with the oil test
+ * results and tonnage (one year switch), and its equipment on the map. A
+ * figure filters the table to its rows.
  */
 export default function CompanyHome() {
   const { supabase, company, href } = useCompanyPortal();
-  const router = useRouter();
   const [stats, setStats] = useState<{ key: string; value: InventoryStats | null; noPoint: number } | null>(null);
   const [years, setYears] = useState<YearScope>('all');
   const scope = useMemo(() => ({ companyId: company.id, unit: null, subUnit: null }), [company.id]);
   const keepScope = useCallback(() => {}, []);
+  // After an edit or delete in the table: the figures and the table load again.
+  const [reloadKey, setReloadKey] = useState(0);
+  const changed = () => setReloadKey((key) => key + 1);
 
   useEffect(() => {
     let active = true;
@@ -103,17 +107,33 @@ export default function CompanyHome() {
       Promise.resolve(supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('company_id', company.id).is('lat', null)),
     ]).then(([value, { count }]) => { if (active) setStats({ key: company.id, value, noPoint: count ?? 0 }); });
     return () => { active = false; };
-  }, [supabase, scope, company.id]);
+  }, [supabase, scope, company.id, reloadKey]);
 
   const loaded = stats?.key === company.id ? stats : null;
   const total = loaded?.value ? sumStats(loaded.value, ALL_CATEGORIES, 'total') : 0;
   const where = (target: StatusTarget) => target.tab === 'roadmap' ? href('/roadmap')
     : href('/formulir', { ...(target.tab ? { tab: target.tab } : {}), ...(target.section ? { bagian: target.section } : {}) });
-  // A figure opens the form its rows come from ("all transformers" the first one).
-  const openForm = (_filters: unknown, category: CategoryFilter) => {
-    const tab = ALL_CATEGORIES.includes(category as InventoryCategory) ? category : 'transformator_digunakan';
-    router.push(href('/formulir', { tab: tab as string, bagian: 'formulir' }));
+  // A figure filters the table to its rows and brings it into view.
+  const [tablePreset, setTablePreset] = useState<TablePreset | undefined>();
+  const tableRef = useRef<HTMLDivElement>(null);
+  const showRows = (filters: Partial<InventoryFilters>, type?: CategoryFilter) => {
+    setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters, type }));
+    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  // A row opens in the form's own editor, as under "Data tersimpan".
+  const [editing, setEditing] = useState<{ category: InventoryCategory; row: StoredRow } | null>(null);
+  const load = async (item: InventoryItem) => {
+    const category = item.type as InventoryCategory;
+    if (!ALL_CATEGORIES.includes(category)) return null;
+    const { data } = await supabase.from(category).select('*').eq('id', item.id).maybeSingle();
+    return data ? { category, row: data as StoredRow } : null;
+  };
+  const rowActions = (item: InventoryItem) => (
+    <>
+      <button type="button" title="Ubah data" aria-label={`Ubah ${item.name || 'data'}`} onClick={async () => { const found = await load(item); if (found) setEditing(found); }} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700"><Pencil className="h-4 w-4" /></button>
+      <button type="button" title="Hapus data" aria-label={`Hapus ${item.name || 'data'}`} onClick={async () => { const found = await load(item); if (found && await removeStoredEntry(supabase, found.category, found.row)) changed(); }} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-4 w-4" /></button>
+    </>
+  );
 
   return (
     <>
@@ -124,13 +144,17 @@ export default function CompanyHome() {
       {loaded === null ? <div className="h-48 animate-pulse rounded-2xl bg-slate-100" />
         : total === 0 ? <StartHere /> : (
           <>
+            {/* All its equipment, right under the status: search, filter, revise. */}
+            <div ref={tableRef} className="scroll-mt-6">
+              <DataTable companies={[{ id: company.id, name: company.nama_perusahaan }]} scope={scope} reloadKey={reloadKey} preset={tablePreset} hideCompany rowActions={rowActions} />
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <span className="text-sm font-semibold text-slate-800">Tahun pembuatan</span>
               <YearToggle value={years} onChange={setYears} />
-              <span className="text-xs text-slate-500">{years === 'all' ? 'Semua peralatan, termasuk yang tahunnya tidak diketahui.' : `Hanya peralatan ${years === 'pre1997' ? 'buatan sebelum 1997' : 'buatan 1997 ke atas'}; yang tahunnya tidak diketahui tidak dihitung.`} Klik angka untuk membuka formulirnya.</span>
+              <span className="text-xs text-slate-500">{years === 'all' ? 'Semua peralatan, termasuk yang tahunnya tidak diketahui.' : `Hanya peralatan ${years === 'pre1997' ? 'buatan sebelum 1997' : 'buatan 1997 ke atas'}; yang tahunnya tidak diketahui tidak dihitung.`} Klik angka untuk melihat datanya di tabel.</span>
             </div>
-            <InventorySummary stats={loaded.value} scope={years} loading={false} onSelect={openForm} />
-            <TonnageCard stats={loaded.value} scope={years} loading={false} supabase={supabase} companyId={company.id} />
+            <InventorySummary stats={loaded.value} scope={years} loading={false} onSelect={showRows} />
+            <TonnageCard stats={loaded.value} scope={years} loading={false} onSelect={showRows} supabase={supabase} companyId={company.id} reloadKey={reloadKey} />
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <h2 className="mb-1 text-base font-semibold text-slate-900">Peta peralatan</h2>
@@ -144,6 +168,7 @@ export default function CompanyHome() {
             </section>
           </>
         )}
+      {editing && <StoredEntryEditor category={editing.category} row={editing.row} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); changed(); }} />}
     </>
   );
 }

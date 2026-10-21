@@ -1,28 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Database, Loader2, Pencil, Search, Trash2 } from 'lucide-react';
-import FormEditor from '@/components/FormEditor';
-import { fieldErrors, formFields, formSpec, type FormEntry } from '@/lib/form-fields';
+import { Database, Loader2, Pencil, Search, Trash2 } from 'lucide-react';
+import { formSpec } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import { createClient } from '@/lib/supabase/client';
-import { alertDialog, confirmDialog } from '@/components/Dialog';
+import { StoredEntryEditor, removeStoredEntry, type StoredRow as Row } from '@/components/StoredEntryEditor';
 
 const PAGE = 50;
-type Row = Record<string, unknown> & { id: string };
 
 const fmt = (value: number) => value.toLocaleString('id-ID');
 const text = (value: unknown) => (value === null || value === undefined ? '' : String(value));
-
-/** A stored row as the form's entry, so it opens in the same editor. */
-function entryOf(category: InventoryCategory, row: Row): FormEntry {
-  const fields = formFields(category);
-  return {
-    id: row.id,
-    unknownYear: fields.some((field) => field.input === 'year') && (row.tahun_pembuatan === null || row.tahun_pembuatan === undefined),
-    values: Object.fromEntries(fields.map((field) => [field.key, field.input === 'date' ? text(row[field.key]).slice(0, 10) : text(row[field.key])])),
-  };
-}
 
 /**
  * The company's stored rows of one form, a page at a time, to revise or
@@ -38,8 +26,6 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<{ key: string; rows: Row[]; total: number } | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
   const term = query.trim().replace(/[,()%]/g, ' ').trim();
   const key = `${term}|${limit}|${reloadKey}|${refreshKey}`;
 
@@ -56,31 +42,12 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
     return () => { active = false; clearTimeout(timer); };
   }, [supabase, category, companyId, oil, term, limit, key]);
 
-  const save = async (entry: FormEntry) => {
-    if (!editing) return;
-    setSaving(true);
-    setErrors([]);
-    try {
-      const response = await fetch('/api/formulir', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category, id: editing.id, entry }) });
-      const body = await response.json() as { saved?: boolean; errors?: string[]; error?: string };
-      if (!response.ok) { setErrors(body.errors ?? [body.error ?? 'Gagal menyimpan perubahan.']); return; }
-      setEditing(null);
-      setReloadKey((value) => value + 1);
-      onChanged();
-    } catch (err) {
-      setErrors([err instanceof Error ? err.message : String(err)]);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const remove = async (row: Row) => {
-    const name = text(oil ? row.merek_minyak_dielektrik : row.nama_merek) || 'data ini';
-    if (!(await confirmDialog({ title: `Hapus ${name}${row.nomor_serial ? ` (${row.nomor_serial})` : ''}?`, message: 'Data ini dihapus dari formulir dan tidak dapat dibatalkan.', tone: 'danger', confirmLabel: 'Hapus' }))) return;
-    const { error, count } = await supabase.from(category).delete({ count: 'exact' }).eq('id', row.id);
-    if (error || count === 0) return alertDialog({ title: 'Gagal menghapus', message: error?.message ?? 'Data tidak ditemukan; mungkin sudah dihapus.' });
+  const changed = () => {
     setReloadKey((value) => value + 1);
     onChanged();
+  };
+  const remove = async (row: Row) => {
+    if (await removeStoredEntry(supabase, category, row)) changed();
   };
 
   const rows = result?.key === key ? result.rows : null;
@@ -102,16 +69,7 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
         </label>
       </div>
 
-      {editing && (
-        <FormEditor key={editing.id} sections={spec.sections} initial={entryOf(category, editing)} validate={(entry) => fieldErrors(formFields(category), entry)}
-          title={`Ubah data no. ${text(editing.no)}`} subtitle={`Formulir ${spec.code}: ${spec.title}`} saveLabel="Simpan perubahan" saving={saving} onSave={save} onCancel={() => { setEditing(null); setErrors([]); }}
-          notice={errors.length > 0 && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900">
-              <p className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-4 w-4" /> Perubahan belum tersimpan:</p>
-              <ul className="mt-1 list-disc pl-5">{errors.map((message) => <li key={message}>{message}</li>)}</ul>
-            </div>
-          )} />
-      )}
+      {editing && <StoredEntryEditor category={category} row={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); changed(); }} />}
 
       {rows === null ? <p className="flex items-center gap-2 p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>
         : rows.length === 0 ? <p className="p-5 text-sm text-slate-500">{term ? 'Tidak ada data yang cocok.' : 'Belum ada data tersimpan.'}</p> : (
@@ -131,7 +89,7 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
                       <td className="px-3 py-2.5">
                         <div className="flex justify-end gap-1">
                           {notes > 0 && <span title={`${notes} catatan pemeriksaan (lihat Kualitas data)`} className="self-center rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">{notes}</span>}
-                          <button type="button" onClick={() => { setEditing(row); setErrors([]); }} title="Ubah" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => setEditing(row)} title="Ubah" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><Pencil className="h-3.5 w-3.5" /></button>
                           <button type="button" onClick={() => remove(row)} title="Hapus" className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       </td>

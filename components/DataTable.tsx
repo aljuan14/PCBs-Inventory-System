@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw, Map as MapIcon } from 'lucide-react';
@@ -87,6 +87,10 @@ interface DataTableProps {
   preset?: TablePreset;
   onEdit?: (item: InventoryItem, changes: EditableInventoryFields) => Promise<void> | void;
   onDelete?: (item: InventoryItem) => Promise<void> | void;
+  /** One company's own table: its units in place of the company column. */
+  hideCompany?: boolean;
+  /** Buttons of a row in place of the table's own edit and delete (the company's form editor). */
+  rowActions?: (item: InventoryItem) => ReactNode;
 }
 
 export interface EditableInventoryFields {
@@ -291,7 +295,7 @@ function NumberFilter({ value, onCommit, placeholder, label }: { value: number |
   );
 }
 
-export default function DataTable({ category, companies, reloadKey = 0, scope, onScopeChange, preset, onEdit, onDelete }: DataTableProps) {
+export default function DataTable({ category, companies, reloadKey = 0, scope, onScopeChange, preset, onEdit, onDelete, hideCompany = false, rowActions }: DataTableProps) {
   // A pemantau account reads only: no edit or delete buttons (the database refuses them too).
   const editable = !useReadOnly();
   const supabase = useMemo(() => createClient(), []);
@@ -746,7 +750,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
               <th className={`${th()} ${STICKY_NO} bg-slate-50`}>No.</th>
               <th className={`${th(focused('kode') ? 'kode' : 'merek')} ${STICKY_NAME} ${focused('kode') || focused('merek') ? '' : 'bg-slate-50'}`}>Merek / Seri</th>
               <th className={th('baris')}>Baris Excel</th>
-              <th className={th()}>Perusahaan / Unit</th>
+              <th className={th()}>{hideCompany ? 'Unit' : 'Perusahaan / Unit'}</th>
               <th className={th('lokasi')}>Lokasi</th>
               <th className={th('koordinat')}>Koordinat</th>
               <th className={th('tahun')}>Tahun</th>
@@ -812,8 +816,8 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                     </td>
                     <td className={`${td('baris')} tabular-nums`}>{item.excelRow ?? '-'}</td>
                     <td className={`${td()} font-medium text-slate-700`}>
-                      {item.companyName}
-                      {item.unit && <div className="mt-0.5 text-[11px] font-normal text-slate-500">{item.unit}{item.subUnit ? ` › ${item.subUnit}` : ''}</div>}
+                      {hideCompany ? (item.unit ? `${item.unit}${item.subUnit ? ` › ${item.subUnit}` : ''}` : '-') : item.companyName}
+                      {!hideCompany && item.unit && <div className="mt-0.5 text-[11px] font-normal text-slate-500">{item.unit}{item.subUnit ? ` › ${item.subUnit}` : ''}</div>}
                     </td>
                     <td className={td('lokasi')}><div className="text-slate-800 font-medium">{item.location || '-'}</div></td>
                     <td className={td('koordinat')}>
@@ -858,7 +862,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                     )}
                     <td className={`${td()} ${STICKY_ACTIONS} bg-inherit`}>
                       <div className="flex justify-end gap-1.5">
-                        {editable && <>
+                        {rowActions ? rowActions(item) : editable && <>
                         <button
                           type="button"
                           title="Edit data"

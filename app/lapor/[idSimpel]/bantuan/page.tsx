@@ -31,7 +31,7 @@ const FAQ_GROUPS: Array<{ title: string; items: Faq[] }> = [
     { id: 'batas-waktu', q: 'Apakah data bisa diubah setelah disimpan?', a: 'Bisa, kapan saja. Laporan ini bersifat berkelanjutan: perbarui datanya setiap ada perubahan, misalnya trafo baru diuji, diganti, atau sudah dikelola.' },
   ] },
   { title: 'Mengisi formulir', items: [
-    { id: 'ubah-data', q: 'Data yang sudah tersimpan salah. Bagaimana mengubahnya?', a: 'Buka formulirnya di menu Isi formulir. Di bagian "Data tersimpan" klik ikon ubah pada baris yang salah, perbaiki di jendela yang muncul, lalu Simpan. Ikon tempat sampah menghapus baris tersebut setelah dikonfirmasi.', go: { label: 'Buka Isi formulir', path: '/formulir' } },
+    { id: 'ubah-data', q: 'Data yang sudah tersimpan salah. Bagaimana mengubahnya?', a: 'Cari datanya di tabel Beranda, atau buka formulirnya di menu Isi formulir bagian "Data tersimpan". Klik ikon ubah pada baris yang salah, perbaiki di jendela yang muncul, lalu Simpan. Ikon tempat sampah menghapus baris tersebut setelah dikonfirmasi.', go: { label: 'Buka Isi formulir', path: '/formulir' } },
     { id: 'wajib-isi', q: 'Kolom mana saja yang wajib diisi?', a: 'Kolom wajib ditandai bintang (*). Untuk formulir 1.1 misalnya: nama/merek, nomor serial, tahun pembuatan, lokasi peralatan, dan titik koordinat. Bila ada yang terlewat, formulir tidak tersimpan dan kolom yang kurang ditandai merah serta langsung ditampilkan.' },
     { id: 'banyak-data', q: 'Kami punya puluhan trafo. Apakah ada cara lebih cepat dari mengisi satu per satu?', a: 'Ada dua cara. Pertama, tombol "Simpan & tambah lagi" di jendela formulir menyimpan data lalu langsung membuka formulir kosong berikutnya (pintasan Ctrl+Enter untuk menyimpan). Kedua, unggah template Excel: unduh template resmi, isi semua baris, lalu unggah di card "Tambah data" pada formulir yang sesuai.' },
     { id: 'draf', q: 'Jendela formulir tertutup sebelum disimpan. Apakah isiannya hilang?', a: 'Bila ada isian yang belum disimpan, aplikasi menanyakan dulu sebelum menutup jendela. Isian yang sudah disimpan selalu tampil di "Data tersimpan".' },
@@ -53,7 +53,7 @@ const FAQ_GROUPS: Array<{ title: string; items: Faq[] }> = [
   { title: 'Peta & koordinat', items: [
     { id: 'titik-laut', q: 'Titik trafo kami muncul di laut pada peta.', a: 'Hampir selalu karena lintang selatan ditulis tanpa tanda minus. Wilayah Indonesia di selatan khatulistiwa lintangnya negatif, misalnya -6.2088, 106.8456 (Jakarta). Perbaiki di formulir: Data tersimpan, ikon ubah, lalu koreksi koordinatnya atau pilih titiknya langsung di peta.' },
     { id: 'format-koordinat', q: 'Format koordinat apa saja yang diterima?', a: 'Desimal (-6.2088, 106.8456) maupun derajat-menit-detik, misalnya 6°12\'31.7"LS 106°50\'44.2"BT. Arah LU/LS/BT/BB maupun N/S/E/W dikenali. Di jendela formulir juga ada tombol untuk memilih titik langsung di peta.' },
-    { id: 'tidak-tampil', q: 'Sebagian peralatan tidak tampil di peta Beranda.', a: 'Peralatan tanpa koordinat yang terbaca tidak tampil di peta; jumlahnya disebutkan di atas peta Beranda. Lengkapi koordinatnya lewat Data tersimpan, ikon ubah.' },
+    { id: 'tidak-tampil', q: 'Sebagian peralatan tidak tampil di peta Beranda.', a: 'Peralatan tanpa koordinat yang terbaca tidak tampil di peta; jumlahnya disebutkan di atas peta Beranda. Lengkapi koordinatnya lewat ikon ubah di tabel Beranda atau di Data tersimpan.' },
   ] },
 ];
 

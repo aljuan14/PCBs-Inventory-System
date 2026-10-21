@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { FileSignature, Lock } from 'lucide-react';
+import { Database, FileSignature, Lock } from 'lucide-react';
 import AddDataCard, { ManualChoice, UploadChoice } from '@/components/AddDataCard';
-import FormEditor from '@/components/FormEditor';
 import FormTabs, { OTHER_FORMS, type ReportTab } from '@/components/FormTabs';
 import { CHECKLISTS, type ChecklistKey } from '@/lib/checklists';
-import { BALANCE_SECTIONS, FORM_SPECS, REDUCTION_SECTIONS, STORAGE_SECTIONS, TRAFO_FOCUS_YEAR, type FormSection } from '@/lib/form-fields';
+import { FORM_SPECS, TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 
 const noop = () => {};
 const QUESTIONS_SHOWN = 5;
@@ -16,12 +15,16 @@ function LockNote({ text = 'Pilih perusahaan di atas untuk mengisi.' }: { text?:
   return <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500"><Lock className="h-3.5 w-3.5" /> {text}</p>;
 }
 
-/** A form's sections as the editor shows them, every field disabled. */
-function FormPreview({ sections }: { sections: FormSection[] }) {
+/** Where the stored rows will be, empty until a company is picked. */
+function LockedStored() {
   return (
-    <fieldset disabled className="pointer-events-none select-none opacity-70" aria-label="Contoh formulir, terkunci">
-      <FormEditor sections={sections} initial={{ id: 'preview', values: {} }} validate={() => ({})} title="Contoh isian" saveLabel="Simpan" onSave={noop} onCancel={noop} inline />
-    </fieldset>
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-white">
+      <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+        <Database className="h-5 w-5 shrink-0 text-slate-300" />
+        <h3 className="text-sm font-semibold text-slate-400">Data tersimpan</h3>
+      </div>
+      <p className="flex items-center justify-center gap-2 px-5 py-10 text-xs font-medium text-slate-500"><Lock className="h-3.5 w-3.5" /> Pilih perusahaan untuk melihat dan mengisi datanya.</p>
+    </div>
   );
 }
 
@@ -54,36 +57,26 @@ function LockedAddCard() {
 
 function TabPreview({ tab }: { tab: ReportTab }) {
   const spec = FORM_SPECS.find((form) => form.category === tab);
-  if (spec) {
-    return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">Formulir {spec.code}: {spec.title}</h2>
-            <p className="text-xs text-slate-500">Isi lewat formulir atau unggah template Excel{tab.startsWith('transformator') ? `, hanya trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui` : ''}. Di bawahnya: data tersimpan dan bukti dukung.</p>
-          </div>
-        </div>
-        <LockedAddCard />
-        <FormPreview sections={spec.sections} />
-      </div>
-    );
-  }
-  const label = OTHER_FORMS.find(([key]) => key === tab)?.[1] ?? '';
+  const title = spec ? `Formulir ${spec.code}: ${spec.title}` : `Formulir ${OTHER_FORMS.find(([key]) => key === tab)?.[1] ?? ''}`;
+  // As on a picked company: the add-data card (its form opens in a pop-up), then the stored rows; the checklists stay in the page.
   return (
-    <div className="space-y-5">
-      <h2 className="text-base font-semibold text-slate-900">Formulir {label}</h2>
-      {tab === 'pengurangan' && <FormPreview sections={REDUCTION_SECTIONS} />}
-      {tab === 'penyimpanan' && <><FormPreview sections={STORAGE_SECTIONS} /><ChecklistPreview checklist="3_penyimpanan" /></>}
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        {spec && <p className="text-xs text-slate-500">Isi lewat formulir atau unggah template Excel{tab.startsWith('transformator') ? `, hanya trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau yang tahunnya tidak diketahui` : ''}.</p>}
+      </div>
+      <LockedAddCard />
+      {tab === 'penyimpanan' && <ChecklistPreview checklist="3_penyimpanan" />}
       {tab === 'pengolahan' && <ChecklistPreview checklist="4_2_pengolahan" />}
-      {tab === 'pelaporan' && <FormPreview sections={BALANCE_SECTIONS} />}
+      {tab !== 'pengolahan' && <LockedStored />}
     </div>
   );
 }
 
 /**
  * A company's report before a company is picked (Isi formulir): the statement
- * and every form laid out as they will be, locked. The tabs
- * still open, to show what each form asks.
+ * and every tab laid out as it will be, locked and empty. The tabs still
+ * open; the forms themselves are pop-ups, so none is shown here.
  */
 export default function LockedReport() {
   const [tab, setTab] = useState<ReportTab>('transformator_digunakan');
@@ -109,7 +102,7 @@ export default function LockedReport() {
 
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 sm:p-5">
         <FormTabs value={tab} onChange={setTab} withRoadmap={false} />
-        <LockNote text="Pratinjau formulir. Pilih perusahaan di atas untuk mengisinya." />
+        <LockNote text="Pilih perusahaan di atas untuk mengisi formulirnya." />
         <TabPreview tab={tab} />
       </section>
     </div>
