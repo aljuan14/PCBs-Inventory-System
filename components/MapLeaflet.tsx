@@ -49,14 +49,18 @@ const CELL_CATEGORIES: Array<{ key: keyof MapCell; category: InventoryCategory }
 // zoom the map out to the whole world.
 const INDONESIA: [[number, number], [number, number]] = [[-11, 95], [6, 141]];
 const FIT_BOX = { south: -15, west: 90, north: 10, east: 145 };
+// All of Indonesia, as close as fits: zoom moves in quarter levels (zoomSnap), so the map is
+// not left at the whole level out with wide margins.
+const showIndonesia = (map: LeafletMap) => map.fitBounds(INDONESIA);
 // Single points are drawn once at most this many are in view; above it, cells (dots or bubbles).
 const POINT_LIMIT = 1500;
-// Grid cell of about 60 px at a zoom level (groups), or of about 6 px (dots).
+// Grid cell of about 40 px at a zoom level (groups), or of about 6 px (dots).
 const cellSize = (zoom: number, view: ViewMode) => view === 'dots'
   ? Math.min(1, Math.max(0.0001, 84 / 10 / 2 ** zoom))
-  : Math.min(5, Math.max(0.0005, 84 / 2 ** zoom));
-// Summary mode: the levels prepared by summary_build (migration 20261010000003); dots three levels finer (cells an eighth the size).
-const summaryLevel = (zoom: number, view: ViewMode) => Math.min(11, Math.max(4, Math.round(zoom) + (view === 'dots' ? 3 : 0)));
+  : Math.min(5, Math.max(0.0005, 84 / 1.5 / 2 ** zoom));
+// Summary mode: the levels prepared by summary_build (migration 20261010000003), one finer for groups
+// (cells half the size) and three finer for dots (an eighth).
+const summaryLevel = (zoom: number, view: ViewMode) => Math.min(11, Math.max(4, Math.round(zoom) + (view === 'dots' ? 3 : 1)));
 // A dot's radius grows a little with what it holds: 3 px for one, up to 6 px.
 const dotRadius = (total: number) => Math.min(6, 3 + Math.log2(total) * 0.5);
 
@@ -109,7 +113,7 @@ function cellIconHtml(cell: MapCell, mode: ColorMode, size: number) {
     return stop;
   });
   return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:conic-gradient(${stops.join(',')});box-shadow:0 1px 4px rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;cursor:pointer">
-    <div style="width:${size - 10}px;height:${size - 10}px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font:600 ${size > 40 ? 12 : 11}px/1 system-ui,sans-serif;color:#0f172a">${cell.total >= 10000 ? `${Math.round(cell.total / 1000)}rb` : formatNumber(cell.total)}</div>
+    <div style="width:${size - 8}px;height:${size - 8}px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font:600 ${size > 40 ? 12 : 11}px/1 system-ui,sans-serif;color:#0f172a">${cell.total >= 10000 ? `${Math.round(cell.total / 1000)}rb` : formatNumber(cell.total)}</div>
   </div>`;
 }
 
@@ -159,8 +163,8 @@ interface MapProps {
  * Inventory map: filters above, satellite imagery (or a clean basemap), and every
  * point with coordinates. Zoomed out it shows the points summed per grid
  * cell: as many small dots, one per fine cell in the colour most of it has
- * (Titik, the default), or as numbered bubbles split by PCBs class or
- * category (Kelompok); zoomed in far enough, the single points. Only what is on screen is loaded (map_clusters, migration
+ * (Titik), or as numbered bubbles split by PCBs class or category
+ * (Kelompok, the default); zoomed in far enough, the single points. Only what is on screen is loaded (map_clusters, migration
  * 20261010000002).
  */
 export default function MapLeaflet({ supabase, companies, scope, onScopeChange, category, reloadKey = 0, height = '480px', onSelectPoint, fixedCompany = false }: MapProps) {
@@ -184,7 +188,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   const [ownCompany, setOwnCompany] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>(category === 'kapasitor' ? 'category' : 'pcb');
   const [basemap, setBasemap] = useState<Basemap>('satellite');
-  const [view, setView] = useState<ViewMode>('dots');
+  const [view, setView] = useState<ViewMode>('groups');
   const [fullscreen, setFullscreen] = useState(false);
   const [shown, setShown] = useState<Shown | null>(null);
   const [loading, setLoading] = useState(false);
@@ -205,8 +209,8 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
     import('leaflet').then((L) => {
       if (cancelled || !containerRef.current || mapRef.current) return;
       leafletRef.current = L;
-      const map = L.map(containerRef.current, { zoomControl: true, minZoom: 3, worldCopyJump: true });
-      map.fitBounds(INDONESIA);
+      const map = L.map(containerRef.current, { zoomControl: true, minZoom: 3, worldCopyJump: true, zoomSnap: 0.25, zoomDelta: 0.5 });
+      showIndonesia(map);
       for (const key of Object.keys(BASEMAPS) as Basemap[]) {
         const { layers, maxNativeZoom } = BASEMAPS[key];
         basemapLayers.current[key] = L.layerGroup(layers.map((url) => L.tileLayer(url, { attribution: BASEMAP_ATTRIBUTION, maxZoom: 19, maxNativeZoom })));
@@ -298,7 +302,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
       const box: MapBounds = [FIT_BOX.west, FIT_BOX.south, FIT_BOX.east, FIT_BOX.north];
       const cells = SUMMARY_MODE ? await fetchSummaryCells(supabase, filters, effectiveScope, box, 6) : await fetchMapCells(supabase, filters, effectiveScope, box, 2);
       if (!mapRef.current) return;
-      if (cells.length === 0 || (!effectiveScope.companyId && filters.category === 'all')) map.fitBounds(INDONESIA);
+      if (cells.length === 0 || (!effectiveScope.companyId && filters.category === 'all')) showIndonesia(map);
       else {
         map.fitBounds([
           [Math.min(...cells.map((cell) => cell.south)), Math.min(...cells.map((cell) => cell.west))],
@@ -306,7 +310,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
         ], { padding: [40, 40], maxZoom: 14 });
       }
     } catch {
-      map.fitBounds(INDONESIA);
+      showIndonesia(map);
     }
     schedule();
   }, [supabase, filters, effectiveScope, schedule]);
@@ -350,7 +354,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
             .addTo(layer);
           continue;
         }
-        const size = Math.round(Math.min(64, 30 + Math.log10(cell.total) * 9));
+        const size = Math.round(Math.min(44, 24 + Math.log10(cell.total) * 7));
         const icon: DivIcon = L.divIcon({ html: cellIconHtml(cell, colorMode, size), className: '', iconSize: [size, size] });
         L.marker([cell.lat, cell.lng], { icon })
           .bindTooltip(cellTooltip(cell, colorMode), { direction: 'top', offset: [0, -size / 2], opacity: 1 })
@@ -389,6 +393,7 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
   const filtered = (!category && filters.category !== 'all') || filters.pcbRange !== 'all' || filters.year !== 'all';
   const companyValue = effectiveScope.companyId;
   const pickCompany = (companyId: string | null) => (onScopeChange ? onScopeChange({ companyId, unit: null, subUnit: null }) : setOwnCompany(companyId));
+  // The legend sits bottom left, small, over the Indian Ocean west of Java.
   const legend = colorMode === 'pcb'
     ? PCB_COLORS.map((entry) => ({ key: entry.key, label: entry.label, color: entry.color }))
     : INVENTORY_CATEGORIES.filter((entry) => filters.category === 'all' || filters.category === entry.key || (filters.category === 'transformator' && entry.key.startsWith('transformator')))
@@ -454,14 +459,14 @@ export default function MapLeaflet({ supabase, companies, scope, onScopeChange, 
         </div>
 
         {legend.length > 0 && (
-          <div className="absolute bottom-6 left-3 z-[500] rounded-xl bg-white/95 p-3 text-[11px] text-slate-700 shadow-md ring-1 ring-slate-200 backdrop-blur-sm">
-            <div className="mb-1.5 font-semibold text-slate-900">{colorMode === 'pcb' ? 'Hasil uji minyak dielektrik' : 'Jenis alat'}</div>
-            <div className="flex flex-col gap-1">
+          <div className="absolute bottom-3 left-3 z-[500] rounded-lg bg-white/95 px-2.5 py-2 text-[10px] leading-tight text-slate-700 shadow-md ring-1 ring-slate-200 backdrop-blur-sm">
+            <div className="mb-1 font-semibold text-slate-900">{colorMode === 'pcb' ? 'Hasil uji minyak dielektrik' : 'Jenis alat'}</div>
+            <div className="flex flex-col gap-0.5">
               {legend.map((entry) => (
-                <div key={entry.key} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: entry.color }} />{entry.label}</div>
+                <div key={entry.key} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full ring-1 ring-white" style={{ backgroundColor: entry.color }} />{entry.label}</div>
               ))}
             </div>
-            {shown?.mode === 'cells' && <div className="mt-2 border-t border-slate-100 pt-1.5 text-slate-500">{view === 'dots' ? 'Titik besar = lebih banyak data di sekitarnya' : 'Lingkaran berangka = jumlah data di area itu'}</div>}
+            {shown?.mode === 'cells' && <div className="mt-1.5 max-w-[11rem] border-t border-slate-100 pt-1 text-slate-500">{view === 'dots' ? 'Titik besar = lebih banyak data di sekitarnya' : 'Lingkaran berangka = jumlah data di area itu'}</div>}
           </div>
         )}
 
