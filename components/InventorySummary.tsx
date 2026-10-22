@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { categoryTint, getCategoryColor, getCategoryLabel, type InventoryCategory } from '@/lib/inventory';
@@ -163,6 +163,31 @@ function YearButtons({ value, onChange, focusable = true }: { value: YearScope; 
       })}
     </>
   );
+}
+
+/**
+ * When the floating switch shows: while the cards it drives are on screen and
+ * the bar above them is not. Pass `setBar` as the bar's ref and `setCards` as the
+ * cards' box: callback refs, so either may appear after the first render.
+ */
+export function useYearRail() {
+  const [bar, setBar] = useState<HTMLElement | null>(null);
+  const [cards, setCards] = useState<HTMLElement | null>(null);
+  const [inView, setInView] = useState({ bar: true, cards: false });
+  useEffect(() => {
+    if (!bar || !cards) return;
+    const observer = new IntersectionObserver((entries) => {
+      setInView((current) => {
+        const next = { ...current };
+        for (const entry of entries) next[entry.target === bar ? 'bar' : 'cards'] = entry.isIntersecting;
+        return next;
+      });
+    });
+    observer.observe(bar);
+    observer.observe(cards);
+    return () => observer.disconnect();
+  }, [bar, cards]);
+  return { setBar, setCards, visible: inView.cards && !inView.bar };
 }
 
 /**

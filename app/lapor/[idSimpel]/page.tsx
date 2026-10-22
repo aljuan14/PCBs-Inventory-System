@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { ClipboardPen, FileSpreadsheet, Info, MapPinOff, Pencil, Trash2 } from 'lucide-react';
+import { ChevronRight, ClipboardPen, FileSpreadsheet, Info, MapPinOff, Pencil, Trash2 } from 'lucide-react';
 import CompanyPcbStatusCard from '@/components/CompanyPcbStatusCard';
 import DataTable, { type InventoryItem, type TablePreset } from '@/components/DataTable';
 import { StoredEntryEditor, removeStoredEntry, type StoredRow } from '@/components/StoredEntryEditor';
-import InventorySummary, { YearToggle } from '@/components/InventorySummary';
+import InventorySummary, { YearRail, YearToggle, useYearRail } from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
 import { PortalHeader, useCompanyPortal } from '@/components/company/CompanyPortal';
 import { UPLOAD_STATUS } from '@/components/InventoryUpload';
@@ -122,6 +122,7 @@ export default function CompanyHome() {
   };
   // A row opens in the form's own editor, as under "Data tersimpan".
   const [editing, setEditing] = useState<{ category: InventoryCategory; row: StoredRow } | null>(null);
+  const { setBar: setYearBar, setCards: setYearCards, visible: yearRailShown } = useYearRail();
   const load = async (item: InventoryItem) => {
     const category = item.type as InventoryCategory;
     if (!ALL_CATEGORIES.includes(category)) return null;
@@ -138,6 +139,23 @@ export default function CompanyHome() {
   return (
     <>
       <PortalHeader title="Beranda" description="Status laporan PCBs perusahaan, ringkasan peralatan, dan letaknya di peta." />
+      {/* The map first, as on the admin's dashboard: where the equipment is, before the figures. */}
+      {loaded !== null && total > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-1 text-base font-semibold text-slate-900">Peta peralatan</h2>
+          <p className="mb-3 flex items-start gap-1.5 text-xs text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Periksa apakah titiknya berada di lokasi yang benar. Titik di laut biasanya karena lintang selatan ditulis tanpa tanda minus (-).</p>
+          {/* Leads to those rows in the table below, each with its pencil to fill the coordinate. */}
+          {loaded.noPoint > 0 && (
+            <button type="button" onClick={() => showRows({ coordinates: 'without' })} className="mb-3 flex w-full items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-xs text-amber-900 transition-colors hover:border-amber-300 hover:bg-amber-100">
+              <MapPinOff className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{fmt(loaded.noPoint)} peralatan belum punya titik koordinat yang terbaca, jadi tidak tampil di peta. Lengkapi koordinatnya dengan tombol ubah (ikon pensil) di tabel.{' '}
+                <span className="inline-flex items-center gap-0.5 font-semibold underline underline-offset-2">Klik di sini untuk melihat datanya <ChevronRight className="h-3.5 w-3.5" /></span>
+              </span>
+            </button>
+          )}
+          <MapLeaflet supabase={supabase} companies={[{ id: company.id, name: company.nama_perusahaan }]} scope={scope} onScopeChange={keepScope} fixedCompany height="380px" />
+        </section>
+      )}
       <CompanyPcbStatusCard supabase={supabase} companyId={company.id} hrefFor={where} helpHref={`${href('/bantuan')}#arti-status`} />
       <UploadsToWatch />
 
@@ -148,24 +166,16 @@ export default function CompanyHome() {
             <div ref={tableRef} className="scroll-mt-6">
               <DataTable companies={[{ id: company.id, name: company.nama_perusahaan }]} scope={scope} reloadKey={reloadKey} preset={tablePreset} hideCompany rowActions={rowActions} />
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div ref={setYearBar} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <span className="text-sm font-semibold text-slate-800">Tahun pembuatan</span>
               <YearToggle value={years} onChange={setYears} />
               <span className="text-xs text-slate-500">{years === 'all' ? 'Semua peralatan, termasuk yang tahunnya tidak diketahui.' : `Hanya peralatan ${years === 'pre1997' ? 'buatan sebelum 1997' : 'buatan 1997 ke atas'}; yang tahunnya tidak diketahui tidak dihitung.`} Klik angka untuk melihat datanya di tabel.</span>
             </div>
-            <InventorySummary stats={loaded.value} scope={years} loading={false} onSelect={showRows} />
-            <TonnageCard stats={loaded.value} scope={years} loading={false} onSelect={showRows} supabase={supabase} companyId={company.id} reloadKey={reloadKey} />
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h2 className="mb-1 text-base font-semibold text-slate-900">Peta peralatan</h2>
-              <p className="mb-3 flex items-start gap-1.5 text-xs text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Periksa apakah titiknya berada di lokasi yang benar. Titik di laut biasanya karena lintang selatan ditulis tanpa tanda minus (-).</p>
-              {loaded.noPoint > 0 && (
-                <p className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-                  <MapPinOff className="mt-0.5 h-4 w-4 shrink-0" /> {fmt(loaded.noPoint)} peralatan belum punya titik koordinat yang terbaca, jadi tidak tampil di peta. Lengkapi koordinatnya di formulir (bagian Data tersimpan, tombol ubah).
-                </p>
-              )}
-              <MapLeaflet supabase={supabase} companies={[{ id: company.id, name: company.nama_perusahaan }]} scope={scope} onScopeChange={keepScope} fixedCompany height="520px" />
-            </section>
+            <div ref={setYearCards} className="space-y-6">
+              <YearRail value={years} onChange={setYears} visible={yearRailShown} />
+              <InventorySummary stats={loaded.value} scope={years} loading={false} onSelect={showRows} />
+              <TonnageCard stats={loaded.value} scope={years} loading={false} onSelect={showRows} supabase={supabase} companyId={company.id} reloadKey={reloadKey} />
+            </div>
           </>
         )}
       {editing && <StoredEntryEditor category={editing.category} row={editing.row} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); changed(); }} />}

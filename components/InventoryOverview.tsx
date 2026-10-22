@@ -8,7 +8,7 @@ import DataTable, { type EditableInventoryFields, type InventoryItem, type Table
 import CompanyCheckCard from '@/components/CompanyCheckCard';
 import CompanyPcbStatusCard, { reportHref } from '@/components/CompanyPcbStatusCard';
 import DashboardScopeFilter, { FilterRow } from '@/components/DashboardScopeFilter';
-import InventorySummary, { YearRail, YearToggle } from '@/components/InventorySummary';
+import InventorySummary, { YearRail, YearToggle, useYearRail } from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
 import SummaryStamp from '@/components/SummaryStamp';
 import { useDashboardData } from '@/components/useDashboardData';
@@ -27,24 +27,7 @@ export default function InventoryOverview() {
   // One production-year switch for the figures, the test results and the tonnage.
   const [years, setYears] = useState<YearScope>('all');
   // The floating switch shows while the cards it drives are on screen and the bar above them is not.
-  const yearBarRef = useRef<HTMLDivElement>(null);
-  const yearCardsRef = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState({ bar: true, cards: false });
-  useEffect(() => {
-    const bar = yearBarRef.current;
-    const cards = yearCardsRef.current;
-    if (!bar || !cards) return;
-    const observer = new IntersectionObserver((entries) => {
-      setInView((current) => {
-        const next = { ...current };
-        for (const entry of entries) next[entry.target === bar ? 'bar' : 'cards'] = entry.isIntersecting;
-        return next;
-      });
-    });
-    observer.observe(bar);
-    observer.observe(cards);
-    return () => observer.disconnect();
-  }, []);
+  const { setBar: setYearBar, setCards: setYearCards, visible: yearRailShown } = useYearRail();
 
   const handleEdit = async (item: InventoryItem, changes: EditableInventoryFields) => {
     await updateInventoryItem(supabase, item, changes);
@@ -83,7 +66,7 @@ export default function InventoryOverview() {
     <div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-3 text-base font-semibold">Peta sebaran inventaris</h2><MapLeaflet supabase={supabase} companies={companies} scope={scope} onScopeChange={setScope} reloadKey={reloadKey} height="380px" onSelectPoint={SUMMARY_MODE ? undefined : (selected) => showRows({ mapPoint: mapPointFilter(selected) })} /></div>
     {/* Both filters in one card: which data, then which production years. */}
     <DashboardScopeFilter companies={companies} scope={scope} onChange={setScope} reloadKey={reloadKey} statuses={statuses}>
-      <div ref={yearBarRef}>
+      <div ref={setYearBar}>
         <FilterRow icon={<CalendarDays className="h-4 w-4" />} label="Tahun pembuatan">
           <YearToggle value={years} onChange={setYears} />
           <span className="text-xs text-slate-500">{years === 'all' ? 'Semua peralatan, termasuk yang tahunnya tidak diketahui.' : `Hanya peralatan ${years === 'pre1997' ? 'buatan sebelum 1997' : 'buatan 1997 ke atas'}; yang tahunnya tidak diketahui tidak dihitung.`} Berlaku untuk angka, hasil pengujian, dan tonase di bawah.</span>
@@ -92,8 +75,8 @@ export default function InventoryOverview() {
     </DashboardScopeFilter>
     {!SUMMARY_MODE && !readOnly && scope.companyId && companyName && <CompanyCheckCard companyId={scope.companyId} companyName={companyName} reloadKey={reloadKey} onSendsChange={() => setStatusKey((key) => key + 1)} />}
     {scope.companyId && <CompanyPcbStatusCard supabase={supabase} companyId={scope.companyId} reloadKey={reloadKey} hrefFor={SUMMARY_MODE ? undefined : (target) => reportHref(scope.companyId!, target, { readOnly })} />}
-    <div ref={yearCardsRef} className="space-y-6">
-    <YearRail value={years} onChange={setYears} visible={inView.cards && !inView.bar} />
+    <div ref={setYearCards} className="space-y-6">
+    <YearRail value={years} onChange={setYears} visible={yearRailShown} />
     <InventorySummary stats={stats} scope={years} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} scope={years} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} supabase={supabase} companyId={scope.companyId} unitPicked={Boolean(scope.unit || scope.subUnit)} reloadKey={reloadKey} />
     </div>
