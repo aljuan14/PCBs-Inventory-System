@@ -2,34 +2,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Building2, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Building2, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
 import { countCompanyData, deleteCompany, type CompanyData } from '@/lib/company-purge';
 import { INVENTORY_CATEGORIES, getCategoryLabel } from '@/lib/inventory';
 import { EMPTY_STATUS, STATUS_COLORS, fetchAllPcbStatus, nationalColor, type NationalColor } from '@/lib/company-pcb-status';
 import { FEEDBACK_STATUSES, STATUS_ORDER, fetchCompanyStatuses, formatDate, statusOf, type CompanyStatus, type FeedbackStatus } from '@/lib/company-status';
 import NationalPcbStatus from '@/components/NationalPcbStatus';
 import { useReadOnly } from '@/components/useAccess';
-import CompanySortControl from '@/components/CompanySortControl';
 import { useCompanySort } from '@/components/useCompanySort';
-import { formatEdited, selectCompanies, sortCompanies } from '@/lib/company-sort';
+import { formatEdited, selectCompanies } from '@/lib/company-sort';
 import { createClient } from '@/lib/supabase/client';
-import { alertDialog } from '@/components/Dialog';
+import { alertDialog, promptDialog } from '@/components/Dialog';
 
 type Company = { id: string; nama_perusahaan: string; alamat?: string | null; id_simpel?: string | null; pilar_company_id?: string | null; terakhir_diubah?: string | null };
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
 
 type DataFilter = 'all' | FeedbackStatus;
+type SortKey = 'nama' | 'status' | 'data' | 'diubah';
 
-function DataBadge({ summary }: { summary: CompanyStatus | undefined }) {
-  if (!summary || summary.rows === 0) {
-    return <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-500">Kosong · belum ada data</span>;
-  }
-  const detail = INVENTORY_CATEGORIES.filter((category) => summary.byCategory[category.key]).map((category) => `${category.shortLabel} ${formatNumber(summary.byCategory[category.key]!)}`).join(' · ');
-  return <span title={detail} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">{formatNumber(summary.rows)} baris · {formatNumber(summary.files)} berkas</span>;
-}
+/** Most urgent first, for the Status PCBs column and its filter. */
+const PCB_ORDER: NationalColor[] = ['red', 'yellow', 'green', 'empty'];
 
 /** Whether the check results were sent, with the date of the last message. */
 function SendBadge({ summary }: { summary: CompanyStatus | undefined }) {
@@ -129,7 +123,6 @@ export default function CompaniesPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Company | null>(null);
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<Map<string, CompanyStatus> | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -166,13 +159,42 @@ export default function CompaniesPage() {
     return () => { active = false; };
   }, [load, apply]);
 
-  const [sort, setSort] = useCompanySort();
+  // The table's order: a click on a column heading sorts by it, again to reverse. Name and edit
+  // time follow the order shared by every company list (lib/company-sort.ts).
+  const [sharedSort, setSharedSort] = useCompanySort();
   const withEdited = companies.some((company) => company.terakhir_diubah);
-  const shown = sortCompanies(companies.filter((company) => filter === 'all' || statusOf(summaries, company.id) === filter),
-    withEdited || sort !== 'terbaru' ? sort : 'az', (company) => company.nama_perusahaan, (company) => company.terakhir_diubah);
+  const [columnSort, setColumnSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
+  const sort = columnSort ?? (sharedSort === 'terbaru' && withEdited ? { key: 'diubah' as const, desc: true } : { key: 'nama' as const, desc: sharedSort === 'za' });
+  const sortBy = (key: SortKey) => {
+    const desc = sort.key === key ? !sort.desc : key === 'diubah' || key === 'data';
+    setColumnSort({ key, desc });
+    if (key === 'nama') setSharedSort(desc ? 'za' : 'az');
+    if (key === 'diubah' && desc) setSharedSort('terbaru');
+  };
+
+  const [query, setQuery] = useState('');
+  const [pcbFilter, setPcbFilter] = useState<NationalColor | 'all'>('all');
+  const colorOf = (companyId: string): NationalColor => pcbColors?.get(companyId) ?? 'empty';
+  const needle = query.trim().toLowerCase();
+  const matches = (company: Company) => !needle || [company.nama_perusahaan, company.id_simpel, company.alamat].some((value) => value?.toLowerCase().includes(needle));
+  const byName = (a: Company, b: Company) => a.nama_perusahaan.localeCompare(b.nama_perusahaan, 'id');
+  const compare: Record<SortKey, (a: Company, b: Company) => number> = {
+    nama: byName,
+    status: (a, b) => PCB_ORDER.indexOf(colorOf(a.id)) - PCB_ORDER.indexOf(colorOf(b.id)),
+    data: (a, b) => (summaries?.get(a.id)?.rows ?? 0) - (summaries?.get(b.id)?.rows ?? 0),
+    diubah: (a, b) => (a.terakhir_diubah ?? '').localeCompare(b.terakhir_diubah ?? ''),
+  };
+  const searched = companies.filter(matches);
+  const shown = searched
+    .filter((company) => (filter === 'all' || statusOf(summaries, company.id) === filter) && (pcbFilter === 'all' || colorOf(company.id) === pcbFilter))
+    .sort((a, b) => (sort.desc ? -1 : 1) * compare[sort.key](a, b) || byName(a, b));
   const FILTERS: Array<[DataFilter, string, number]> = [
-    ['all', 'Semua', companies.length],
-    ...STATUS_ORDER.map((status): [DataFilter, string, number] => [status, FEEDBACK_STATUSES[status].label, companies.filter((company) => statusOf(summaries, company.id) === status).length]),
+    ['all', 'Semua', searched.length],
+    ...STATUS_ORDER.map((status): [DataFilter, string, number] => [status, FEEDBACK_STATUSES[status].label, searched.filter((company) => statusOf(summaries, company.id) === status).length]),
+  ];
+  const PCB_FILTERS: Array<[NationalColor | 'all', string, number]> = [
+    ['all', 'Semua', searched.length],
+    ...PCB_ORDER.map((color): [NationalColor, string, number] => [color, (color === 'empty' ? EMPTY_STATUS : STATUS_COLORS[color]).label, searched.filter((company) => colorOf(company.id) === color).length]),
   ];
 
   const statusCompanies = useMemo(() => companies.map((company) => ({ id: company.id, name: company.nama_perusahaan })), [companies]);
@@ -183,17 +205,121 @@ export default function CompaniesPage() {
     const company = companies.find((entry) => entry.id === companyId);
     if (company?.id_simpel) { router.push(`/lapor/${encodeURIComponent(company.id_simpel)}`); return; }
     setFilter('all');
+    setPcbFilter('all');
+    setQuery('');
     setHighlighted(companyId);
     requestAnimationFrame(() => document.getElementById(`company-${companyId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   };
 
-  const addCompany = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!name.trim()) return;
-    await supabase.from('companies').insert({ nama_perusahaan: name.trim() });
-    setName('');
+  const addCompany = async () => {
+    const name = (await promptDialog({ title: 'Tambah perusahaan', label: 'Nama perusahaan', placeholder: 'mis. PT Contoh Energi', tone: 'primary', confirmLabel: 'Tambah', icon: Building2 }))?.trim();
+    if (!name) return;
+    const { error } = await supabase.from('companies').insert({ nama_perusahaan: name });
+    if (error) { await alertDialog({ title: 'Gagal menambah perusahaan', message: error.message }); return; }
     await loadCompanies();
   };
 
-  return <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 lg:px-8"><header><p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Administrasi</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Manajemen Perusahaan</h1><p className="mt-2 text-sm text-slate-500">Kelola perusahaan pemilik data inventarisasi.</p></header><NationalPcbStatus supabase={supabase} companies={statusCompanies} reloadKey={reloadKey} onSelectCompany={openCompany} />{!readOnly && <form onSubmit={addCompany} className="flex max-w-xl gap-2 rounded-2xl border border-slate-200 bg-white p-4"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama perusahaan baru" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-600" /><button type="submit" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><Plus className="h-4 w-4" /> Tambah</button></form>}<div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4"><div className="flex flex-wrap items-center gap-x-4 gap-y-2"><div className="text-sm font-semibold">Daftar perusahaan</div><CompanySortControl value={sort} onChange={setSort} withEdited={withEdited} /></div>{summaries && <div role="group" aria-label="Saring perusahaan" className="flex gap-1 rounded-xl bg-slate-100 p-1">{FILTERS.map(([key, label, count]) => <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={filter === key} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${filter === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}>{label} ({formatNumber(count)})</button>)}</div>}</div>{summaryError && <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-3 text-xs font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" /> Ringkasan isi data gagal dimuat: {summaryError}</div>}{loading ? <div className="p-6 text-sm text-slate-500">Memuat...</div> : shown.length === 0 ? <div className="p-6 text-sm text-slate-500">Tidak ada perusahaan pada pilihan ini.</div> : shown.map((company) => <div key={company.id} id={`company-${company.id}`} className={`flex items-center gap-3 border-b border-slate-100 px-5 py-4 transition-colors last:border-0 ${highlighted === company.id ? 'bg-amber-50' : ''}`}><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><Building2 className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">{company.nama_perusahaan}{company.id_simpel && <Link href={readOnly ? `/roadmap?company=${company.id}` : `/lapor/${encodeURIComponent(company.id_simpel)}`} title={readOnly ? 'Buka roadmap perusahaan ini' : 'Buka halaman laporan perusahaan ini'} className="rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white hover:bg-emerald-800">ID SIMPEL {company.id_simpel}</Link>}{pcbColors?.get(company.id) && (() => { const color = pcbColors.get(company.id)!; const style = color === 'empty' ? EMPTY_STATUS : STATUS_COLORS[color]; return <span title={`Status PCBs: ${style.label}`} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${style.card} ${style.text}`}><span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />{style.label}</span>; })()}</div><div className="text-xs text-slate-500">{company.alamat || 'Alamat belum diisi'}{company.terakhir_diubah && <> · diubah {formatEdited(company.terakhir_diubah)}</>}</div></div>{summaries && <div className="flex flex-wrap justify-end gap-1.5"><SendBadge summary={summaries.get(company.id)} /><DataBadge summary={summaries.get(company.id)} /></div>}{!readOnly && <button type="button" onClick={() => setDeleting(company)} aria-label={`Hapus ${company.nama_perusahaan}`} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" /> Hapus</button>}</div>)}</div>{deleting && <DeleteCompanyDialog supabase={supabase} company={deleting} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); loadCompanies(); }} />}</div>;
+  const opens = (company: Company) => readOnly || Boolean(company.id_simpel);
+  const heading = (key: SortKey, label: string, className = '') => (
+    <th scope="col" aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={`px-4 py-3 ${className}`}>
+      <button type="button" onClick={() => sortBy(key)} className="inline-flex items-center gap-1 font-bold hover:text-emerald-700">
+        {label}{sort.key === key ? (sort.desc ? <ArrowDown className="h-3.5 w-3.5" /> : <ArrowUp className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5 text-slate-300" />}
+      </button>
+    </th>
+  );
+  const chips = <K extends string>(label: string, options: Array<[K, string, number]>, value: K, onChange: (key: K) => void) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="w-32 shrink-0 text-xs font-semibold text-slate-500">{label}</span>
+      <div role="group" aria-label={label} className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+        {options.map(([key, text, count]) => <button key={key} type="button" onClick={() => onChange(key)} aria-pressed={value === key} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${value === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}>{text} ({formatNumber(count)})</button>)}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 px-5 py-8 lg:px-8">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Administrasi</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Manajemen Perusahaan</h1>
+        <p className="mt-2 text-sm text-slate-500">Kelola perusahaan pemilik data inventarisasi.</p>
+      </header>
+      <NationalPcbStatus supabase={supabase} companies={statusCompanies} reloadKey={reloadKey} onSelectCompany={openCompany} />
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Daftar perusahaan</h2>
+            <p className="text-xs text-slate-500">{formatNumber(shown.length)} dari {formatNumber(companies.length)} perusahaan{readOnly ? ' · klik baris untuk membuka roadmap-nya' : ' · klik baris untuk membuka laporannya'}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex w-72 max-w-full items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 focus-within:border-emerald-600">
+              <Search className="h-4 w-4 shrink-0 text-slate-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama, ID SIMPEL, alamat…" aria-label="Cari perusahaan" className="min-w-0 flex-1 text-sm outline-none" />
+              {query && <button type="button" onClick={() => setQuery('')} aria-label="Hapus pencarian" className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>}
+            </label>
+            {!readOnly && <button type="button" onClick={addCompany} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><Plus className="h-4 w-4" /> Tambah perusahaan</button>}
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {pcbColors && chips('Status PCBs', PCB_FILTERS, pcbFilter, setPcbFilter)}
+          {summaries && chips('Hasil pemeriksaan', FILTERS, filter, setFilter)}
+        </div>
+        {summaryError && <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" /> Ringkasan isi data gagal dimuat: {summaryError}</div>}
+
+        <div className="mt-4 max-h-[70vh] overflow-auto rounded-xl border border-slate-200/80">
+          <table className="w-full min-w-[56rem] text-left text-sm">
+            <thead className="sticky top-0 z-20 bg-slate-50 text-xs text-slate-700 shadow-[0_1px_0_0_var(--color-slate-200)]">
+              <tr>
+                <th scope="col" className="sticky left-0 z-10 w-14 min-w-14 bg-slate-50 px-4 py-3 font-bold">No.</th>
+                {heading('nama', 'Perusahaan', 'sticky left-14 z-10 bg-slate-50')}
+                <th scope="col" className="px-4 py-3 font-bold">ID SIMPEL</th>
+                {heading('status', 'Status PCBs')}
+                {heading('data', 'Data')}
+                <th scope="col" className="px-4 py-3 font-bold">Hasil pemeriksaan</th>
+                {heading('diubah', 'Diubah')}
+                {!readOnly && <th scope="col" className="px-4 py-3 text-right font-bold">Aksi</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <tr><td colSpan={8} className="p-6 text-sm text-slate-500">Memuat…</td></tr>
+                : shown.length === 0 ? <tr><td colSpan={8} className="p-6 text-sm text-slate-500">Tidak ada perusahaan pada pilihan ini.</td></tr>
+                : shown.map((company, index) => {
+                  const summary = summaries?.get(company.id);
+                  const color = pcbColors?.get(company.id);
+                  const style = color ? (color === 'empty' ? EMPTY_STATUS : STATUS_COLORS[color]) : null;
+                  const detail = summary ? INVENTORY_CATEGORIES.filter((category) => summary.byCategory[category.key]).map((category) => `${category.shortLabel} ${formatNumber(summary.byCategory[category.key]!)}`).join(' · ') : '';
+                  const row = highlighted === company.id ? 'bg-amber-50' : index % 2 ? 'bg-slate-50' : 'bg-white';
+                  return (
+                    <tr key={company.id} id={`company-${company.id}`} onClick={opens(company) ? () => openCompany(company.id) : undefined}
+                      title={opens(company) ? undefined : 'Belum punya ID SIMPEL: hubungkan dulu di menu ID SIMPEL untuk membuka laporannya'}
+                      className={`${row} border-b border-slate-100 align-top transition-colors last:border-0 ${opens(company) ? 'cursor-pointer hover:bg-emerald-50/60' : ''}`}>
+                      <td className="sticky left-0 z-10 w-14 min-w-14 bg-inherit px-4 py-3 tabular-nums text-slate-500">{index + 1}</td>
+                      <td className="sticky left-14 z-10 max-w-80 bg-inherit px-4 py-3">
+                        <div className="font-semibold text-slate-900">{company.nama_perusahaan}</div>
+                        <div className="mt-0.5 line-clamp-2 text-xs text-slate-500">{company.alamat || 'Alamat belum diisi'}</div>
+                      </td>
+                      <td className="px-4 py-3">{company.id_simpel ? <span className="rounded-md bg-slate-900 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">{company.id_simpel}</span> : <span className="text-xs italic text-slate-400">belum ada</span>}</td>
+                      <td className="px-4 py-3">{style ? <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${style.card} ${style.text}`}><span className={`h-2 w-2 rounded-full ${style.dot}`} />{style.label}</span> : <span className="text-xs text-slate-400">–</span>}</td>
+                      <td className="px-4 py-3">
+                        {summary && summary.rows > 0 ? <>
+                          <div className="whitespace-nowrap font-semibold text-slate-800">{formatNumber(summary.rows)} baris</div>
+                          <div className="mt-0.5 text-xs text-slate-500">{detail}{summary.files ? ` · ${formatNumber(summary.files)} berkas` : ''}</div>
+                        </> : <span className="text-xs text-slate-400">Belum ada data</span>}
+                      </td>
+                      <td className="px-4 py-3">{summary && summary.status !== 'empty' ? <SendBadge summary={summary} /> : <span className="text-xs text-slate-400">–</span>}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{company.terakhir_diubah ? formatEdited(company.terakhir_diubah) : '–'}</td>
+                      {!readOnly && <td className="px-4 py-3 text-right">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); setDeleting(company); }} title="Hapus perusahaan" aria-label={`Hapus ${company.nama_perusahaan}`} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-4 w-4" /></button>
+                      </td>}
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {deleting && <DeleteCompanyDialog supabase={supabase} company={deleting} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); loadCompanies(); }} />}
+    </div>
+  );
 }
