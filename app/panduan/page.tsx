@@ -8,13 +8,13 @@ import {
 import { Contents, FaqList, HelpSection, Note, type FaqGroup, type HelpPart } from '@/components/help/HelpParts';
 import { MAX_STORAGE_DAYS, PERMIT_WARNING_DAYS } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
-import { COMPANY_MAX_UPLOAD_BYTES } from '@/lib/upload-rules';
+import { MAX_COMPANY_UPLOAD_BYTES } from '@/lib/company-upload-shared';
 import { MAX_UPLOAD_BYTES } from '@/lib/upload-store';
 import { REGULATION_FILE } from '@/lib/templates';
 
 const linkClass = 'font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-900';
 const ADMIN_MB = MAX_UPLOAD_BYTES / 1024 / 1024;
-const COMPANY_MB = COMPANY_MAX_UPLOAD_BYTES / 1024 / 1024;
+const COMPANY_MB = MAX_COMPANY_UPLOAD_BYTES / 1024 / 1024;
 
 const FAQ_GROUPS: FaqGroup[] = [
   {

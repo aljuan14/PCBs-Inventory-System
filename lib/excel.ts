@@ -73,9 +73,36 @@ function tightenRange(worksheet: XLSX.WorkSheet) {
 }
 
 export function readWorkbook(buffer: ArrayBuffer | Uint8Array) {
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  let workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   if (workbook.SheetNames.length === 0) throw new Error('File Excel tidak memiliki sheet.');
+  // SheetJS drops a whole sheet when one of its hyperlinks has a ref it cannot
+  // read (e.g. "$G$18", written by LibreOffice); the links are never used, so
+  // such a workbook is read again without them.
+  if (workbook.SheetNames.some((name) => !workbook.Sheets[name])) {
+    const stripped = withoutHyperlinks(buffer);
+    if (stripped) workbook = XLSX.read(stripped, { type: 'array', cellDates: true });
+  }
   return workbook;
+}
+
+/** The .xlsx zip with the <hyperlinks> block of every worksheet removed, or null when it is not a zip or has none. */
+function withoutHyperlinks(buffer: ArrayBuffer | Uint8Array): Uint8Array | null {
+  try {
+    const zip = XLSX.CFB.read(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer), { type: 'array' });
+    let changed = false;
+    zip.FullPaths.forEach((path: string, index: number) => {
+      if (!/worksheets\/[^/]+\.xml$/i.test(path)) return;
+      const entry = zip.FileIndex[index];
+      const xml = new TextDecoder().decode(entry.content);
+      if (!xml.includes('<hyperlinks')) return;
+      entry.content = new TextEncoder().encode(xml.replace(/<hyperlinks>[\s\S]*?<\/hyperlinks>/g, ''));
+      entry.size = entry.content.length;
+      changed = true;
+    });
+    return changed ? XLSX.CFB.write(zip, { type: 'array', fileType: 'zip' }) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

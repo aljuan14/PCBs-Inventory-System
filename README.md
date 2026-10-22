@@ -1,6 +1,6 @@
 # Sistem Inventarisasi PCBs
 
-Aplikasi inventarisasi **Polychlorinated Biphenyls (PCBs)** milik Direktorat B3, Kementerian Lingkungan Hidup. Laporan Excel dari banyak perusahaan diunggah, dipetakan ke formulir baku KLHK, diperiksa kualitasnya, lalu dirangkum di dashboard, peta, dan tabel.
+Aplikasi inventarisasi **Polychlorinated Biphenyls (PCBs)** milik Direktorat Pengelolaan B3, Kementerian Lingkungan Hidup. Perusahaan melaporkan peralatannya (transformator, kapasitor, minyak dielektrik) lewat formulir web atau template Excel; admin juga dapat mengimpor laporan Excel dalam format apa pun. Data diperiksa otomatis, lalu dirangkum di dashboard, peta, tabel, dan status PCBs merah / kuning / hijau per perusahaan sesuai Permen LHK No. P.29/2020.
 
 ## Tech Stack
 
@@ -8,34 +8,40 @@ Aplikasi inventarisasi **Polychlorinated Biphenyls (PCBs)** milik Direktorat B3,
 |---|---|
 | Aplikasi | Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4, ikon lucide-react |
 | Grafik & peta | Recharts 3, Leaflet 1.9 (peta dasar Esri: abu-abu terang dan satelit) |
-| Baca Excel | SheetJS (`xlsx`) |
+| Baca Excel | SheetJS (`xlsx` 0.20.3, disimpan di `vendor/` karena versi baru tidak lagi terbit di npm) |
 | Database & login | Supabase: PostgreSQL 17, Auth, Storage, Row Level Security, fungsi RPC untuk statistik |
+| Web | Vercel + Supabase Cloud, data lengkap |
 | Offline | Docker + Supabase CLI (Supabase lokal per laptop), script Node.js di `scripts/offline/` |
-| Web | Vercel + Supabase Cloud, hanya berisi ringkasan |
 | Sinkronisasi data | Repo GitHub private `PCBs-Inventory-Data` (CSV per tabel) |
 
 ---
 
-## Cara kerja: offline dan web
+## Cara kerja: web dan offline
 
 Satu kode yang sama berjalan di dua tempat.
 
-```text
-Laptop (offline, data lengkap)                         Web (Vercel, hanya ringkasan)
-┌──────────────────────────────┐   npm run data:push   ┌──────────────────────────────┐
-│ Supabase lokal di Docker     │──► repo data private  │ Supabase Cloud               │
-│ unggah, periksa, edit, tabel │──► ringkasan (±5 MB) ─►│ dashboard, tonase, peta      │
-└──────────────────────────────┘                       └──────────────────────────────┘
-```
-
-| | **Offline** | **Web** |
+| | **Web** (utama) | **Offline** |
 |---|---|---|
-| Untuk | Admin yang mengolah data | Pimpinan yang memantau hasil |
-| Isi database | Semua baris data (±356 ribu) | Ringkasan saja: angka, sel peta, jumlah merek |
-| Fitur | Semua | Dashboard, status PCBs perusahaan, tonase, peta, daftar Lampiran I/II. Tanpa tabel, unggah, edit, formulir, roadmap |
-| Cara menjalankan | `npm run offline`, lihat **[OFFLINE.md](OFFLINE.md)** | https://pcbs-inventory-system.vercel.app |
+| Alamat | https://pcbs-inventory-system.vercel.app | http://localhost:3000, lihat **[OFFLINE.md](OFFLINE.md)** |
+| Database | Supabase Cloud, **sumber data utama** | Supabase lokal di Docker, salinan untuk diolah di laptop |
+| Pengguna | Admin, pemantau (pimpinan), dan perusahaan | Admin |
+| Fitur | Semua | Semua |
 
-Keduanya wajib login. Akun dibuat oleh admin, dan pendaftaran dari halaman login ditutup. Web diperbarui otomatis setiap `npm run data:push` dari laptop admin (lihat [Memperbarui web](#memperbarui-web)).
+Sejak 13 Oktober 2026 (masa pengujian) web berjalan penuh dengan data asli: data disalin sekali ke cloud dengan `npm run data:to-cloud`, dan sejak itu **data diubah lewat web**. Database lokal dan cloud terpisah: yang diisi di laptop tidak tampil di web, dan sebaliknya. Nanti aplikasi dan datanya dipindah ke server kantor dan dihubungkan ke PILAR / SIMPEL.
+
+Keduanya wajib login. Akun dibuat admin di menu **Akun pengguna**, dan pendaftaran dari halaman login ditutup.
+
+---
+
+## Pengguna dan peran
+
+| Peran | Yang bisa dilakukan |
+|---|---|
+| **Admin** | Semua: data, unggah, verifikasi unggahan dan surat pernyataan perusahaan, ID SIMPEL, akun |
+| **Pemantau** | Melihat dashboard, perusahaan, roadmap, kualitas data, dan panduan; tidak dapat mengubah apa pun (untuk pimpinan) |
+| **Perusahaan** | Hanya area perusahaannya sendiri, `/lapor/<ID SIMPEL>`: beranda, formulir, roadmap, template, riwayat unggahan, bantuan |
+
+Akun uji coba ZZ Uji A–F (satu skenario status per perusahaan uji) dibuat dari halaman Akun pengguna.
 
 ---
 
@@ -45,13 +51,13 @@ Keduanya wajib login. Akun dibuat oleh admin, dan pendaftaran dari halaman login
 
 | Bagian | Isi |
 |---|---|
-| Filter | Perusahaan › Unit Induk › Unit Pelaksana. Pemilih perusahaan bisa dicari dan berlaku untuk seluruh halaman. |
-| Ringkasan | Total transformator, kapasitor, dan minyak dielektrik. Di bawahnya satu kolom per jenis trafo (digunakan dan tidak digunakan, masing-masing dengan latar warnanya): tahun produksi, lalu Status PCBs (< 2, 2–50, > 50 ppm, belum diuji) dengan tombol **< 1997 / Semua**. |
-| Tonase transformator | Baris **menurut tahun pembuatan**: tonase < 1997, ≥ 1997, dan tanpa tahun, ditambah tonase ≥ 1997 dari pernyataan perusahaan (dicatat terpisah). Lalu tombol **< 1997 / Semua**. Total tonase, lalu grafik kolom per kadar PCBs (> 50 ppm, ≤ 50 ppm, belum diuji) untuk tiap jenis trafo, dan baris terpisah untuk trafo yang tahun pembuatannya kosong. Skala logaritmik agar angka kecil tetap terlihat. |
-| Tabel data | Semua kolom, pencarian, filter, edit dan hapus. Baris dimuat 50 per langkah saat tabel di-scroll. *(offline)* |
-| Peta sebaran | Filter kategori, perusahaan, Status PCBs, dan tahun. Titik dikelompokkan per wilayah (lingkaran berangka dengan cincin warna per status), lalu tampil satuan saat diperbesar. Warna per Status PCBs atau kategori, pilihan peta atau satelit, dan layar penuh. |
+| Filter | Satu kartu: **Tampilkan data** (Perusahaan › Unit Induk › Unit Pelaksana, bisa dicari, berlaku untuk seluruh halaman) dan **Tahun pembuatan** (Semua / < 1997 / ≥ 1997). Saat kartu angka di-scroll, tombol tahun ikut melayang di tengah atas, dengan warna berbeda per pilihan. |
+| Peta sebaran | Dibuka pertama. Titik kecil (bawaan) atau kelompok per wilayah berangka dengan cincin warna per status, filter kategori / perusahaan / Status PCBs / tahun, peta atau satelit, layar penuh, legenda di kiri bawah. |
+| Ringkasan | Total transformator, kapasitor, dan minyak dielektrik; per jenis trafo (digunakan dan tidak digunakan): tahun produksi dan Status PCBs (< 2, 2 sampai < 50, ≥ 50 ppm, belum diuji). |
+| Tonase transformator | Tonase < 1997, ≥ 1997, dan tanpa tahun, ditambah tonase ≥ 1997 dari pernyataan perusahaan (dicatat terpisah); grafik per kadar PCBs (≥ 50 ppm, < 50 ppm, belum diuji), skala logaritmik. |
+| Tabel data | Semua kolom, baris belang agar mudah dibaca, berat dalam tiga kolom (kering, minyak, total, kg), pencarian, filter, edit (termasuk koordinat) dan hapus. Baris dimuat 50 per langkah saat di-scroll. |
 
-Hampir semua angka bisa diklik untuk membuka datanya di tabel *(offline)*.
+Hampir semua angka bisa diklik untuk membuka datanya di tabel.
 
 ### Halaman per kategori
 
@@ -60,51 +66,79 @@ Trafo digunakan, trafo tidak digunakan, kapasitor, dan minyak dielektrik, masing
 - **Kapasitor:** daftar 72 nama dagang kapasitor yang mengandung PCBs (**Lampiran II** Permen LHK No. P.29/2020), dicocokkan dengan merek dan tahun di data: *berpotensi PCBs*, *perlu dicek* (tahun kosong), atau *di luar batas tahun*.
 - **Semua kategori:** daftar 110 nama dagang minyak dielektrik yang mengandung PCBs (**Lampiran I**), dicocokkan dengan merek minyak di data. Tulisan seperti "non pcb oil" tidak dihitung.
 
-### Formulir pelaporan *(offline)*
+### Area perusahaan
 
-Alternatif dari unggah Excel: data diisi langsung per unit lewat halaman **Isi formulir**.
+`/lapor/<ID SIMPEL>`: semua yang dilaporkan satu perusahaan, dengan menu samping sendiri dan tampilan yang pas di ponsel. Bila satu ID SIMPEL dipakai beberapa unit/pabrik, unitnya dipilih dulu (`?unit=`). Ini juga pintu masuk dari PILAR/SIMPEL nanti.
 
-- **Kepemilikan dan pernyataan perusahaan:** bila sudah ada data, kepemilikan dibaca dari data (trafo per tahun, kapasitor, minyak), ditambah isian opsional jumlah dan tonase trafo 1997 ke atas yang tidak didata satu per satu. Bila belum ada data, perusahaan menyatakan memiliki peralatan (datanya menyusul di formulir) atau **tidak memiliki** trafo, kapasitor, maupun minyak dielektrik; yang terakhir wajib **unggah surat pernyataan** bertanda tangan dengan kop perusahaan sendiri (PDF/JPG/PNG, maks. 2 MB, bucket privat `surat-pernyataan`), lalu **diverifikasi admin** (menunggu / diterima / ditolak dengan alasan). Perusahaan tidak bisa memverifikasi suratnya sendiri.
-- **Formulir 1.1–1.4** sesuai template KLHK, dengan bagian dan urutan kolom yang sama. Isian wajib ditandai, pilihan berupa dropdown, dan koordinat langsung terbaca beserta tautan ke peta, atau dipilih dengan mengklik peta (peta atau satelit). Setiap formulir punya **tabel bukti dukung** sesuai template: satu tautan Google Drive per dokumentasi. Formulir 1.1/1.2 hanya untuk trafo buatan sebelum 1997 (atau tahunnya tidak diketahui).
-- **Data tersimpan** di bawah setiap formulir 1.1–1.4: daftar data perusahaan (cari, muat bertahap) yang bisa **diubah** dengan editor formulir yang sama atau dihapus. Perubahan diperiksa ulang di server; catatan pemeriksaan lama untuk kolom yang diperbaiki diganti hasil pemeriksaan baru. Trafo 1997 ke atas dari laporan lama tetap bisa diubah.
-- **Formulir 2 Pengurangan PCBs:** log perawatan trafo yang masih digunakan (mis. retrofilling) dengan hasil uji sebelum dan sesudahnya, kondisi, dan pengelolaan limbah B3. Trafo dipilih dari data 1.1 sehingga datanya terisi otomatis, dan log yang tersimpan bisa diubah; bila dicentang, perawatan dan hasil uji sesudahnya ikut memperbarui data trafo, sehingga status PCBs dan roadmap mengikuti.
-- **Formulir 3 Penyimpanan:** logbook penyimpanan (masa simpan dan jumlah di TPS dihitung otomatis) dan 27 ketentuan teknis Ya/Tidak beserta izin TPS Limbah B3.
-- **Formulir 4.2 Pengolahan** (untuk penghasil): 11 ketentuan teknis Ya/Tidak. Formulir 5 memakai pertanyaan yang sama, jadi cukup diisi sekali. Persentase penaatan dihitung otomatis.
-- **Formulir 5 Pelaporan:** neraca dihasilkan / dikelola / disimpan / belum dikelola (ton) dengan baris TOTAL.
-- **Unggah template Excel 2, 3, 4.2, dan 5** di tab masing-masing: template dikenali dari judulnya, kolom dicek terhadap template resmi, baris contoh template dilewati, isinya diperiksa dengan aturan formulir web lalu ditampilkan sebelum disimpan. Log perawatan dicocokkan ke trafo 1.1 lewat merek + nomor serial (`lib/template-import.ts`).
-- Formulir 4.1 (untuk jasa pengelola limbah B3) belum ada, karena diisi pengolah, bukan pemilik peralatan.
-- Isian 1.1–1.4 tersimpan sebagai draf di browser, lalu **diperiksa** dengan aturan yang sama seperti unggahan Excel (koordinat, angka, tahun) ditambah cek merek + nomor serial yang sudah pernah dilaporkan. Isian yang lolos dikirim sekaligus dan tercatat di Riwayat upload sebagai "Formulir web".
+| Menu | Isi |
+|---|---|
+| Beranda | Kartu status PCBs beserta langkah perbaikannya, unggahan yang menunggu atau ditolak, lalu **tabel data peralatan** perusahaan (ubah lewat pop-up formulir, atau hapus). Klik angka untuk menyaring tabel. |
+| Isi formulir | Satu kartu **Tambah data** per formulir: isi formulir (pop-up) atau unggah template Excel. |
+| Roadmap | Tanggal rencana uji / penanganan / pengelolaan dengan catatan opsional. |
+| Template Excel | Unduh template resmi 1.1–5 beserta langkah pengisiannya. |
+| Riwayat unggahan | Status setiap unggahan Excel: menunggu, diterima, atau ditolak beserta alasannya. |
+| Bantuan | FAQ yang bisa dicari dan panduan setiap bagian, dengan daftar isi di samping. |
 
-### Halaman laporan perusahaan *(offline)*
+Admin membuka halaman yang sama lewat label ID SIMPEL di halaman Perusahaan, atau lewat **Isi formulir** dan **Roadmap** dengan pemilih perusahaan. Sebelum perusahaan dipilih, Isi formulir menampilkan perusahaan yang perlu perhatian dan pratinjau laporan yang terkunci, dan Roadmap menampilkan jadwal nasional. Perusahaan terakhir yang dibuka diingat (`?company=`).
 
-`/lapor/<ID SIMPEL>`: semua yang dilaporkan satu perusahaan di satu halaman, tanpa menu admin. Isinya status PCBs, pernyataan, formulir 1.1–5 (termasuk data tersimpan dan unggah template), dan roadmap. Perusahaan dicari dari ID SIMPEL-nya; bila satu ID dipakai beberapa unit/pabrik, unitnya dipilih dulu. Ini pintu masuk dari aplikasi PILAR/SIMPEL, yang mengetahui ID SIMPEL perusahaan yang login. Admin membuka halaman yang sama lewat label ID SIMPEL di halaman Perusahaan; halaman **Isi formulir** memakai isi yang sama dengan pemilih perusahaan. Sebelum perusahaan dipilih, **Isi formulir** menampilkan daftar perusahaan yang perlu perhatian (perlu tindakan, surat menunggu verifikasi, belum melapor) dan pratinjau laporan yang terkunci, sedangkan **Roadmap** menampilkan jadwal nasional (lewat tanggal, 30/90 hari ke depan, belum punya rencana). Perusahaan terakhir yang dibuka diingat di browser dan tercantum di alamat (`?company=`).
+### Formulir pelaporan
 
-### Status PCBs & roadmap *(offline)*
+- **Kepemilikan dan pernyataan perusahaan:** bila sudah ada data, kepemilikan dibaca dari data, ditambah isian opsional jumlah dan tonase trafo 1997 ke atas. Perusahaan yang **tidak memiliki** trafo, kapasitor, maupun minyak dielektrik wajib **unggah surat pernyataan** bertanda tangan (PDF/JPG/PNG, maks. 2 MB, bucket privat `surat-pernyataan`), lalu **diverifikasi admin** (menunggu / diterima / ditolak dengan alasan).
+- **Formulir 1.1–1.4** sesuai template KLHK. Isian wajib ditandai, pilihan berupa dropdown, koordinat dibaca langsung atau dipilih di peta, berat trafo diisi kering / minyak / total. Setiap formulir punya **tabel bukti dukung** (tautan Google Drive). Formulir 1.1/1.2 hanya untuk trafo buatan sebelum 1997 atau tanpa tahun.
+- **Data tersimpan** bisa diubah dengan editor formulir yang sama atau dihapus; perubahan diperiksa ulang di server.
+- **Formulir 2 Pengurangan PCBs:** log perawatan trafo (mis. retrofilling) dengan hasil uji sebelum dan sesudah; bila dicentang, ikut memperbarui data trafo, status PCBs, dan roadmap.
+- **Formulir 3 Penyimpanan:** logbook penyimpanan (masa simpan dan jumlah di TPS dihitung otomatis), 27 ketentuan teknis Ya/Tidak, dan izin TPS Limbah B3.
+- **Formulir 4.2 Pengolahan:** 11 ketentuan teknis Ya/Tidak, persentase penaatan dihitung otomatis. Formulir 4.1 (untuk jasa pengolah) belum ada.
+- **Formulir 5 Pelaporan:** neraca dihasilkan / dikelola / disimpan / belum dikelola (ton).
+- **Unggah template Excel 2, 3, 4.2, dan 5:** dikenali dari judul dan kolomnya, diperiksa, ditampilkan, lalu disimpan (`lib/template-import.ts`).
+- Isian 1.1–1.4 tersimpan sebagai draf di browser, diperiksa dengan aturan yang sama seperti unggahan Excel, lalu tercatat di Riwayat upload sebagai "Formulir web".
 
-- **Kartu status** di dashboard (saat satu perusahaan dipilih) dan di halaman Roadmap: satu kalimat ringkasan semua peralatan perusahaan, lalu lampu **merah / kuning / hijau** untuk trafo buatan sebelum 1997 (atau tanpa tahun) beserta pesannya.
-  - **Merah:** ada trafo belum diuji tanpa rencana uji, > 50 ppm tanpa rencana penanganan, rencana yang lewat tanggalnya, atau limbah PCBs disimpan tanpa izin TPS yang berlaku (formulir 3).
-  - **Kuning:** semua sisanya sudah punya rencana yang belum jatuh tempo, pernyataan belum diisi atau tidak cocok dengan data, tahun pembuatan kosong, izin TPS berakhir dalam 90 hari, limbah disimpan lebih dari 365 hari, ada ketentuan teknis dijawab "Tidak", neraca masih menyisakan limbah belum dikelola, atau bukti dukung formulir 1.1–1.4 yang berisi data belum lengkap. Kotak kuning di dashboard menyebut berapa yang kuning hanya karena kelengkapan administrasi (pernyataan / bukti dukung).
+### Unggahan Excel perusahaan (1.1–1.4)
+
+Perusahaan mengunggah template resmi (`.xlsx`/`.xls`, maks. 20 MB) dan memilih **tambahkan** atau **ganti semua**. Berkas diperiksa dan ditampilkan dulu, lalu menunggu di menu admin **Unggahan perusahaan** (angka kuning di menu = jumlah yang menunggu). Admin memeriksa temuan dan berkasnya, lalu **Terima** (diimpor seperti unggahan admin) atau **Tolak dengan alasan** (tampil ke perusahaan).
+
+### Status PCBs & roadmap
+
+Batas konsentrasi PCBs adalah **50 ppm**: 50 ppm ke atas berarti mengandung PCBs (Permen LHK 29/2020, Pasal 9 ayat 4 dan Pasal 10 ayat 4).
+
+- **Kartu status** per perusahaan: ringkasan peralatan dan lampu untuk trafo buatan sebelum 1997 (atau tanpa tahun), dengan pesan yang mengarah ke perbaikannya.
+  - **Merah:** trafo digunakan belum diuji tanpa rencana uji, ≥ 50 ppm tanpa rencana penanganan, trafo **tidak digunakan** tanpa rencana pengelolaan, rencana yang lewat tanggalnya, atau limbah PCBs disimpan tanpa izin TPS yang berlaku.
+  - **Kuning:** semua sudah punya rencana yang belum jatuh tempo, atau ada hal administratif: pernyataan belum diisi atau tidak cocok, tahun pembuatan kosong, izin TPS berakhir dalam 90 hari, limbah disimpan lebih dari 365 hari, ketentuan teknis dijawab "Tidak", neraca masih menyisakan limbah, atau bukti dukung belum lengkap.
   - **Hijau:** tidak ada yang perlu dilakukan.
-- **Ringkasan nasional** di dashboard (tanpa perusahaan dipilih): jumlah perusahaan merah / kuning / hijau / belum melapor, angka nasional (trafo belum diuji, > 50 ppm, tanpa rencana, rencana lewat), dan daftar perusahaan per warna, yang paling banyak tindakan terbuka di atas. Klik perusahaan untuk melihat dashboard-nya. Halaman Perusahaan juga menampilkan status tiap perusahaan.
-- **Roadmap:** tanggal rencana uji (untuk yang belum diuji) atau penanganan (untuk yang > 50 ppm), untuk semua trafo sekaligus atau trafo yang dicentang. Rencana uji selesai sendiri begitu hasil ujinya masuk; penanganan ditandai selesai oleh admin.
+- **Ringkasan nasional** di halaman Perusahaan: jumlah perusahaan per warna dan belum melapor, angka nasional, dan daftar perusahaan per warna.
+- **Roadmap:** tanggal rencana uji (belum diuji), penanganan (≥ 50 ppm), atau pengelolaan (tidak digunakan), untuk semua trafo atau yang dicentang, dengan catatan opsional. Rencana uji selesai sendiri begitu hasil ujinya masuk; penanganan ditandai selesai oleh admin atau oleh log perawatan yang menurunkan kadar di bawah 50 ppm.
 
-### Impor data *(offline)*
+### Impor data (admin)
 
 | Langkah | Keterangan |
 |---|---|
 | Unggah | Workbook multi-sheet hingga 50 MB langsung ke Storage. Berkas di atas 10 MB dikirim tanpa fotonya (hanya data sel). |
-| Aturan unggah perusahaan | Hanya .xlsx (bukan .xls, .xlsm, PDF), maksimal 1 MB, tanpa gambar atau objek tersemat, tanpa makro, tidak dikunci kata sandi, memakai template KLHK, maksimal 5.000 baris per sheet. Untuk admin hanya peringatan; nanti untuk akun perusahaan menjadi penolakan (`lib/upload-rules.ts`). |
+| Aturan unggah perusahaan | Hanya .xlsx, maks. 1 MB, tanpa gambar, makro, atau kata sandi, memakai template KLHK, maks. 5.000 baris per sheet. Di menu Upload data ini hanya peringatan (`lib/upload-rules.ts`). |
 | Deteksi format | Header dicari otomatis (termasuk judul bertingkat) dan dikenali sebagai Template KLHK atau format PLN beserta kategorinya. |
 | Pemetaan kolom | Otomatis sesuai format. Admin cukup mengonfirmasi. |
 | Pemeriksaan | Koordinat tidak terbaca, angka atau tanggal tidak valid, kolom penting kosong, dan duplikat, lengkap dengan nomor baris Excel. |
 | Impor | Baris yang sudah ada dilewati. Berkas revisi bisa **mengganti** unggahan lama dalam satu transaksi. |
-| Perbaikan otomatis | Koordinat DMS, koma desimal, dan lintang-bujur tertukar. Nama unit PLN diseragamkan. Berat trafo dalam ton dikoreksi. Baris contoh, kosong, dan tempelan ganda dilewati. |
+| Perbaikan otomatis | Koordinat DMS, koma desimal, lintang-bujur tertukar, dan tanda minus lintang yang hilang. Nama unit PLN diseragamkan. Berat trafo dalam ton dikoreksi; berat total dihitung dari ton bila kolom kg kosong. Baris contoh, kosong, dan tempelan ganda dilewati. |
 
-### Perusahaan & kualitas data *(offline)*
+### Perusahaan, kualitas data, dan bantuan
 
-- **Perusahaan:** isi data per perusahaan, hasil pemeriksaan siap dikirim lewat email, dan status pengiriman (belum dikirim, sudah dikirim, ada data baru, kosong).
-- **ID SIMPEL** (menu sendiri, `/id-simpel`): setiap perusahaan di data inventaris dijodohkan dengan catatannya di daftar perusahaan PILAR. Tab **Perusahaan kita** berupa tabel dengan status (terhubung, tanpa ID SIMPEL, perlu dipilih, tidak ditemukan, cocok persis), kandidat terbaik, dan tombol Pilih / Cari yang membuka jendela kandidat beserta pencarian nama, NPWP, NIB, atau ID SIMPEL. Tab **Daftar PILAR** menampilkan seluruh daftar dengan ID SIMPEL, NPWP, NIB, alamat, dan perusahaan kita yang terhubung. Pencocokan mengenali ejaan Inggris/Indonesia (Division = Divisi, Factory = Pabrik); ID SIMPEL yang tidak berupa angka ditandai.
-- **Kualitas data:** termasuk tanda **berat tidak sesuai daya** (lebih dari 50 kg per kVA, biasanya salah satuan berat atau daya; hanya ditandai, data tidak diubah). Skor kelengkapan per perusahaan dan unit, plus laporan temuan yang bisa diekspor ke Excel atau PDF.
+- **Perusahaan:** status PCBs tiap perusahaan, isi data, hasil pemeriksaan siap dikirim lewat email, dan status pengiriman. Daftar bisa diurutkan A–Z, Z–A, atau yang terakhir diubah.
+- **ID SIMPEL** (`/id-simpel`): setiap perusahaan dijodohkan dengan catatannya di daftar PILAR. Tab **Perusahaan kita** (status terhubung / tanpa ID / perlu dipilih / tidak ditemukan / cocok persis, kandidat terbaik, Pilih / Cari) dan **Daftar PILAR**.
+- **Kualitas data:** termasuk tanda **berat tidak sesuai daya** (lebih dari 50 kg per kVA). Skor kelengkapan per perusahaan dan unit, plus laporan temuan yang bisa diekspor ke Excel atau PDF.
+- **Panduan admin** (`/panduan`): FAQ dan panduan rinci setiap menu admin, dengan daftar isi di kiri. Perusahaan punya menu **Bantuan** sendiri.
+- Preloader berlogo KLH tampil sekali per sesi browser.
+
+---
+
+## Keamanan
+
+- **Row Level Security** di semua tabel dan bucket: admin melihat semua, pemantau hanya membaca, perusahaan hanya baris perusahaannya (`my_company_ids()`). Batas ini berlaku juga bila API Supabase dipanggil langsung.
+- **`proxy.ts`**: semua halaman dan API wajib login; halaman dan API diarahkan sesuai peran. Bila peran tidak dapat dibaca, akses ditolak (503).
+- **Kunci service role** hanya di server (`lib/supabase/admin.ts`, dipakai halaman Akun pengguna) dan tidak pernah dikirim ke browser.
+- **Storage privat**: perusahaan hanya menulis dan membaca foldernya sendiri; tautan unduh bertanda tangan dan kedaluwarsa.
+- **Header keamanan** di setiap respons (`next.config.ts`): tidak bisa ditampilkan di dalam frame situs lain, `nosniff`, `Referrer-Policy`, dan kamera / mikrofon / lokasi dimatikan.
+- `?next=` di halaman login hanya menerima alamat di dalam aplikasi.
+- Repositori ini publik: tanpa data perusahaan (`Data-inventaris/`, `laporan/`) dan tanpa kunci (`.env*`).
 
 ---
 
@@ -130,33 +164,19 @@ npm run offline -- --dev   # Supabase lokal + next dev
 | `npm run dev` | Server pengembangan |
 | `npm run lint` | ESLint |
 | `npm run build` | Build produksi (termasuk pemeriksaan TypeScript) |
+| `npx tsx scripts/check-import.ts <folder>` | Uji coba impor atas berkas Excel asli tanpa database |
 | `npm run offline` | Mode offline lengkap |
 | `npm run data:push` / `data:pull` | Kirim / ambil data lewat repo private |
-| `npm run web:publish` | Kirim ringkasan ke web sekarang |
-| `npm run data:to-cloud` | Salin seluruh data laptop ke Supabase Cloud agar web berjalan penuh (sekali saja; tanpa `--yes` hanya memeriksa) |
+| `npm run data:to-cloud` | Salin seluruh data laptop ke Supabase Cloud (sekali saja; tanpa `--yes` hanya memeriksa) |
 | `npm run simpel:load` | Muat daftar perusahaan PILAR (CSV terbaru di `Data-inventaris/id_simpel/`) |
 | `npm run offline:user -- email password` | Buat akun admin atau ganti password (offline) |
-| `npm run offline:user -- email password perusahaan <ID SIMPEL>` | Buat akun perusahaan: hanya melihat laporan perusahaan dengan ID SIMPEL itu |
+| `npm run offline:user -- email password perusahaan <ID SIMPEL>` | Buat akun perusahaan (offline) |
 
----
+Di web, akun dikelola di menu **Akun pengguna**, yang butuh `SUPABASE_SERVICE_ROLE_KEY` di Environment Variables Vercel (jangan diberi awalan `NEXT_PUBLIC_`).
 
-## Memperbarui web
+### Mode ringkasan (cara lama)
 
-> **Sejak 13 Oktober 2026 (masa pengujian), web berjalan penuh dengan data asli di Supabase Cloud.** Data disalin sekali dengan `npm run data:to-cloud`, `NEXT_PUBLIC_DATA_MODE` dihapus di Vercel, dan sejak itu **data hanya diubah lewat web**. `web:publish` menolak berjalan selama cloud berisi data lengkap, dan `data:push` tidak lagi mengirim ringkasan. Bagian di bawah ini berlaku untuk mode ringkasan (cara sebelumnya). Nanti aplikasi dan datanya dipindah ke server kantor dan digabung ke SIMPEL.
->
-> **Akun di web** dikelola admin di menu Administrasi → *Akun pengguna*: peran admin, pemantau (melihat semua tanpa dapat mengubah, untuk pimpinan), atau perusahaan (satu ID SIMPEL), serta akun uji coba ZZ Uji A–F. Halaman ini butuh `SUPABASE_SERVICE_ROLE_KEY` di Environment Variables Vercel (kunci *service_role* dari Project Settings → API; jangan diberi awalan `NEXT_PUBLIC_`).
-
-
-Web tidak menyimpan baris data. Isinya ringkasan yang dihitung di laptop admin, lalu dikirim ke Supabase Cloud.
-
-1. **Sekali saja:** buat file `.env.web` (tidak ikut git) berisi connection string *Session pooler* dari Supabase:
-   ```
-   WEB_DATABASE_URL=postgresql://postgres.<ref>:<password>@<host>:5432/postgres
-   ```
-2. **Setiap ada data baru:** `npm run data:push`. Ringkasan ikut terkirim otomatis. Bisa juga dijalankan sendiri dengan `npm run web:publish`.
-3. **Pengaturan Vercel:** `NEXT_PUBLIC_DATA_MODE=summary` (sudah terpasang). Variabel ini menyembunyikan tabel, unggah, dan edit, dan halaman yang membutuhkan baris data ditutup.
-
-Detailnya ada di [OFFLINE.md](OFFLINE.md#khusus-admin-ringkasan-di-web).
+Sebelum 13 Oktober 2026 web hanya berisi ringkasan yang dikirim dari laptop (`npm run web:publish`, `NEXT_PUBLIC_DATA_MODE=summary`). Mode ini masih ada di kode; `web:publish` menolak berjalan selama cloud berisi data lengkap. Detailnya di [OFFLINE.md](OFFLINE.md#khusus-admin-ringkasan-di-web).
 
 ---
 
@@ -167,39 +187,36 @@ Jalankan semua berkas di `supabase/migrations/` **berurutan**. Mode offline menj
 | Objek | Fungsi |
 |---|---|
 | `transformator_digunakan`, `transformator_tidak_digunakan`, `kapasitor`, `minyak_dielektrik` | Data inventaris per formulir KLHK (1.1–1.4) |
-| `companies`, `import_batches`, `upload_sessions` | Perusahaan, satu baris per sheet yang diimpor, satu baris per workbook yang diunggah |
+| `companies`, `simpel_companies` | Perusahaan (dengan ID SIMPEL, ID PILAR, terakhir diubah) dan daftar perusahaan PILAR |
+| `import_batches`, `upload_sessions`, `unggahan_perusahaan` | Satu baris per sheet yang diimpor, per workbook yang diunggah, dan per unggahan perusahaan yang menunggu verifikasi |
 | `inventory_stats_parts` | Ringkasan statistik yang dijaga trigger, sumber semua angka dashboard |
 | `inventory_items` (view) | Gabungan keempat tabel untuk tabel dan peta |
+| `user_access` | Peran setiap akun: admin, pemantau, atau perusahaan dengan ID SIMPEL-nya |
+| `company_statements` | Pernyataan dan surat pernyataan perusahaan (riwayat; yang terbaru berlaku) |
+| `pengurangan_pcbs`, `penyimpanan_logbook`, `pelaporan_neraca`, `ketentuan_teknis` | Formulir 2, 3, 5, dan ketentuan teknis formulir 3 dan 4.2 |
+| `bukti_dukung` | Tautan bukti dukung formulir 1.1–1.4 |
+| `equipment_plans` | Rencana uji / penanganan / pengelolaan per trafo atau untuk semua trafo perusahaan, dengan catatan |
 | `company_feedback_log` | Riwayat pengiriman hasil pemeriksaan ke perusahaan |
-| `user_access` | Peran setiap akun: admin, atau perusahaan dengan ID SIMPEL-nya |
-| `company_statements` | Pernyataan perusahaan (riwayat; yang terbaru berlaku), termasuk jumlah dan tonase trafo 1997 ke atas |
-| `pengurangan_pcbs` | Log perawatan pengurangan PCBs (formulir 2) |
-| `bukti_dukung` | Tautan bukti dukung formulir 1.1–1.4 per perusahaan (riwayat; yang terbaru berlaku) |
-| `penyimpanan_logbook`, `pelaporan_neraca`, `ketentuan_teknis` | Logbook penyimpanan (formulir 3), neraca (formulir 5), dan jawaban ketentuan teknis Ya/Tidak (formulir 3 dan 4.2) |
-| `equipment_plans` | Rencana uji / penanganan per trafo atau untuk semua trafo perusahaan |
-| `simpel_companies` | Daftar perusahaan PILAR dengan ID SIMPEL; `companies.pilar_company_id` dan `companies.id_simpel` menyimpan pilihan admin |
-| `summary_map_cells`, `summary_brand_counts`, `summary_company_status`, `summary_meta` | Ringkasan untuk web: sel peta, jumlah merek, status PCBs per perusahaan, waktu kirim |
+| `summary_*` | Ringkasan untuk mode ringkasan web |
 | RPC `inventory_stats`, `inventory_charts`, `inventory_units`, `inventory_quality` | Statistik, grafik, daftar unit, dan kualitas data |
-| RPC `company_pcb_status`, `company_focus_transformers`, `pcb_status_all` | Angka status PCBs per perusahaan dan daftar trafo sebelum 1997 beserta rencananya |
-| RPC `map_clusters`, `oil_brand_counts`, `summary_build`, `summary_cells` | Peta per wilayah, merek minyak, serta pembuatan dan pembacaan ringkasan web |
-| Storage `pcbs-files` | Workbook yang diunggah (privat) |
-
-Semua tabel, fungsi, dan bucket hanya bisa diakses pengguna yang sudah login, sesuai perannya (`user_access`): **admin** melihat semua; **perusahaan** hanya membaca dan mengubah baris perusahaan dengan ID SIMPEL-nya (dijaga Row Level Security di database) dan hanya membuka `/lapor/<ID SIMPEL>` miliknya. Akun tanpa peran tidak bisa membuka apa pun.
+| RPC `company_pcb_status`, `company_focus_transformers`, `pcb_status_all` | Status PCBs per perusahaan dan trafo yang butuh rencana |
+| RPC `my_access`, `map_clusters`, `oil_brand_counts` | Peran pengguna, peta per wilayah, merek minyak |
+| Storage `pcbs-files`, `surat-pernyataan` | Workbook yang diunggah dan surat pernyataan (privat) |
 
 ---
 
 ## Struktur Direktori
 
 ```text
-app/                 Halaman: login, dashboard (nasional & per kategori), upload, companies,
-                     kualitas-data, laporan; API unggah, pemetaan, impor
-components/          Dashboard, tonase, peta, tabel, filter, daftar Lampiran I/II
-lib/                 Parser Excel, profil format, impor, kueri dashboard, daftar Lampiran,
-                     mode data (offline / ringkasan web)
-proxy.ts             Wajib login, dan menutup halaman berbasis baris di web
-scripts/             Impor massal satu folder, isi ulang berat, hapus data perusahaan, pengujian
-scripts/offline/     Mode offline, sinkronisasi data, kirim ringkasan ke web
+app/                 Halaman: login, dashboard, kategori, formulir, roadmap, upload, perusahaan,
+                     ID SIMPEL, akun, kualitas data, panduan, area perusahaan (lapor/); API
+components/          Dashboard, peta, tabel, formulir, area perusahaan, bantuan
+lib/                 Parser Excel, profil format, impor, aturan formulir, status PCBs, kueri
+proxy.ts             Wajib login dan pembatasan halaman per peran
+scripts/             Uji coba impor, impor massal, isi ulang berat, hapus data perusahaan
+scripts/offline/     Mode offline, sinkronisasi data, salin ke cloud
 supabase/            Migrasi SQL, seed, konfigurasi Supabase lokal
+vendor/              SheetJS xlsx 0.20.3 (tarball resmi dari cdn.sheetjs.com)
 ```
 
 Data inventaris asli (`Data-inventaris/`) tidak disimpan di repositori.
@@ -210,21 +227,20 @@ Data inventaris asli (`Data-inventaris/`) tidak disimpan di repositori.
 
 **Sudah**
 - [x] Impor multi-sheet (Template KLHK & PLN) dengan pemeriksaan, perbaikan koordinat, dan cek duplikat
-- [x] Dashboard berbasis ringkasan trigger untuk ratusan ribu baris
-- [x] Tonase transformator per kadar PCBs, < 1997 / ≥ 1997 / tanpa tahun, ditambah tonase dari pernyataan
-- [x] Peta dengan filter dan pengelompokan per wilayah untuk semua titik
-- [x] Daftar Lampiran I & II Permen LHK 29/2020 yang dicocokkan dengan data
-- [x] Login, Row Level Security, mode offline, dan sinkronisasi antar-laptop
-- [x] Web hanya-ringkasan yang diperbarui dari laptop admin
+- [x] Dashboard berbasis ringkasan trigger untuk ratusan ribu baris, peta, tonase, Lampiran I & II
+- [x] Login, Row Level Security, peran admin / pemantau / perusahaan, akun dikelola dari web
+- [x] Mode offline dan sinkronisasi antar-laptop; web berjalan penuh di Supabase Cloud
 - [x] ID SIMPEL: perusahaan dihubungkan dengan daftar PILAR
-- [x] Formulir web 1.1–1.4, 2, 3, 4.2, 5 dengan pernyataan, bukti dukung, pemilih titik di peta, revisi data tersimpan, dan unggah template
-- [x] Aturan unggah perusahaan (1 MB, tanpa gambar, .xlsx template KLHK)
-- [x] Status PCBs merah / kuning / hijau per perusahaan dan nasional (juga di web), roadmap uji dan penanganan
-- [x] Halaman laporan perusahaan `/lapor/<ID SIMPEL>`, peran admin / perusahaan dengan data terbatas per perusahaan, tampilan ponsel
+- [x] Formulir web 1.1–1.4, 2, 3, 4.2, 5 dengan pernyataan, surat pernyataan, bukti dukung, dan unggah template
+- [x] Status PCBs merah / kuning / hijau (batas 50 ppm), roadmap uji / penanganan / pengelolaan
+- [x] Area perusahaan dengan menu sendiri, tabel data di beranda, tampilan ponsel, dan Bantuan
+- [x] Unggahan Excel perusahaan yang diverifikasi admin
+- [x] Panduan admin
 - [x] Uji skala PLN (±350 ribu baris): semua halaman di bawah 1 detik
 
 **Berikutnya**
 - [ ] Login dari PILAR / SIMPEL (halaman `/masuk`), setelah cara dan kuncinya disepakati
-- [ ] Pindah ke server kantor: satu database lengkap online
+- [ ] Daftar perusahaan dari API PILAR, bukan CSV manual
+- [ ] Pindah ke server kantor: satu database lengkap dengan backup terjadwal
 - [ ] Unggah ulang data PT PLN (Persero) yang sudah diperbaiki
 - [ ] Uji mode offline di laptop Windows

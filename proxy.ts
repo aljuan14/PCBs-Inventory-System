@@ -62,9 +62,14 @@ export async function proxy(request: NextRequest) {
   // (/lapor/<ID SIMPEL>/…) dan API formulir serta unggahan; akun tanpa peran tidak membuka apa pun.
   // Batas datanya dijaga di database (RLS); ini hanya mengarahkan halaman.
   const { data: access, error: accessError } = await supabase.rpc('my_access');
-  // Belum ada fungsinya (database web sebelum migrasi itu dijalankan): perilaku lama. Aman,
-  // karena pembatasan datanya datang dari migrasi yang sama.
-  if (accessError) return response;
+  // Peran tidak dapat dibaca (database sedang gangguan): tutup, jangan buka semua halaman.
+  if (accessError) {
+    console.error('my_access error:', accessError.message);
+    if (pathname.startsWith('/api/')) {
+      return withCookies(NextResponse.json({ error: 'Peran akun tidak dapat diperiksa. Coba lagi sebentar.' }, { status: 503 }), response);
+    }
+    return withCookies(new NextResponse('Peran akun tidak dapat diperiksa. Muat ulang halaman sebentar lagi.', { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8' } }), response);
+  }
   const role = access as { peran: 'admin' | 'pemantau' | 'perusahaan'; id_simpel: string | null } | null;
   if (role?.peran === 'admin') return response;
   // Pemantau (migrasi 20261014000001): halaman yang hanya membaca; formulir, unggah, ID SIMPEL,
