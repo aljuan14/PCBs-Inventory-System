@@ -13,8 +13,8 @@ function loadAccess(): Promise<Access | null> {
   if (!cached) {
     const supabase = createClient();
     supabase.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') cached = null; });
-    // Without the function (a database before migration 20261013000011) every account was admin.
-    cached = Promise.resolve(supabase.rpc('my_access')).then(({ data, error }) => (error ? { peran: 'admin', id_simpel: null } : (data as Access | null)), () => null);
+    // Not readable: no role. The proxy refuses the pages then, and the menu shows only what any account may open.
+    cached = Promise.resolve(supabase.rpc('my_access')).then(({ data, error }) => (error ? null : (data as Access | null)), () => null);
   }
   return cached;
 }

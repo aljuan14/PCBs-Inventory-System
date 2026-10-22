@@ -62,7 +62,7 @@ export default function Navbar() {
 
   // Menus by what they are for. Reporting, incoming data and administration
   // work on the rows: not on the web (summary mode). A pemantau account gets
-  // the menus that only read (readable); the accounts page is the admin's.
+  // only the menus that read (readable); the accounts page is the admin's.
   type Item = { href: string; label: string; icon: typeof Grid2X2; active?: boolean; readable?: boolean; adminOnly?: boolean; badge?: number };
   const groups: Array<{ title: string; rowsOnly?: boolean; items: Item[] }> = [
     { title: 'Inventarisasi', items: INVENTORY_CATEGORIES.map((category) => ({ href: `/dashboard/${category.key.replaceAll('_', '-')}`, label: category.shortLabel, icon: categoryIcons[category.key], readable: true })) },
@@ -86,6 +86,10 @@ export default function Navbar() {
     ] },
   ];
 
+  // Until the role is known (or when it cannot be read), only the menus every account may open:
+  // a pemantau never sees, even for a moment, a menu it cannot use.
+  const shown = (item: Item) => (access === null || readOnly ? Boolean(item.readable) : !item.adminOnly || access.peran === 'admin');
+
   return (
     <aside className="sticky top-0 z-40 flex h-screen w-64 print:hidden shrink-0 flex-col border-r border-slate-200 bg-[#fbfcfa] px-4 py-5">
       <Link href="/dashboard" className="flex items-center gap-3 px-2 pb-7">
@@ -95,7 +99,7 @@ export default function Navbar() {
       <nav className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-4 text-sm font-medium">
         <NavLink href="/dashboard" icon={Grid2X2} label="Dashboard" active={pathname === '/dashboard'} />
         {groups.filter((group) => !group.rowsOnly || !SUMMARY_MODE)
-          .map((group) => ({ ...group, items: group.items.filter((item) => (readOnly ? item.readable : !item.adminOnly || access?.peran === 'admin')) }))
+          .map((group) => ({ ...group, items: group.items.filter(shown) }))
           .filter((group) => group.items.length > 0).map((group) => (
           <div key={group.title} className="mt-5">
             <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group.title}</div>
