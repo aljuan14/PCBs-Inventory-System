@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useIdleHold } from '@/components/IdleLogout';
 import { AlertTriangle, CheckCircle2, Clock, Info, Loader2, Send, X, XCircle } from 'lucide-react';
 import { COMPANY_UPLOAD_FOLDER, MAX_COMPANY_UPLOAD_BYTES, type UploadMode, type UploadSummary } from '@/lib/company-upload-shared';
 import { formSpec } from '@/lib/form-fields';
@@ -99,6 +100,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
   const [mode, setMode] = useState<UploadMode>('tambah');
   const [checked, setChecked] = useState<Checked | null>(null);
   const [busy, setBusy] = useState<'check' | 'send' | 'cancel' | null>(null);
+  useIdleHold(busy !== null);
   const [error, setError] = useState<string | null>(null);
   const listKey = `${companyId}|${category}|${reload}`;
 

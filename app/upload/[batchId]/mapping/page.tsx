@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
+import { useIdleHold } from '@/components/IdleLogout';
 import { useRouter } from 'next/navigation';
 import { ImportBatch } from '@/lib/types';
 import type { ValidationIssue } from '@/lib/import-transform';
@@ -75,6 +76,7 @@ export default function MappingPage({ params }: { params: Promise<{ batchId: str
 
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  useIdleHold(importing);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [batch, setBatch] = useState<ImportBatch | null>(null);

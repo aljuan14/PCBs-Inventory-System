@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, useSyncExternalStore, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail, Timer } from 'lucide-react';
+import { IDLE_LIMIT_MS, markActivity } from '@/components/IdleLogout';
 import { adminContactLink } from '@/lib/contact';
 import { createClient } from '@/lib/supabase/client';
 
@@ -13,6 +14,10 @@ function nextPath() {
   return next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
 }
 
+/** Sent here by the idle timer (components/IdleLogout.tsx). */
+const idleSignOut = () => new URLSearchParams(window.location.search).get('keluar') === 'idle';
+const noSubscribe = () => () => {};
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -21,6 +26,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const contactLink = adminContactLink();
+  const wasIdle = useSyncExternalStore(noSubscribe, idleSignOut, () => false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,6 +39,8 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
+    // A fresh start for the idle timer, or yesterday's last activity would sign it out at once.
+    markActivity();
     router.replace(nextPath());
     router.refresh();
   }
@@ -102,6 +110,13 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
+              {wasIdle && !error && (
+                <div role="status" className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <Timer className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>Anda keluar otomatis karena tidak aktif selama {IDLE_LIMIT_MS / 60000} menit. Silakan masuk lagi.</span>
+                </div>
+              )}
 
               {error && (
                 <div role="alert" className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

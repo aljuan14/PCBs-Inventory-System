@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import { DialogHost } from "@/components/Dialog";
 import Preloader from "@/components/Preloader";
+import IdleLogout from "@/components/IdleLogout";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 
@@ -45,6 +46,7 @@ export default function RootLayout({
         <Navbar />
         <main className="min-w-0 flex-1">{children}</main>
         <DialogHost />
+        <IdleLogout />
         <Preloader />
       </body>
     </html>

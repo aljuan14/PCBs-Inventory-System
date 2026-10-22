@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useIdleHold } from '@/components/IdleLogout';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { UploadCloud, FileSpreadsheet, Building2, Layers, CheckCircle, ArrowRight, Loader2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
@@ -135,6 +136,8 @@ export default function UploadPage() {
   const [uploadProgress, setUploadProgress] = useState<ProgressState | null>(null);
   const trackUpload = (event: ProgressEvent) => setUploadProgress((prev) => prev && applyProgress(prev, event, Date.now()));
   const [confirming, setConfirming] = useState(false);
+  // An upload or scan may run for minutes without a touch: the idle timer waits.
+  useIdleHold(uploading || confirming);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [selection, setSelection] = useState<Record<string, { include: boolean; category: InventoryCategory | '' }>>({});

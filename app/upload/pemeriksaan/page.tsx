@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useIdleHold } from '@/components/IdleLogout';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2, XCircle } from 'lucide-react';
 import { confirmDialog, promptDialog } from '@/components/Dialog';
@@ -25,6 +26,7 @@ function UploadCard({ upload, onAnswered }: { upload: Upload; onAnswered: () => 
   const supabase = useMemo(() => createClient(), []);
   const [open, setOpen] = useState(upload.status === 'menunggu');
   const [busy, setBusy] = useState<'terima' | 'tolak' | 'file' | null>(null);
+  useIdleHold(busy === 'terima');
   const [result, setResult] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const summary = upload.ringkasan;
   const status = UPLOAD_STATUS[upload.status];
