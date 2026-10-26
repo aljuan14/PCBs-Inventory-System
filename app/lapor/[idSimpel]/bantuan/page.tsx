@@ -171,6 +171,7 @@ export default function CompanyHelp() {
             <li>Buka tab formulirnya, lalu klik &ldquo;Isi lewat formulir&rdquo; pada card Tambah data.</li>
             <li>Isi kolomnya di jendela yang muncul. Kolom bertanda * wajib; tombol bagian di atas jendela membawa langsung ke bagian tertentu.</li>
             <li>Klik <span className="font-semibold">Simpan</span>, atau <span className="font-semibold">Simpan &amp; tambah lagi</span> untuk langsung mengisi data berikutnya. Pintasan: Ctrl+Enter.</li>
+            <li>Pada formulir 1.1–1.4, isian masuk ke daftar &ldquo;Belum tersimpan&rdquo; dulu. Klik <span className="font-semibold">Simpan … isian ke data</span> di bawah daftar itu. Bila ada isian yang salah, belum ada yang tersimpan: perbaiki yang ditandai merah, lalu klik lagi.</li>
             <li>Data muncul di &ldquo;Data tersimpan&rdquo; dan dapat diubah atau dihapus kapan saja.</li>
           </ol>
         </Section>
@@ -181,12 +182,12 @@ export default function CompanyHelp() {
             <li>Isi mulai baris di bawah contoh. Baris bertanda CONTOH tidak ikut terbaca.</li>
             <li>Di tab formulir yang sesuai, klik atau seret berkas ke kotak &ldquo;Unggah template Excel&rdquo; (maksimal {UPLOAD_MB} MB).</li>
             <li>Periksa ringkasannya: jumlah baris terbaca dan baris yang perlu diperbaiki. Perbaiki di Excel bila ada yang salah, lalu unggah lagi.</li>
-            <li>Kirim atau simpan.</li>
+            <li>Klik <span className="font-semibold">Simpan ke data</span>.</li>
           </ol>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-200 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Formulir 1.1–1.4</p>
-              <p className="mt-1 text-sm">Dikirim ke KLH dan <span className="font-semibold">diperiksa dulu</span> sebelum masuk ke data. Pilih &ldquo;Menambahkan&rdquo; (baris yang sudah ada dilewati) atau &ldquo;Mengganti semua&rdquo; (data lama formulir itu dihapus).</p>
+              <p className="mt-1 text-sm"><span className="font-semibold">Langsung tersimpan</span> setelah lolos pemeriksaan otomatis. Pilih &ldquo;Menambahkan&rdquo; (baris yang sudah ada dilewati) atau &ldquo;Mengganti semua&rdquo; (data lama formulir itu dihapus).</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Formulir 2–5</p>

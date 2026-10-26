@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Save, Trash2 } from 'lucide-react';
 import EvidencePanel from '@/components/EvidencePanel';
 import InventoryUpload from '@/components/InventoryUpload';
 import StoredEntriesPanel from '@/components/StoredEntriesPanel';
@@ -35,7 +34,8 @@ type Result = { saved: boolean; savedRows?: number; blocked: number; checks: Ent
 
 /**
  * One form (1.1–1.4) of a company: a list of entries kept as a draft in the
- * browser, each typed in the editor, then checked and sent together.
+ * browser, each typed in the editor, then saved together with one button
+ * (none is saved while any is refused).
  */
 export default function InventoryFormPanel({ companyId, category, noTrafoBefore1997, onSaved }: {
   companyId: string;
@@ -52,7 +52,7 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
   const [entries, setEntries] = useState<FormEntry[]>(() => readDraft(key));
   const [editing, setEditing] = useState<FormEntry | null>(null);
   const [checks, setChecks] = useState<Map<string, EntryCheck>>(new Map());
-  const [busy, setBusy] = useState<'check' | 'send' | null>(null);
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
   // After "Simpan & tambah lagi": how many entries the list holds now.
   const [added, setAdded] = useState<number | null>(null);
@@ -78,32 +78,30 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
   // A copy keeps the shared details (brand, oil, location) and clears what identifies the unit.
   const duplicate = (entry: FormEntry) => setEditing({ id: newId(), unknownYear: entry.unknownYear, values: { ...entry.values, nomor_serial: '', kode_alat: '', koordinat_raw: entry.values.koordinat_raw ?? '' } });
 
-  const submit = async (dryRun: boolean) => {
-    setBusy(dryRun ? 'check' : 'send');
+  // Checks every entry and saves them all when none is refused; otherwise nothing is saved and the refused ones say why.
+  const submit = async () => {
+    setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch('/api/formulir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId, category, entries, dryRun }) });
+      const response = await fetch('/api/formulir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId, category, entries, dryRun: false }) });
       const body = await response.json() as Result & { error?: string };
       if (!response.ok) throw new Error(body.error || 'Gagal memproses formulir.');
       if (body.saved) {
         update([]);
-        setMessage({ tone: 'ok', text: `${body.savedRows} isian tersimpan ke database.` });
+        setMessage({ tone: 'ok', text: `${body.savedRows} isian tersimpan.` });
         setSentKey((value) => value + 1);
         onSaved();
         return;
       }
       setChecks(new Map(body.checks.map((check) => [check.id, check])));
-      setMessage(body.blocked > 0
-        ? { tone: 'warn', text: `${body.blocked} dari ${entries.length} isian perlu diperbaiki sebelum dikirim.` }
-        : { tone: 'ok', text: `Semua ${entries.length} isian lolos pemeriksaan. Klik "Kirim" untuk menyimpan.` });
+      setMessage({ tone: 'warn', text: `${body.blocked} dari ${entries.length} isian perlu diperbaiki. Belum ada yang tersimpan; perbaiki lalu klik "Simpan ke data" lagi.` });
     } catch (err) {
       setMessage({ tone: 'warn', text: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
-  const allChecked = entries.length > 0 && entries.every((entry) => checks.get(entry.id)?.errors.length === 0);
   const columns = useMemo(() => (category === 'minyak_dielektrik'
     ? [['merek_minyak_dielektrik', 'Merek minyak'], ['volume_l', 'Volume (L)'], ['lokasi_penyimpanan', 'Lokasi']]
     : [['nama_merek', 'Merek'], ['nomor_serial', 'No. serial'], ['tahun_pembuatan', 'Tahun'], ['lokasi_peralatan', 'Lokasi']]), [category]);
@@ -124,12 +122,12 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
           onCancel={() => { setEditing(null); setAdded(null); }} />
       )}
 
-      {entries.length > 0 && <p className="-mb-2 px-1 text-xs text-slate-500"><span className="font-semibold text-slate-800">Draf isian · {entries.length}</span> · tersimpan di browser ini sampai diperiksa dan dikirim.</p>}
+      {entries.length > 0 && <p className="-mb-2 px-1 text-xs text-slate-500"><span className="font-semibold text-slate-800">Belum tersimpan · {entries.length} isian</span> · klik &ldquo;Simpan ke data&rdquo; di bawah daftar ini. Sampai itu, isian hanya ada di browser ini.</p>}
       {entries.length === 0 ? null : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <tr><th className="w-10 px-3 py-2.5">No</th>{columns.map(([field, label]) => <th key={field} className="px-3 py-2.5">{label}</th>)}<th className="px-3 py-2.5">Pemeriksaan</th><th className="w-28 px-3 py-2.5" /></tr>
+              <tr><th className="w-10 px-3 py-2.5">No</th>{columns.map(([field, label]) => <th key={field} className="px-3 py-2.5">{label}</th>)}<th className="px-3 py-2.5">Status</th><th className="w-28 px-3 py-2.5" /></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {entries.map((entry, index) => {
@@ -139,9 +137,9 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
                     <td className="px-3 py-2.5 align-top tabular-nums text-slate-400">{index + 1}</td>
                     {columns.map(([field]) => <td key={field} className="max-w-48 truncate px-3 py-2.5 align-top text-slate-800">{entry.values[field] || (field === 'tahun_pembuatan' && entry.unknownYear ? 'Tidak diketahui' : '–')}</td>)}
                     <td className="px-3 py-2.5 align-top">
-                      {!check ? <span className="text-slate-400">Belum diperiksa</span>
+                      {!check ? <span className="text-slate-400">Belum tersimpan</span>
                         : check.errors.length ? <ul className="space-y-0.5 text-rose-700">{check.errors.map((text) => <li key={text} className="flex gap-1"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{text}</li>)}</ul>
-                          : <span className="flex items-center gap-1 font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Lolos</span>}
+                          : <span className="flex items-center gap-1 font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Sudah benar</span>}
                       {check?.notes.map((text) => <p key={text} className="mt-0.5 text-[11px] text-slate-500">{text}</p>)}
                     </td>
                     <td className="px-3 py-2.5 align-top">
@@ -162,17 +160,14 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
       {message && (
         <p className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-xs ${message.tone === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
           {message.tone === 'ok' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
-          <span>{message.text}{message.tone === 'ok' && entries.length === 0 && <> Lihat di <Link href="/upload/riwayat" className="font-semibold underline">Riwayat upload</Link>.</>}</span>
+          <span>{message.text}{message.tone === 'ok' && entries.length === 0 && ' Lihat di daftar data tersimpan di bawah.'}</span>
         </p>
       )}
 
       {entries.length > 0 && (
         <div className="flex flex-wrap justify-end gap-2">
-          <button type="button" disabled={busy !== null} onClick={() => submit(true)} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40">
-            {busy === 'check' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Periksa {entries.length} isian
-          </button>
-          <button type="button" disabled={busy !== null || !allChecked} onClick={() => submit(false)} title={allChecked ? undefined : 'Periksa dulu; semua isian harus lolos.'} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">
-            {busy === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Kirim ke database
+          <button type="button" disabled={busy} onClick={submit} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {busy ? 'Menyimpan…' : `Simpan ${entries.length} isian ke data`}
           </button>
         </div>
       )}
