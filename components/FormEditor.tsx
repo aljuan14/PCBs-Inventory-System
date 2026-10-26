@@ -29,6 +29,28 @@ function placeholderOf(field: FormField): string {
   return '…';
 }
 
+/** A field's total of its parts when all of them hold a number, else null. */
+function sumOf(field: FormField, values: Record<string, string>): number | null {
+  if (!field.sumOf) return null;
+  const parts = field.sumOf.keys.map((key) => (values[key]?.trim() ? Number(values[key]) : NaN));
+  if (parts.some((part) => !Number.isFinite(part))) return null;
+  return Number((parts.reduce((total, part) => total + part, 0) / field.sumOf.divisor).toFixed(4));
+}
+
+/**
+ * The entry with each total of parts filled in; one the parts filled in before
+ * is cleared when a part is emptied, while a total typed in by hand stays.
+ */
+function withTotals(sections: FormSection[], entry: FormEntry, before?: FormEntry): FormEntry {
+  const values = { ...entry.values };
+  for (const field of sections.flatMap((section) => section.fields)) {
+    const total = sumOf(field, values);
+    if (total !== null) values[field.key] = String(total);
+    else if (before && sumOf(field, before.values) !== null) values[field.key] = '';
+  }
+  return { ...entry, values };
+}
+
 /** Decimal or degree-minute-second coordinate, with what it reads as. */
 export function CoordinatePreview({ value }: { value: string }) {
   if (!value.trim()) return <p className="mt-1 text-[11px] text-slate-400">Desimal, atau derajat-menit-detik seperti S 6°12&apos;31&quot; E 106°50&apos;44&quot;</p>;
@@ -46,6 +68,7 @@ export function CoordinatePreview({ value }: { value: string }) {
 
 export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { field: FormField; entry: FormEntry; error?: string; onChange: (value: string) => void; onUnknownYear: (unknown: boolean) => void }) {
   const value = entry.values[field.key] ?? '';
+  const locked = sumOf(field, entry.values) !== null;
   const listId = field.options && field.input === 'text' ? `options-${field.key}` : undefined;
   // The point to open the map on, fixed when the map opens (null: no point yet).
   const [picking, setPicking] = useState<{ initial: { lat: number; lng: number } | null } | null>(null);
@@ -81,9 +104,10 @@ export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { f
           min={field.input === 'number' ? 0 : undefined}
           list={listId}
           value={value}
+          readOnly={locked}
           placeholder={field.input === 'date' ? undefined : placeholderOf(field)}
           onChange={(event) => onChange(event.target.value)}
-          className={`${inputClass} min-w-0 flex-1 bg-transparent ${field.input === 'date' && !value ? 'text-slate-400' : 'text-slate-900'}`}
+          className={`${inputClass} min-w-0 flex-1 bg-transparent ${locked ? 'cursor-not-allowed text-slate-500' : field.input === 'date' && !value ? 'text-slate-400' : 'text-slate-900'}`}
         />
         {field.unit && <span className="self-stretch flex items-center border-l border-slate-200 px-3.5 text-xs font-semibold text-slate-500">{field.unit}</span>}
         {listId && <datalist id={listId}>{field.options!.map((option) => <option key={option} value={option} />)}</datalist>}
@@ -100,7 +124,10 @@ export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { f
       {field.label}{field.required && <span className="text-rose-600"> *</span>}
       <div className="mt-1.5">{control}</div>
       {field.input === 'coordinate' && <CoordinatePreview value={value} />}
-      {error ? <p className="mt-1 text-[11px] font-medium text-rose-700">{error}</p> : field.hint && field.input !== 'coordinate' && <p className="mt-1 text-[11px] font-normal text-slate-400">{field.hint}</p>}
+      {error ? <p className="mt-1 text-[11px] font-medium text-rose-700">{error}</p>
+        : field.sumOf && value.trim() && Number.isFinite(Number(value))
+          ? <p className={`mt-1 text-[11px] font-normal ${locked ? 'text-emerald-700' : 'text-slate-400'}`}>{locked ? `Dihitung dari ${field.sumOf.label}` : 'Setara'} = {(Number(value) * field.sumOf.divisor).toLocaleString('id-ID', { maximumFractionDigits: 2 })} kg</p>
+          : field.hint && field.input !== 'coordinate' && <p className="mt-1 text-[11px] font-normal text-slate-400">{field.hint}</p>}
       {/* In a portal: inside the label, clicks on the map would focus the input. */}
       {picking && createPortal(<CoordinatePicker initial={picking.initial} onClose={() => setPicking(null)} onPick={(picked) => { onChange(picked); setPicking(null); }} />, document.body)}
     </label>
@@ -134,7 +161,9 @@ export default function FormEditor({ sections, initial, validate, title, subtitl
   onCancel: () => void;
   inline?: boolean;
 }) {
-  const [entry, setEntry] = useState(initial);
+  // An entry opened with both parts of a total shows the total they make.
+  const [start] = useState(() => withTotals(sections, initial));
+  const [entry, setEntry] = useState(start);
   const [tried, setTried] = useState(false);
   const [active, setActive] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -142,8 +171,8 @@ export default function FormEditor({ sections, initial, validate, title, subtitl
   const downOnBackdrop = useRef(false);
   const errors = tried ? validate(entry) : {};
   const errorCount = Object.keys(errors).length;
-  const dirty = JSON.stringify(entry) !== JSON.stringify(initial);
-  const set = (key: string, value: string) => setEntry((current) => ({ ...current, values: { ...current.values, [key]: value } }));
+  const dirty = JSON.stringify(entry) !== JSON.stringify(start);
+  const set = (key: string, value: string) => setEntry((current) => withTotals(sections, { ...current, values: { ...current.values, [key]: value } }, current));
 
   useEffect(() => {
     if (inline) return;

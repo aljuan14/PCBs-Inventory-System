@@ -328,8 +328,9 @@ const MAX_KG_PER_KVA = 50;
 /**
  * Weights of a transformer row (kg): values over 1.000 t are cleared; a total
  * written in tons (dry + oil ≈ total × 1000) becomes dry + oil; a missing
- * total is dry + oil; any other total that differs from its parts is kept as
- * reported and noted in the check report. berat_ton follows the total.
+ * total is dry + oil; any other total that differs from its parts becomes
+ * dry + oil too, noted (as the form fills it in, lib/form-fields). berat_ton
+ * follows the total.
  */
 function checkWeights(
   item: Record<string, unknown>,
@@ -369,7 +370,9 @@ function checkWeights(
       note('info', { kode: 'weight:total_in_tons', jenis: 'diperbaiki', kolom: 'berat_total_kg', pesan: 'Berat total tertulis dalam ton, diganti berat kering + minyak', nilai_asli: String(total), nilai_baru: String(sum) }, `${total} → ${sum}`);
       item.berat_total_kg = sum;
     } else if (Math.abs(sum - total) > Math.max(1, 0.02 * total)) {
-      found.push(['weight:mismatch', 'info', 'Berat total tidak sama dengan berat kering + minyak (dipakai berat total yang tertulis)', rowNumber, `${dry} + ${oil} ≠ ${total}`]);
+      note('info', { kode: 'weight:mismatch', jenis: 'diperbaiki', kolom: 'berat_total_kg', pesan: 'Berat total tidak sama dengan berat kering + minyak, diganti jumlah keduanya', nilai_asli: String(total), nilai_baru: String(sum) }, `${dry} + ${oil} ≠ ${total}`);
+      item.berat_total_kg = sum;
+      item.berat_ton = Number((sum / 1000).toFixed(4));
     }
   }
   if (typeof item.berat_total_kg === 'number' && (item.berat_ton === null || item.berat_ton === undefined)) {

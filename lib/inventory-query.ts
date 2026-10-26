@@ -388,8 +388,8 @@ const MISSING_FINDINGS: Record<string, Partial<InventoryFilters>> = {
  */
 export function issueTableFilter(key: string, label: string): Partial<InventoryFilters> | null {
   if (key.startsWith('missing:')) return MISSING_FINDINGS[key] ?? null;
-  // Not kept with the row: read from the workbook. weight:mismatch keeps the reported total, so it is only a finding.
-  if (key.startsWith('duplicate:') || key.startsWith('skipped:') || key === 'weight:mismatch') return null;
+  // Not kept with the row: read from the workbook.
+  if (key.startsWith('duplicate:') || key.startsWith('skipped:')) return null;
   return { note: { kode: key, label } };
 }
 

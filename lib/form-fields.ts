@@ -18,6 +18,8 @@ export type FormField = {
   options?: string[];
   unit?: string;
   hint?: string;
+  /** A total of other number fields (divided by `divisor`): filled in and locked once all of them are, typed in otherwise. */
+  sumOf?: { keys: string[]; divisor: number; label: string };
 };
 
 export type FormSection = { title: string; note?: string; fields: FormField[]; collapsed?: boolean };
@@ -49,12 +51,15 @@ const UNIT_SECTION = (): FormSection => ({
     { key: 'kode_alat', label: 'Kode alat', input: 'text', hint: 'Kode internal peralatan' },
   ],
 });
-// The weight in its two parts (as the PLN form reports it) and the total; the
-// total may be left empty when both parts are filled in (lib/import-transform).
+// The weight in its two parts (as the PLN form reports it) and the total: the
+// total follows both parts once they are filled in (FormEditor; on import,
+// lib/import-transform), and is typed in when they are not, as most companies
+// know only the total.
 const WEIGHT_INPUTS = (): FormField[] => [
   { key: 'berat_kering_kg', label: 'Berat kering (tanpa minyak)', input: 'number', unit: 'kg', hint: 'Inti, kumparan, dan tangki' },
   { key: 'berat_minyak_kg', label: 'Berat minyak', input: 'number', unit: 'kg' },
-  { key: 'berat_ton', label: 'Berat total transformator', input: 'number', unit: 'ton', hint: 'Boleh kosong bila berat kering dan minyak diisi' },
+  { key: 'berat_ton', label: 'Berat total transformator', input: 'number', unit: 'ton', hint: 'Isi bila berat kering dan minyak tidak diketahui',
+    sumOf: { keys: ['berat_kering_kg', 'berat_minyak_kg'], divisor: 1000, label: 'berat kering + berat minyak' } },
 ];
 const MAINTENANCE_TYPES = ['Purifikasi', 'Retrofilling (penggantian minyak dielektrik)', 'Penambahan minyak dielektrik', 'Filtrasi'];
 
