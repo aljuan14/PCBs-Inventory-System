@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { CalendarPlus, Check, CheckCircle2, Loader2, Trash2, X } from 'lucide-react';
+import { CalendarPlus, CheckCircle2, ListChecks, Loader2, Pencil, Trash2, X } from 'lucide-react';
 import { formatPlanDate, formatPlanMonth, monthEnd } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 import { useReadOnly } from '@/components/useAccess';
@@ -15,46 +16,43 @@ type FocusRow = {
   lokasi: string | null; unit: string | null; ppm: number | null; kebutuhan: Need | null;
   rencana_id: string | null; rencana_untuk_alat: boolean | null; rencana_tanggal: string | null; rencana_selesai: string | null; rencana_catatan: string | null;
 };
-/** What a ticked transformer needs to be planned, and its own plan if it has one. */
+/** What a transformer to plan needs, and its own plan if it has one. */
 type Picked = { kategori: Category; kebutuhan: Need; ownPlan: string | null; done: boolean };
+/** The plan dialog: for one row (its plan can be changed, finished, removed) or for several transformers at once. */
+type Editing = { row: FocusRow } | { targets: Array<[string, Picked]>; title: string };
 
 const PAGE = 100;
 // What PostgREST returns at most per request.
 const BATCH = 1000;
 const today = () => new Date().toISOString().slice(0, 10);
 const fmt = (value: number) => value.toLocaleString('id-ID');
-// The roadmap in two parts: transformers still in use (when tested, when retrofilled) and those no longer in use (when managed).
-const FILTERS = [
-  ['all', 'Semua'], ['uji', 'Belum diuji'], ['penanganan', '≥ 50 ppm'], ['noplan', 'Tanpa rencana'], ['late', 'Lewat waktu'],
-] as const;
+const FILTERS = [['all', 'Semua'], ['noplan', 'Belum diisi'], ['late', 'Terlambat']] as const;
 type Filter = (typeof FILTERS)[number][0];
-// Testing and handling only concern transformers in use.
-const filtersOf = (group: Category) => FILTERS.filter(([key]) => group === 'transformator_digunakan' || (key !== 'uji' && key !== 'penanganan'));
 const MONTHS = Array.from({ length: 12 }, (_, index) => new Date(2000, index, 1).toLocaleDateString('id-ID', { month: 'long' }));
 const thisYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 11 }, (_, index) => thisYear + index);
 
-const inputClass = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600';
+const fieldClass = 'w-full rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-600/10';
 
 function planState(row: FocusRow) {
-  if (!row.rencana_tanggal) return { label: 'Tanpa rencana', className: 'border-rose-200 bg-rose-50 text-rose-800' };
+  if (!row.rencana_tanggal) return null;
   // A handling is done by its after-test under 50 ppm (form 2), when the transformer leaves this list; one marked done by hand is not.
   if (row.rencana_selesai && row.kebutuhan === 'penanganan') return { label: 'Ditandai selesai, masih ≥ 50 ppm', className: 'border-amber-200 bg-amber-50 text-amber-900' };
   if (row.rencana_selesai) return { label: `Selesai ${formatPlanDate(row.rencana_selesai)}`, className: 'border-emerald-200 bg-emerald-50 text-emerald-800' };
-  if (row.rencana_tanggal < today()) return { label: `Lewat: ${formatPlanMonth(row.rencana_tanggal)}`, className: 'border-rose-200 bg-rose-50 text-rose-800' };
-  return { label: formatPlanMonth(row.rencana_tanggal), className: 'border-amber-200 bg-amber-50 text-amber-900' };
+  if (row.rencana_tanggal < today()) return { label: `Terlambat · ${formatPlanMonth(row.rencana_tanggal)}`, className: 'border-rose-200 bg-rose-50 text-rose-800' };
+  return { label: formatPlanMonth(row.rencana_tanggal), className: 'border-slate-200 bg-white text-slate-800' };
 }
 
-const needLabel = (row: FocusRow) =>
-  row.kebutuhan === 'uji' ? 'Uji PCBs'
-    // A transformer no longer in use is managed whatever its test says, so its ppm is not shown.
-    : row.kebutuhan === 'pengelolaan' ? 'Pengelolaan'
-      : `Retrofilling / penggantian (${row.ppm?.toLocaleString('id-ID')} ppm)`;
+// In plain words. A transformer no longer in use is managed whatever its test says, so its ppm is not shown.
+function NeedCell({ row }: { row: FocusRow }) {
+  if (row.kebutuhan === 'uji') return <>Uji kandungan PCBs</>;
+  if (row.kebutuhan === 'pengelolaan') return <>Kelola sebagai limbah B3</>;
+  return <>Retrofilling / ganti trafo<span className="block text-[11px] font-normal text-slate-500">hasil uji {row.ppm?.toLocaleString('id-ID')} ppm</span></>;
+}
 
 /** The transformers of a group and filter, as the database function gives them. */
 function focusQuery(supabase: SupabaseClient, companyId: string, group: Category, filter: Filter, columns = '*', options?: { count: 'exact'; head: true }) {
   let request = supabase.rpc('company_focus_transformers', { p_company_id: companyId }, options).select(columns).not('kebutuhan', 'is', null).eq('kategori', group);
-  if (filter === 'uji' || filter === 'penanganan') request = request.eq('kebutuhan', filter);
   if (filter === 'noplan') request = request.is('rencana_tanggal', null);
   if (filter === 'late') request = request.lt('rencana_tanggal', today()).is('rencana_selesai', null);
   return request;
@@ -77,11 +75,96 @@ export default function RoadmapPanels(props: { supabase: SupabaseClient; company
 }
 
 /**
- * One group's table: tick the ones to plan, give
- * them a month and year (kept as the month's last day, so a plan is late
- * only once its month is over); mark a plan done or
- * remove it on its row or for the ticked ones. A new date replaces the open
- * plan a transformer had. On the Roadmap page and in the company's report.
+ * The month and year of a plan (kept as the month's last day, so a plan is
+ * late only once its month is over) and a note; for one row also marking a
+ * management done and removing the plan.
+ */
+function PlanDialog({ title, subtitle, initial, busy, error, done, onSave, onFinish, onUndo, onRemove, onClose }: {
+  title: string;
+  subtitle?: string;
+  initial: { date: string | null; note: string | null };
+  busy: string | null;
+  error: string | null;
+  /** A management already marked done: no new month, only undoing the mark. */
+  done?: string;
+  onSave: (date: string, note: string) => void;
+  onFinish?: () => void;
+  onUndo?: () => void;
+  onRemove?: () => void;
+  onClose: () => void;
+}) {
+  const [month, setMonth] = useState(initial.date ? String(Number(initial.date.slice(5, 7))) : '');
+  const [year, setYear] = useState(initial.date ? initial.date.slice(0, 4) : '');
+  const [note, setNote] = useState(initial.note ?? '');
+  const date = month && year ? monthEnd(Number(year), Number(month)) : '';
+  // A year before this one (an old plan) stays choosable.
+  const years = year && !YEARS.includes(Number(year)) ? [Number(year), ...YEARS] : YEARS;
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, onClose]);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1500] flex items-end justify-center bg-slate-900/40 sm:items-center sm:p-4" onClick={() => { if (!busy) onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="plan-dialog-title" className="text-base font-semibold text-slate-900">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+          </div>
+          <button type="button" onClick={onClose} disabled={busy !== null} aria-label="Tutup" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><X className="h-4 w-4" /></button>
+        </div>
+        {done ? <p className="mt-4 flex items-start gap-2 rounded-xl bg-emerald-50 px-3.5 py-3 text-xs text-emerald-900"><CheckCircle2 className="h-4 w-4 shrink-0" /> {done}</p> : <>
+        <p className="mt-4 text-[13px] font-medium text-slate-800">Kapan akan dilakukan?</p>
+        <div className="mt-1.5 grid grid-cols-2 gap-2">
+          <select aria-label="Bulan" value={month} onChange={(event) => setMonth(event.target.value)} className={fieldClass}>
+            <option value="">Pilih bulan</option>
+            {MONTHS.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+          </select>
+          <select aria-label="Tahun" value={year} onChange={(event) => setYear(event.target.value)} className={fieldClass}>
+            <option value="">Pilih tahun</option>
+            {years.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </div>
+        <label className="mt-4 block text-[13px] font-medium text-slate-800">Keterangan <span className="font-normal text-slate-400">(boleh kosong)</span>
+          <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} placeholder="mis. menunggu jadwal laboratorium" className={`${fieldClass} mt-1.5`} />
+        </label>
+        </>}
+        {error && <p className="mt-3 text-xs font-medium text-rose-700">{error}</p>}
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+          {onRemove && (
+            <button type="button" disabled={busy !== null} onClick={onRemove} className="mr-auto flex items-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40">
+              {busy === 'remove' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Hapus rencana
+            </button>
+          )}
+          {onFinish && (
+            <button type="button" disabled={busy !== null} onClick={onFinish} className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-40">
+              {busy === 'finish' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Tandai selesai
+            </button>
+          )}
+          {done ? (
+            onUndo && <button type="button" disabled={busy !== null} onClick={onUndo} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+              {busy === 'finish' && <Loader2 className="h-4 w-4 animate-spin" />} Batalkan tanda selesai
+            </button>
+          ) : (
+            <button type="button" disabled={!date || busy !== null} onClick={() => onSave(date, note)} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">
+              {busy === 'plan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />} Simpan rencana
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * One group's table: the transformers without a plan first, each with a
+ * button to give it one (or change, finish or remove it) on its row; above
+ * the table the plan can be set at once for every transformer still without
+ * one, or for those picked. A new plan replaces the open one a transformer had.
  */
 function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void; group: Category }) {
   // A pemantau account sees the plans and the transformers, without the means to change them.
@@ -90,20 +173,19 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
   const [limit, setLimit] = useState(PAGE);
   const [rows, setRows] = useState<{ key: string; list: FocusRow[]; more: boolean } | null>(null);
   const [counts, setCounts] = useState<{ key: string; values: Partial<Record<Filter, number>> } | null>(null);
+  // Picking several transformers is a mode, so the table has no checkboxes otherwise.
+  const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Map<string, Picked>>(new Map());
-  const [month, setMonth] = useState('');
-  const [year, setYear] = useState('');
-  const date = month && year ? monthEnd(Number(year), Number(month)) : '';
-  // An optional note going with the date, e.g. why it is set so.
-  const [note, setNote] = useState('');
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestKey = `${companyId}|${reloadKey}|${filter}|${limit}`;
   const countKey = `${companyId}|${reloadKey}`;
+  const inUse = group === 'transformator_digunakan';
 
   useEffect(() => {
     let active = true;
-    focusQuery(supabase, companyId, group, filter).order('kebutuhan', { ascending: false }).order('tahun_pembuatan', { nullsFirst: true }).range(0, limit)
+    focusQuery(supabase, companyId, group, filter).order('rencana_tanggal', { nullsFirst: true }).order('tahun_pembuatan', { nullsFirst: true }).range(0, limit)
       .then(({ data }) => {
         if (!active) return;
         const list = (data ?? []) as unknown as FocusRow[];
@@ -115,16 +197,18 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
   // The number behind each filter.
   useEffect(() => {
     let active = true;
-    Promise.all(filtersOf(group).map(async ([key]) => {
+    Promise.all(FILTERS.map(async ([key]) => {
       const { count } = await focusQuery(supabase, companyId, group, key, 'id', { count: 'exact', head: true });
       return [key, count ?? 0] as const;
     })).then((entries) => { if (active) setCounts({ key: countKey, values: Object.fromEntries(entries) }); });
     return () => { active = false; };
   }, [supabase, companyId, group, countKey]);
 
-  const inUse = group === 'transformator_digunakan';
   const list = rows?.key === requestKey ? rows.list : null;
   const count = (key: Filter) => (counts?.key === countKey ? counts.values[key] : undefined);
+  const total = count('all');
+  const open = count('noplan');
+  const planned = total !== undefined && open !== undefined ? total - open : undefined;
   const filterTotal = count(filter) ?? 0;
   const allShownPicked = list !== null && list.length > 0 && list.every((row) => picked.has(row.id));
 
@@ -134,18 +218,33 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
     return next;
   });
   const toggleShown = () => setPicked(allShownPicked ? new Map() : new Map((list ?? []).map((row) => [row.id, pickedOf(row)])));
+  const stopPicking = () => { setPicking(false); setPicked(new Map()); };
 
-  // Every transformer of the filter, beyond the rows loaded.
-  const pickAll = async () => {
-    setBusy('pick');
-    const next = new Map<string, Picked>();
+  // Every transformer of a filter, beyond the rows loaded.
+  const loadAll = async (which: Filter) => {
+    const found = new Map<string, Picked>();
     for (let from = 0; ; from += BATCH) {
-      const { data, error: loadError } = await focusQuery(supabase, companyId, group, filter).range(from, from + BATCH - 1);
-      if (loadError) { setBusy(null); return setError(loadError.message); }
-      for (const row of (data ?? []) as unknown as FocusRow[]) next.set(row.id, pickedOf(row));
+      const { data, error: loadError } = await focusQuery(supabase, companyId, group, which).range(from, from + BATCH - 1);
+      if (loadError) throw new Error(loadError.message);
+      for (const row of (data ?? []) as unknown as FocusRow[]) found.set(row.id, pickedOf(row));
       if (!data || data.length < BATCH) break;
     }
-    setPicked(next);
+    return found;
+  };
+  const pickAll = async () => {
+    setBusy('pick');
+    try { setPicked(await loadAll(filter)); } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    setBusy(null);
+  };
+  const planAllOpen = async () => {
+    setBusy('pick');
+    setError(null);
+    try {
+      const targets = [...(await loadAll('noplan')).entries()];
+      if (targets.length) setEditing({ targets, title: `Isi rencana untuk ${fmt(targets.length)} trafo yang belum diisi` });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
     setBusy(null);
   };
 
@@ -155,156 +254,188 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
     const failed = (await work()).find((result) => result.error)?.error;
     setBusy(null);
     if (failed) return setError(failed.message);
-    setPicked(new Map());
-    setMonth('');
-    setYear('');
-    setNote('');
+    setEditing(null);
+    stopPicking();
     onChange();
   };
 
-  const chosen = [...picked.entries()];
-  const withOwnPlan = chosen.filter(([, row]) => row.ownPlan);
-  // A test is done by its result in the data, a handling by its after-test under 50 ppm (form 2);
-  // only a management (handing a transformer no longer in use over) is marked done by hand.
-  const toFinish = withOwnPlan.filter(([, row]) => !row.done && row.kebutuhan === 'pengelolaan');
-
-  // Each ticked transformer gets the month; an open plan it had is replaced, and so is a handling
-  // marked done while the transformer is still 50 ppm or more (it would win over the new date).
-  const setPlan = () => run('plan', async () => {
-    const ids = chosen.map(([id]) => id);
+  // Each transformer gets the month; an open plan it had is replaced, and so is a handling
+  // marked done while the transformer is still 50 ppm or more (it would win over the new month).
+  const setPlan = (targets: Array<[string, Picked]>, date: string, note: string) => run('plan', async () => {
+    const ids = targets.map(([id]) => id);
     const results = [];
     for (let at = 0; at < ids.length; at += BATCH) {
       const slice = ids.slice(at, at + BATCH);
       results.push(await supabase.from('equipment_plans').delete().eq('company_id', companyId).in('item_id', slice).is('selesai_at', null));
       results.push(await supabase.from('equipment_plans').delete().eq('company_id', companyId).in('item_id', slice).eq('jenis', 'penanganan'));
     }
-    for (let at = 0; at < chosen.length; at += BATCH) {
-      results.push(await supabase.from('equipment_plans').insert(chosen.slice(at, at + BATCH).map(([id, row]) => ({ company_id: companyId, kategori: row.kategori, item_id: id, jenis: row.kebutuhan, rencana_tanggal: date, catatan: note.trim() || null }))));
+    for (let at = 0; at < targets.length; at += BATCH) {
+      results.push(await supabase.from('equipment_plans').insert(targets.slice(at, at + BATCH).map(([id, row]) => ({ company_id: companyId, kategori: row.kategori, item_id: id, jenis: row.kebutuhan, rencana_tanggal: date, catatan: note.trim() || null }))));
     }
     return results;
   });
-  const finishPlans = (planIds: string[]) => run('finish', async () => [await supabase.from('equipment_plans').update({ selesai_at: today() }).in('id', planIds)]);
+  // A test is done by its result in the data, a handling by its after-test under 50 ppm (form 2);
+  // only a management (handing a transformer no longer in use over) is marked done by hand.
+  const finishPlan = (planId: string, done = true) => run('finish', async () => [await supabase.from('equipment_plans').update({ selesai_at: done ? today() : null }).eq('id', planId)]);
   const removePlans = async (planIds: string[]) => {
-    if (!(await confirmDialog({ title: planIds.length === 1 ? 'Hapus rencana trafo ini?' : `Hapus rencana ${fmt(planIds.length)} trafo?`, message: 'Trafonya kembali tanpa rencana dan status perusahaan bisa menjadi merah sampai diberi rencana lagi.', tone: 'danger', confirmLabel: 'Hapus rencana' }))) return;
+    if (!(await confirmDialog({ title: planIds.length === 1 ? 'Hapus rencana trafo ini?' : `Hapus rencana ${fmt(planIds.length)} trafo?`, message: 'Trafonya kembali belum punya rencana dan status perusahaan bisa menjadi merah sampai diisi lagi.', tone: 'danger', confirmLabel: 'Hapus rencana' }))) return;
     run('remove', async () => [await supabase.from('equipment_plans').delete().in('id', planIds)]);
   };
 
+  const chosen = [...picked.entries()];
+  const withOwnPlan = chosen.filter(([, row]) => row.ownPlan);
+  const name = (row: FocusRow) => [row.nama_merek, row.nomor_serial].filter(Boolean).join(' · ') || 'Trafo tanpa nama';
+  const dialog = editing && ('row' in editing
+    ? (() => {
+        const row = editing.row;
+        const own = row.rencana_untuk_alat ? row.rencana_id : null;
+        return (
+          <PlanDialog title={row.rencana_tanggal ? 'Ubah rencana' : 'Isi rencana'} subtitle={`${name(row)} · ${row.kebutuhan === 'uji' ? 'uji kandungan PCBs' : row.kebutuhan === 'pengelolaan' ? 'kelola sebagai limbah B3' : 'retrofilling / ganti trafo'}`}
+            initial={{ date: row.rencana_selesai ? null : row.rencana_tanggal, note: row.rencana_catatan }} busy={busy} error={error}
+            done={row.rencana_selesai && row.kebutuhan === 'pengelolaan' ? `Pengelolaan trafo ini ditandai selesai pada ${formatPlanDate(row.rencana_selesai)}.` : undefined}
+            onSave={(date, note) => setPlan([[row.id, pickedOf(row)]], date, note)}
+            onFinish={own && !row.rencana_selesai && row.kebutuhan === 'pengelolaan' ? () => finishPlan(own) : undefined}
+            onUndo={own ? () => finishPlan(own, false) : undefined}
+            onRemove={own ? () => removePlans([own]) : undefined}
+            onClose={() => { setEditing(null); setError(null); }} />
+        );
+      })()
+    : <PlanDialog title={editing.title} subtitle="Bulan dan tahun yang sama untuk semua trafo ini. Rencana yang belum selesai diganti." initial={{ date: null, note: null }} busy={busy} error={error}
+        onSave={(date, note) => setPlan(editing.targets, date, note)} onClose={() => { setEditing(null); setError(null); }} />);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white">
-      <div className="space-y-3 border-b border-slate-200 px-5 py-4">
+      <div className="space-y-4 border-b border-slate-200 px-5 py-4">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
             {inUse ? 'Trafo masih digunakan' : 'Trafo tidak digunakan'}
-            {count('all') !== undefined && <span className="rounded-full bg-slate-100 px-2 text-xs tabular-nums text-slate-600">{fmt(count('all')!)}</span>}
+            {total !== undefined && <span className="rounded-full bg-slate-100 px-2 text-xs tabular-nums text-slate-600">{fmt(total)}</span>}
           </h2>
           <p className="mt-1 text-xs text-slate-500">
             Buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun.{' '}
-            {inUse ? 'Kapan diuji (bila belum diuji) dan kapan diretrofilling atau diganti (bila ≥ 50 ppm).' : 'Kapan dikelola, berapa pun hasil ujinya.'}
-            {!readOnly && ' Centang trafonya, lalu tetapkan bulan dan tahun rencananya.'}
+            {inUse ? 'Isi kapan trafo akan diuji (bila belum diuji) atau diretrofilling / diganti (bila hasil ujinya 50 ppm atau lebih).' : 'Isi kapan trafo akan dikelola sebagai limbah B3, berapa pun hasil ujinya.'}
           </p>
         </div>
-        <div role="group" aria-label="Saring" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
-          {filtersOf(group).map(([key, label]) => {
-            const value = count(key);
-            const alarming = (key === 'noplan' || key === 'late') && value;
-            return (
-              <button key={key} type="button" aria-pressed={filter === key} onClick={() => { setFilter(key); setLimit(PAGE); setPicked(new Map()); }}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${filter === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}>
-                {label}
-                {value !== undefined && <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${alarming ? 'bg-rose-100 text-rose-800' : 'bg-slate-200/70 text-slate-600'}`}>{fmt(value)}</span>}
-              </button>
-            );
-          })}
-        </div>
 
-        {!readOnly && picked.size > 0 && (
-          <div className="space-y-2 rounded-xl bg-emerald-50 p-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <span className="self-center text-xs font-semibold text-emerald-900">{fmt(picked.size)} trafo dipilih</span>
-              <fieldset className="text-xs font-medium text-slate-600">
-                <legend>Rencana (bulan dan tahun)</legend>
-                <div className="mt-1 flex gap-2">
-                  <select aria-label="Bulan" value={month} onChange={(event) => setMonth(event.target.value)} className={inputClass}>
-                    <option value="">Bulan</option>
-                    {MONTHS.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
-                  </select>
-                  <select aria-label="Tahun" value={year} onChange={(event) => setYear(event.target.value)} className={inputClass}>
-                    <option value="">Tahun</option>
-                    {YEARS.map((value) => <option key={value} value={value}>{value}</option>)}
-                  </select>
-                </div>
-              </fieldset>
-              <label className="min-w-56 flex-1 text-xs font-medium text-slate-600">Keterangan <span className="font-normal text-slate-400">(opsional)</span>
-                <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} placeholder="mis. menunggu jadwal laboratorium, anggaran tahun depan" className={`${inputClass} mt-1 block w-full`} />
-              </label>
-              <button type="button" disabled={!date || busy !== null} onClick={setPlan} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40">
-                {busy === 'plan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />} Tetapkan rencana
-              </button>
-              {toFinish.length > 0 && (
-                <button type="button" disabled={busy !== null} onClick={() => finishPlans(toFinish.map(([, row]) => row.ownPlan!))} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40">
-                  <CheckCircle2 className="h-4 w-4" /> Tandai selesai ({fmt(toFinish.length)})
+        {total !== undefined && total > 0 && planned !== undefined && (
+          <div>
+            <div className="flex items-baseline justify-between gap-3 text-xs">
+              <span className="font-semibold text-slate-800">{fmt(planned)} dari {fmt(total)} trafo sudah punya rencana</span>
+              {open ? <span className="font-semibold text-rose-700">{fmt(open)} belum diisi</span> : <span className="flex items-center gap-1 font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Semua sudah diisi</span>}
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full rounded-full ${open ? 'bg-amber-500' : 'bg-emerald-600'}`} style={{ width: `${(planned / total) * 100}%` }} />
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Tampilkan" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+            {FILTERS.map(([key, label]) => {
+              const value = count(key);
+              const alarming = key !== 'all' && value;
+              return (
+                <button key={key} type="button" aria-pressed={filter === key} onClick={() => { setFilter(key); setLimit(PAGE); setPicked(new Map()); }}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${filter === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}>
+                  {label}
+                  {value !== undefined && <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${alarming ? 'bg-rose-100 text-rose-800' : 'bg-slate-200/70 text-slate-600'}`}>{fmt(value)}</span>}
+                </button>
+              );
+            })}
+          </div>
+          {!readOnly && !picking && total !== undefined && total > 0 && (
+            <div className="ml-auto flex flex-wrap gap-2">
+              {open !== undefined && open > 1 && (
+                <button type="button" disabled={busy !== null} onClick={planAllOpen} className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-40">
+                  {busy === 'pick' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />} Isi semua yang belum diisi ({fmt(open)})
                 </button>
               )}
-              {withOwnPlan.length > 0 && (
-                <button type="button" disabled={busy !== null} onClick={() => removePlans(withOwnPlan.map(([, row]) => row.ownPlan!))} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40">
-                  <Trash2 className="h-4 w-4" /> Hapus rencana ({fmt(withOwnPlan.length)})
+              {total > 1 && (
+                <button type="button" onClick={() => { setPicking(true); setError(null); }} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <ListChecks className="h-4 w-4" /> Pilih beberapa trafo
                 </button>
               )}
             </div>
-            {withOwnPlan.length > 0 && <p className="text-[11px] text-slate-500">Rencana baru menggantikan rencana yang belum selesai pada trafo yang sudah punya rencana.</p>}
+          )}
+        </div>
+
+        {!readOnly && picking && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-emerald-50 p-3">
+            <span className="text-xs font-semibold text-emerald-900">{picked.size ? `${fmt(picked.size)} trafo dipilih` : 'Centang trafo di tabel, lalu isi rencananya sekaligus.'}</span>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <button type="button" disabled={!picked.size || busy !== null} onClick={() => setEditing({ targets: chosen, title: `Isi rencana untuk ${fmt(chosen.length)} trafo` })} className="flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">
+                <CalendarPlus className="h-4 w-4" /> Isi rencana{picked.size ? ` (${fmt(picked.size)})` : ''}
+              </button>
+              {withOwnPlan.length > 0 && (
+                <button type="button" disabled={busy !== null} onClick={() => removePlans(withOwnPlan.map(([, row]) => row.ownPlan!))} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40">
+                  <Trash2 className="h-4 w-4" /> Hapus rencana ({fmt(withOwnPlan.length)})
+                </button>
+              )}
+              <button type="button" onClick={stopPicking} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
+            </div>
           </div>
         )}
-        {error && <p className="text-xs font-medium text-rose-700">{error}</p>}
+        {error && !editing && <p className="text-xs font-medium text-rose-700">{error}</p>}
       </div>
 
       {list === null ? <p className="flex items-center gap-2 p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>
-        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo ${inUse ? 'masih digunakan' : 'tidak digunakan'} sebelum ${TRAFO_FOCUS_YEAR} yang perlu tindakan.` : 'Tidak ada trafo pada pilihan ini.'}</p> : (
-          <div className="overflow-x-auto">
-            {!readOnly && allShownPicked && filterTotal > list.length && picked.size < filterTotal && (
-              <p className="border-b border-slate-100 bg-slate-50 px-5 py-2 text-xs text-slate-600">
+        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo ${inUse ? 'masih digunakan' : 'tidak digunakan'} sebelum ${TRAFO_FOCUS_YEAR} yang perlu rencana.` : filter === 'noplan' ? 'Semua trafo sudah punya rencana.' : 'Tidak ada rencana yang terlambat.'}</p> : (
+          <div className="px-5 py-4">
+            {picking && allShownPicked && filterTotal > list.length && picked.size < filterTotal && (
+              <p className="mb-3 rounded-xl bg-slate-50 px-4 py-2 text-xs text-slate-600">
                 {fmt(list.length)} trafo yang tampil dipilih.{' '}
-                <button type="button" disabled={busy !== null} onClick={pickAll} className="font-semibold text-emerald-700 underline">{busy === 'pick' ? 'Memilih…' : `Pilih semua ${fmt(filterTotal)} trafo pada saringan ini`}</button>
+                <button type="button" disabled={busy !== null} onClick={pickAll} className="font-semibold text-emerald-700 underline">{busy === 'pick' ? 'Memilih…' : `Pilih semua ${fmt(filterTotal)} trafo`}</button>
               </p>
             )}
-            <table className="w-full min-w-[680px] text-left text-xs">
-              <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {/* A grid of boxes, as in the Excel template: lines between every cell, rows striped. */}
+            <div className="overflow-x-auto rounded-xl border border-slate-300">
+            <table className="w-full min-w-[720px] border-collapse text-left text-xs [&_td]:border [&_td]:border-slate-200 [&_th]:border [&_th]:border-slate-300 [&_tr>*:first-child]:border-l-0 [&_tr>*:last-child]:border-r-0 [&_thead_tr>*]:border-t-0 [&_tbody_tr:last-child>*]:border-b-0">
+              <thead className="bg-slate-100 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                 <tr>
-                  {!readOnly && <th className="w-10 px-3 py-2.5"><input type="checkbox" aria-label="Pilih semua yang tampil" checked={allShownPicked} onChange={toggleShown} className="accent-emerald-700" /></th>}
-                  <th className="px-3 py-2.5">Merek / No. serial</th><th className="px-3 py-2.5">Tahun</th><th className="px-3 py-2.5">Lokasi</th><th className="px-3 py-2.5">Perlu</th><th className="px-3 py-2.5">Rencana</th>
+                  {picking && <th className="w-10 px-3 py-3 text-center"><input type="checkbox" aria-label="Pilih semua yang tampil" checked={allShownPicked} onChange={toggleShown} className="accent-emerald-700" /></th>}
+                  <th className="w-12 px-3 py-3 text-center">No</th>
+                  <th className="px-3 py-2.5">Trafo</th><th className="px-3 py-2.5">Tahun</th><th className="px-3 py-2.5">Lokasi</th><th className="px-3 py-2.5">Yang perlu dilakukan</th><th className="px-3 py-2.5 text-right">Rencana</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {list.map((row) => {
+              <tbody>
+                {list.map((row, index) => {
                   const state = planState(row);
-                  const own = row.rencana_untuk_alat ? row.rencana_id : null;
                   return (
-                    <tr key={row.id} className={picked.has(row.id) ? 'bg-emerald-50/50' : ''}>
-                      {!readOnly && <td className="px-3 py-2.5"><input type="checkbox" aria-label="Pilih" checked={picked.has(row.id)} onChange={() => toggle(row)} className="accent-emerald-700" /></td>}
-                      <td className="px-3 py-2.5 text-slate-800">{row.nama_merek || '–'}<span className="block text-slate-500">{row.nomor_serial || '–'}</span></td>
-                      <td className="px-3 py-2.5 tabular-nums">{row.tahun_pembuatan ?? <span className="text-amber-700">tidak ada</span>}</td>
-                      <td className="max-w-56 px-3 py-2.5 text-slate-600"><span className="line-clamp-2">{[row.unit, row.lokasi].filter(Boolean).join(' · ') || '–'}</span></td>
-                      <td className="px-3 py-2.5 font-medium text-slate-800">{needLabel(row)}</td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1">
-                          <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${state.className}`}>{state.label}</span>
-                          {!readOnly && own && !row.rencana_selesai && row.kebutuhan === 'pengelolaan' && (
-                            <button type="button" title="Tandai selesai" aria-label="Tandai selesai" disabled={busy !== null} onClick={() => finishPlans([own])} className="rounded-md p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700"><Check className="h-3.5 w-3.5" /></button>
-                          )}
-                          {!readOnly && own && (
-                            <button type="button" title="Hapus rencana" aria-label="Hapus rencana" disabled={busy !== null} onClick={() => removePlans([own])} className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><X className="h-3.5 w-3.5" /></button>
-                          )}
-                        </div>
-                        {row.rencana_catatan && <span title={row.rencana_catatan} className="mt-1 line-clamp-2 block max-w-64 text-[11px] text-slate-500">{row.rencana_catatan}</span>}
-                        {row.rencana_tanggal && !own && <span className="mt-0.5 block text-[10px] text-slate-400">rencana bersama (lama)</span>}
+                    <tr key={row.id} className={picked.has(row.id) ? 'bg-emerald-50' : !state ? 'bg-rose-50/60' : index % 2 ? 'bg-slate-50' : 'bg-white'}>
+                      {picking && <td className="px-3 py-3 text-center"><input type="checkbox" aria-label="Pilih" checked={picked.has(row.id)} onChange={() => toggle(row)} className="accent-emerald-700" /></td>}
+                      <td className="px-3 py-3 text-center tabular-nums text-slate-500">{index + 1}</td>
+                      <td className="px-3 py-3 text-slate-800">{row.nama_merek || '–'}<span className="block text-slate-500">{row.nomor_serial || '–'}</span></td>
+                      <td className="px-3 py-3 tabular-nums">{row.tahun_pembuatan ?? <span className="text-amber-700">tidak ada</span>}</td>
+                      <td className="max-w-56 px-3 py-3 text-slate-600"><span className="line-clamp-2">{[row.unit, row.lokasi].filter(Boolean).join(' · ') || '–'}</span></td>
+                      <td className="px-3 py-3 font-medium text-slate-800"><NeedCell row={row} /></td>
+                      <td className="px-3 py-3 text-right">
+                        {!state ? (
+                          readOnly || picking ? <span className="font-semibold text-rose-700">Belum diisi</span> : (
+                            <button type="button" onClick={() => { setError(null); setEditing({ row }); }} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800">
+                              <CalendarPlus className="h-4 w-4" /> Isi rencana
+                            </button>
+                          )
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${state.className}`}>{state.label}</span>
+                            {!readOnly && !picking && (
+                              <button type="button" onClick={() => { setError(null); setEditing({ row }); }} title="Ubah rencana" aria-label="Ubah rencana" className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:border-emerald-300 hover:text-emerald-700"><Pencil className="h-3.5 w-3.5" /></button>
+                            )}
+                          </div>
+                        )}
+                        {row.rencana_catatan && <span title={row.rencana_catatan} className="mt-1 ml-auto line-clamp-2 block max-w-64 text-[11px] text-slate-500">{row.rencana_catatan}</span>}
+                        {row.rencana_tanggal && !row.rencana_untuk_alat && <span className="mt-0.5 block text-[10px] text-slate-400">rencana bersama (lama)</span>}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {rows?.more && <button type="button" onClick={() => setLimit((value) => value + PAGE)} className="w-full border-t border-slate-100 py-3 text-xs font-semibold text-emerald-700 hover:bg-slate-50">Muat {PAGE} lagi</button>}
+            </div>
+            {rows?.more && <button type="button" onClick={() => setLimit((value) => value + PAGE)} className="mt-3 w-full rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-slate-50">Muat {PAGE} lagi</button>}
           </div>
         )}
+      {dialog}
     </div>
   );
 }

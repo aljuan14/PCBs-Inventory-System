@@ -30,7 +30,7 @@ const FAQ_GROUPS: FaqGroup[] = [
     { id: 'wajib-isi', q: 'Kolom mana saja yang wajib diisi?', a: 'Kolom wajib ditandai bintang (*). Untuk formulir 1.1 misalnya: nama/merek, nomor serial, tahun pembuatan, lokasi peralatan, dan titik koordinat. Bila ada yang terlewat, formulir tidak tersimpan dan kolom yang kurang ditandai merah serta langsung ditampilkan.' },
     { id: 'banyak-data', q: 'Kami punya puluhan trafo. Apakah ada cara lebih cepat dari mengisi satu per satu?', a: 'Ada dua cara. Pertama, tombol "Simpan & tambah lagi" di jendela formulir menyimpan data lalu langsung membuka formulir kosong berikutnya (pintasan Ctrl+Enter untuk menyimpan). Kedua, unggah template Excel: unduh template resmi, isi semua baris, lalu unggah di card "Tambah data" pada formulir yang sesuai.' },
     { id: 'draf', q: 'Jendela formulir tertutup sebelum disimpan. Apakah isiannya hilang?', a: 'Bila ada isian yang belum disimpan, aplikasi menanyakan dulu sebelum menutup jendela. Isian yang sudah disimpan selalu tampil di "Data tersimpan".' },
-    { id: 'belum-diuji', q: 'Trafo kami belum pernah diuji kandungan PCBs-nya. Apa yang diisi?', a: 'Kosongkan bagian hasil uji. Trafo tersebut dihitung "Belum diuji" dan perlu diberi rencana uji (bulan dan tahun) di menu Roadmap. Setelah diuji, ubah datanya dan isi jenis uji, metode, penyedia jasa, serta konsentrasi PCBs (ppm).' },
+    { id: 'belum-diuji', q: 'Trafo kami belum pernah diuji kandungan PCBs-nya. Apa yang diisi?', a: 'Kosongkan bagian hasil uji. Trafo tersebut perlu diberi rencana uji (bulan dan tahun) di menu Roadmap. Setelah diuji, ubah datanya dan isi jenis uji, metode, penyedia jasa, serta konsentrasi PCBs (ppm).' },
   ] },
   { title: 'Template Excel', items: [
     { id: 'unggah-belum-masuk', q: 'Apakah unggahan Excel langsung masuk ke data?', a: 'Ya. Setelah berkas dipilih, sistem membaca dan memeriksanya, lalu menampilkan jumlah baris dan temuannya. Begitu Anda menekan "Simpan ke data", datanya langsung masuk dan tampil di Beranda serta tabel. Setiap unggahan formulir 1.1–1.4 tercatat di menu Riwayat unggahan.', go: { label: 'Lihat riwayat unggahan', path: '/unggah' } },
@@ -197,7 +197,7 @@ export default function CompanyHelp() {
           <Note tone="warn">Jangan memindah, menghapus, menggabungkan, atau mengganti nama kolom template. Sistem mengenali kolom dari judulnya, sehingga template yang diubah ditolak sebagai &ldquo;bukan template resmi&rdquo;.</Note>
         </Section>
 
-        <Section id="roadmap" title={`Roadmap trafo buatan sebelum ${TRAFO_FOCUS_YEAR}`} description="Rencana dan tanggal untuk setiap trafo yang perlu tindakan.">
+        <Section id="roadmap" title={`Roadmap trafo buatan sebelum ${TRAFO_FOCUS_YEAR}`} description="Rencana bulan dan tahun untuk setiap trafo yang perlu tindakan.">
           <div className="grid gap-3 sm:grid-cols-3">
             {[
               ['Belum diuji', 'Trafo masih digunakan tanpa hasil uji: kapan akan diuji kandungan PCBs-nya.'],
@@ -208,8 +208,9 @@ export default function CompanyHelp() {
             ))}
           </div>
           <ol className="list-decimal space-y-1 pl-5">
-            <li>Buka menu <Link href={href('/roadmap')} className={linkClass}>Roadmap</Link>. Pilih kelompok trafo (masih digunakan atau tidak digunakan), lalu gunakan filter (Tanpa rencana, Lewat waktu, dan lainnya) untuk menemukan trafo yang perlu diatur.</li>
-            <li>Centang satu atau beberapa trafo, pilih bulan dan tahun rencana, lalu simpan. Rencana baru menggantikan rencana yang belum selesai.</li>
+            <li>Buka menu <Link href={href('/roadmap')} className={linkClass}>Roadmap</Link>. Ada dua tabel: trafo yang masih digunakan dan trafo yang tidak digunakan. Trafo yang belum punya rencana ada di paling atas.</li>
+            <li>Klik <span className="font-semibold">Isi rencana</span> di kanan baris trafo, pilih bulan dan tahun, lalu klik Simpan rencana. Untuk mengubah, klik ikon pensil di samping rencananya.</li>
+            <li>Untuk mengisi banyak trafo sekaligus dengan bulan yang sama, klik <span className="font-semibold">Isi semua yang belum diisi</span> atau <span className="font-semibold">Pilih beberapa trafo</span> di atas tabel.</li>
             <li>Setelah dilaksanakan: untuk uji dan penanganan, isi hasil uji terbarunya di formulir (status mengikuti hasil uji terakhir); untuk pengelolaan, klik <span className="font-semibold">Tandai selesai</span>.</li>
           </ol>
           <Note tone="warn">Rencana yang lewat tanggal tanpa hasil membuat status kembali merah. Majukan atau mundurkan tanggalnya sebelum terlewat bila jadwal berubah.</Note>
