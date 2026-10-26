@@ -49,7 +49,7 @@ export const TEST_SCENARIOS: TestScenario[] = [
   },
   {
     idSimpel: 'UJI-C', email: 'uji-c@pb3.com', name: 'ZZ Uji C - Tidak memiliki PCBs',
-    purpose: 'Tidak memiliki peralatan: memilih "tidak memiliki" dan mengunggah surat pernyataan untuk diverifikasi admin.',
+    purpose: 'Tidak memiliki trafo: menjawab "Tidak memiliki trafo" dan mengunggah surat pernyataan PDF untuk diverifikasi admin.',
     seed: {},
   },
   {

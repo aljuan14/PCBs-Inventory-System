@@ -110,7 +110,7 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
 
   return (
     <div className="space-y-4">
-      <InventoryUpload companyId={companyId} category={category} onManual={() => setEditing({ id: newId(), values: {} })} manualFull={entries.length >= MAX_FORM_ROWS} />
+      <InventoryUpload companyId={companyId} category={category} onSent={() => { setSentKey((value) => value + 1); onSaved(); }} onManual={() => setEditing({ id: newId(), values: {} })} manualFull={entries.length >= MAX_FORM_ROWS} />
 
       {isTrafo(category) && noTrafoBefore1997 && (
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"><Info className="mt-0.5 h-4 w-4 shrink-0" /> Menurut pernyataannya, perusahaan ini tidak memiliki trafo buatan sebelum {TRAFO_FOCUS_YEAR}. Ubah pernyataan dulu bila ternyata ada.</p>

@@ -24,7 +24,7 @@ export type CompanyStatement = {
 
 const BUCKET = 'surat-pernyataan';
 const MAX_LETTER_BYTES = 2 * 1024 * 1024;
-const LETTER_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const LETTER_TYPES = ['application/pdf'];
 const fmt = (value: number) => value.toLocaleString('id-ID');
 const fmtDate = (value: string) => new Date(value.length === 10 ? `${value}T00:00:00` : value).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 const inputClass = 'min-w-0 flex-1 rounded-lg px-3 py-2 text-sm outline-none';
@@ -40,9 +40,10 @@ type Loaded = { key: string; counts: PcbStatusCounts; statement: CompanyStatemen
 /**
  * What the company owns. With inventory data the data says it, and only
  * the transformers from 1997 on that it does not list one by one may be added.
- * Without data the company says it owns equipment (data to follow) or none,
- * the latter with its own signed letter, which the admin verifies. Every save
- * adds a statement row (company_statements, migration 20261013000012).
+ * Without data the company first answers whether it owns transformers: yes
+ * (data to follow), or no, which needs no inventory, only its own signed
+ * letter as a PDF that the admin verifies. Every save adds a statement row
+ * (company_statements, migration 20261013000012).
  */
 export default function CompanyStatementCard({ supabase, companyId, reloadKey = 0, onStatement, onSaved }: {
   supabase: SupabaseClient;
@@ -111,14 +112,13 @@ export default function CompanyStatementCard({ supabase, companyId, reloadKey = 
   const saveOwns = () => save({ punya_trafo_sebelum_1997: false, punya_trafo_1997_keatas: false, tidak_memiliki_peralatan: false });
 
   const saveNone = async () => {
-    if (!file) return setError('Pilih berkas surat pernyataan (PDF, JPG, atau PNG).');
-    if (!LETTER_TYPES.includes(file.type)) return setError('Surat pernyataan harus PDF, JPG, atau PNG.');
+    if (!file) return setError('Pilih berkas surat pernyataan (PDF).');
+    if (!LETTER_TYPES.includes(file.type)) return setError('Surat pernyataan harus berupa PDF.');
     if (file.size > MAX_LETTER_BYTES) return setError('Ukuran surat pernyataan maksimal 2 MB.');
     if (!letterDate) return setError('Isi tanggal surat.');
     setSaving(true);
     setError(null);
-    const extension = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : 'jpg';
-    const path = `${companyId}/${crypto.randomUUID()}.${extension}`;
+    const path = `${companyId}/${crypto.randomUUID()}.pdf`;
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type });
     if (uploadError) {
       setSaving(false);
@@ -179,7 +179,7 @@ export default function CompanyStatementCard({ supabase, companyId, reloadKey = 
             </div>
           </dl>
           {statement && declaresNone(statement) && (
-            <p className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Pernyataan sebelumnya menyebut tidak memiliki peralatan, tetapi datanya ada. Periksa datanya.</p>
+            <p className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Pernyataan sebelumnya menyebut tidak memiliki trafo, tetapi datanya ada. Periksa datanya.</p>
           )}
           <div className="mt-4 rounded-xl border border-slate-200">
             <button type="button" onClick={() => { setExtraOpen((value) => !value); setCount(statement?.jumlah_trafo_1997_keatas?.toString() ?? ''); setTonnage(statement?.tonase_trafo_1997_keatas_ton?.toString() ?? ''); }} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
@@ -204,9 +204,9 @@ export default function CompanyStatementCard({ supabase, companyId, reloadKey = 
         </>
       ) : (
         <>
-          {header('Pernyataan perusahaan', statement ? `Pernyataan terakhir: ${fmtDate(statement.created_at)}.` : 'Belum ada data peralatan. Nyatakan dulu apakah perusahaan memiliki trafo, kapasitor, atau minyak dielektrik.')}
+          {header('Apakah perusahaan memiliki trafo?', statement ? `Jawaban terakhir: ${fmtDate(statement.created_at)}.` : 'Belum ada data peralatan. Jawab dulu pertanyaan ini sebelum mengisi formulir.')}
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {([[true, 'Memiliki peralatan', 'Trafo, kapasitor, atau minyak dielektrik. Datanya diisi di formulir di bawah.'], [false, 'Tidak memiliki peralatan', 'Tidak memiliki trafo, kapasitor, maupun minyak dielektrik yang dimaksud Permen LHK P.29/2020. Wajib surat pernyataan.']] as const).map(([value, title, detail]) => (
+            {([[true, 'Ya, memiliki trafo', 'Datanya diisi di formulir 1.1–1.2, ditambah kapasitor dan minyak dielektrik di formulir 1.3–1.4 bila ada.'], [false, 'Tidak memiliki trafo', 'Tidak perlu melakukan inventarisasi. Cukup unggah surat pernyataan (PDF).']] as const).map(([value, title, detail]) => (
               <label key={title} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${choice === value ? 'border-emerald-500 bg-emerald-50/60' : 'border-slate-200 hover:bg-slate-50'}`}>
                 <input type="radio" name={`owns-${companyId}`} checked={choice === value} onChange={() => setOwns(value)} className="mt-0.5 accent-emerald-700" />
                 <span><span className="block text-sm font-semibold text-slate-900">{title}</span><span className="text-xs text-slate-500">{detail}</span></span>
@@ -217,13 +217,17 @@ export default function CompanyStatementCard({ supabase, companyId, reloadKey = 
           {choice === true && (
             <div className="mt-4 flex flex-wrap items-center gap-3">
               {statement && !declaresNone(statement) && owns === null
-                ? <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Sudah dinyatakan. Lanjutkan dengan mengisi formulir di bawah.</p>
-                : <button type="button" onClick={saveOwns} disabled={saving} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Simpan pernyataan</button>}
+                ? <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Sudah dijawab. Lanjutkan dengan mengisi formulir.</p>
+                : <button type="button" onClick={saveOwns} disabled={saving} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Simpan jawaban</button>}
             </div>
           )}
 
           {choice === false && (
             <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4">
+              <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <span><span className="font-semibold">Tidak perlu melakukan inventarisasi karena perusahaan tidak memiliki trafo.</span> Sebagai buktinya, unggah surat pernyataan tidak memiliki trafo di bawah ini.</span>
+              </p>
               {letter && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
                   <FileSignature className="h-4 w-4 shrink-0 text-slate-400" />
@@ -243,12 +247,12 @@ export default function CompanyStatementCard({ supabase, companyId, reloadKey = 
                   )}
                 </div>
               )}
-              <p className="text-xs text-slate-600">{letter ? 'Unggah surat baru untuk mengganti.' : 'Unggah surat pernyataan bertanda tangan dan bermeterai, dengan kop dan format perusahaan sendiri.'} PDF, JPG, atau PNG, maksimal 2 MB.</p>
+              <p className="text-xs text-slate-600">{letter ? 'Unggah surat baru untuk mengganti.' : 'Surat pernyataan bertanda tangan dan bermeterai, dengan kop dan format perusahaan sendiri.'} PDF, maksimal 2 MB.</p>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600 hover:border-emerald-500">
                   <Upload className="h-4 w-4 shrink-0 text-slate-400" />
-                  <span className="truncate">{file ? file.name : 'Pilih berkas surat…'}</span>
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+                  <span className="truncate">{file ? file.name : 'Pilih berkas surat (PDF)…'}</span>
+                  <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
                 </label>
                 <label className="text-xs font-medium text-slate-600">Tanggal surat
                   <input type="date" value={letterDate} onChange={(event) => setLetterDate(event.target.value)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-emerald-600" />

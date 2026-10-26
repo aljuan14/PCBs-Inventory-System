@@ -13,9 +13,9 @@ const GROUPS = [
   {
     title: 'Inventarisasi',
     description: 'Formulir 1.1–1.4: peralatan yang dimiliki perusahaan.',
-    after: 'diperiksa KLH dulu',
+    after: 'langsung tersimpan',
     files: TEMPLATE_FILES.filter((entry) => isInventory(entry.form)),
-    tone: { icon: 'bg-emerald-50 text-emerald-700', code: 'bg-emerald-50 text-emerald-800', download: 'border-emerald-200 bg-white text-emerald-800 hover:border-emerald-600 hover:bg-emerald-700 hover:text-white', badge: 'border-amber-200 bg-amber-50 text-amber-900' },
+    tone: { icon: 'bg-emerald-50 text-emerald-700', code: 'bg-emerald-50 text-emerald-800', download: 'border-emerald-200 bg-white text-emerald-800 hover:border-emerald-600 hover:bg-emerald-700 hover:text-white', badge: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
   },
   {
     title: 'Pengelolaan',

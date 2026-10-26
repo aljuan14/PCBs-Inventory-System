@@ -1,7 +1,8 @@
+import { randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseSheet, readWorkbook } from '@/lib/excel';
 import { buildSuggestedMapping, detectSheet } from '@/lib/import-profiles';
-import { checkMappings, findRowsInDatabase, transformRows, type LoadedSheet, type TransformedRow } from '@/lib/import-transform';
+import { buildCheckReport, checkMappings, findRowsInDatabase, insertBatchRows, transformRows, type LoadedSheet, type TransformedRow } from '@/lib/import-transform';
 import { formSpec } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import type { SampleRow, UploadMode, UploadSummary } from '@/lib/company-upload-shared';
@@ -11,8 +12,9 @@ import { downloadWorkbook } from '@/lib/upload-store';
  * A company's Excel upload of forms 1.1-1.4 (unggahan_perusahaan, migration
  * 20261014000006): only the official template of that form, its columns
  * known from their titles (no mapping by hand), checked by transformRows as
- * an admin upload is. Read here when the company checks and sends it, and
- * again when the admin accepts it.
+ * an admin upload is. Read here when the company checks it, and again when
+ * it is saved (importCompanyUpload): straight away since 2026-10-26, without
+ * the admin's acceptance first.
  */
 
 export { COMPANY_UPLOAD_FOLDER, MAX_COMPANY_UPLOAD_BYTES, type SampleRow, type UploadMode, type UploadSummary } from '@/lib/company-upload-shared';
@@ -88,4 +90,47 @@ export async function readCompanyUpload(supabase: SupabaseClient, input: { compa
     sample: sampleOf(input.category, transformed.rows),
   };
   return { summary, sheet, mappings, transformed, existing };
+}
+
+/**
+ * Reads the file again and imports it like an admin upload, as one import
+ * batch; "ganti" then removes every other row of the company for that form.
+ * Runs with the caller's rights: a company only reaches its own rows.
+ */
+export async function importCompanyUpload(supabase: SupabaseClient, input: { companyId: string; category: InventoryCategory; path: string; fileName: string; mode: UploadMode }) {
+  const { summary, sheet, mappings, transformed, existing } = await readCompanyUpload(supabase, input);
+  const rows = input.mode === 'tambah' ? transformed.rows.filter((row) => !existing.has(row)) : transformed.rows;
+  if (rows.length === 0) throw new UploadCheckError(`Semua ${summary.rows} baris sudah ada di data perusahaan; tidak ada yang ditambahkan.`);
+
+  const batch = { id: randomUUID(), company_id: input.companyId };
+  const { error: batchError } = await supabase.from('import_batches').insert({
+    id: batch.id, company_id: batch.company_id, jenis_data: input.category, nama_file_asli: input.fileName, file_storage_path: input.path,
+    status: 'pending_mapping', sheet_name: summary.sheetName, profile: 'template_klhk', headers: sheet.headers,
+    total_rows: sheet.allRows.length, data_rows: summary.rows, suggested_mapping: mappings,
+  });
+  if (batchError) throw new Error(`Gagal mencatat unggahan: ${batchError.message}`);
+
+  const failure = await insertBatchRows(supabase, input.category, rows, batch);
+  if (failure) {
+    await supabase.from('import_batches').delete().eq('id', batch.id);
+    throw new Error(`Gagal menyimpan data (Excel baris ${failure.rowNumber} dst.): ${failure.message}`);
+  }
+
+  // "ganti": the company's other rows of this form go only once the new ones are in.
+  let replacedRows = 0;
+  if (input.mode === 'ganti') {
+    const { count, error: deleteError } = await supabase.from(input.category).delete({ count: 'exact' }).eq('company_id', batch.company_id).or(`import_batch_id.is.null,import_batch_id.neq.${batch.id}`);
+    if (deleteError) {
+      await supabase.from(input.category).delete().eq('import_batch_id', batch.id);
+      await supabase.from('import_batches').delete().eq('id', batch.id);
+      throw new Error(`Gagal mengganti data lama: ${deleteError.message}. Tidak ada data yang berubah.`);
+    }
+    replacedRows = count ?? 0;
+    await supabase.from('import_batches').update({ status: 'replaced', replaced_by: batch.id, replaced_at: new Date().toISOString() })
+      .eq('company_id', batch.company_id).eq('jenis_data', input.category).eq('status', 'imported').neq('id', batch.id);
+  }
+
+  const report = buildCheckReport(transformed, rows.length, mappings);
+  await supabase.from('import_batches').update({ status: 'imported', laporan_pemeriksaan: report }).eq('id', batch.id);
+  return { summary, batchId: batch.id, imported: rows.length, skipped: transformed.rows.length - rows.length, replacedRows };
 }

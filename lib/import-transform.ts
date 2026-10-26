@@ -419,7 +419,7 @@ export function transformRows(
     }
     if (isExampleRow(rawRow, mappings)) {
       skippedEmpty++;
-      issues.add('skipped:example', 'info', 'Baris contoh dari template (CONTOH), dilewati', rowNumber);
+      issues.add('skipped:example', 'info', 'Baris contoh dari template, dilewati', rowNumber);
       return;
     }
     // Leftovers pasted below the form (see recordMask) are not data either, but worth a look.

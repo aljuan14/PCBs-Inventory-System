@@ -31,13 +31,13 @@ function UploadHistory() {
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div className="border-b border-slate-200 px-5 py-4">
         <h2 className="text-sm font-semibold text-slate-900">Unggahan formulir 1.1–1.4</h2>
-        <p className="text-xs text-slate-500">Terbaru di atas. Data baru masuk setelah unggahannya diterima KLH.</p>
+        <p className="text-xs text-slate-500">Terbaru di atas. Data langsung tersimpan saat diunggah.</p>
       </div>
       {list === null ? <p className="p-5 text-sm text-slate-500">Memuat…</p> : list.length === 0 ? (
         <div className="flex flex-col items-center px-5 py-12 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><History className="h-7 w-7" /></span>
           <p className="mt-4 text-sm font-semibold text-slate-900">Belum ada unggahan</p>
-          <p className="mt-1 max-w-md text-xs text-slate-500">Unggahan template Excel formulir 1.1–1.4 dan hasil pemeriksaan KLH-nya akan tercatat di sini.</p>
+          <p className="mt-1 max-w-md text-xs text-slate-500">Unggahan template Excel formulir 1.1–1.4 akan tercatat di sini.</p>
           <Link href={href('/template')} className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><FileSpreadsheet className="h-4 w-4" /> Lihat template Excel</Link>
         </div>
       ) : (
@@ -76,9 +76,9 @@ export default function CompanyUploads() {
   const { href } = useCompanyPortal();
   return (
     <>
-      <PortalHeader title="Riwayat unggahan" description="Unggahan Excel formulir 1.1–1.4 yang dikirim ke KLH: menunggu pemeriksaan, diterima, atau ditolak beserta alasannya." />
+      <PortalHeader title="Riwayat unggahan" description="Unggahan Excel formulir 1.1–1.4: kapan diunggah, berapa baris, dan apakah menambahkan atau mengganti data." />
       <UploadHistory />
-      <p className="flex items-start gap-2 text-xs text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Unggahan formulir 2–5 langsung tersimpan setelah lolos pemeriksaan otomatis, jadi tidak tercatat di sini. Butuh template? Unduh di menu <Link href={href('/template')} className="font-semibold text-emerald-700 hover:underline">Template Excel</Link>.</span></p>
+      <p className="flex items-start gap-2 text-xs text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Unggahan formulir 2–5 juga langsung tersimpan, tetapi tidak tercatat di sini. Butuh template? Unduh di menu <Link href={href('/template')} className="font-semibold text-emerald-700 hover:underline">Template Excel</Link>.</span></p>
     </>
   );
 }

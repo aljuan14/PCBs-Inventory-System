@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CalendarClock, ChevronRight, ListChecks, Loader2 } from 'lucide-react';
-import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, formatPlanDate, hasInventory, manageOpenOf, nationalColor, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
+import { EMPTY_STATUS, STATUS_COLORS, evaluateStatus, fetchAllPcbStatus, formatPlanMonth, hasInventory, manageOpenOf, nationalColor, openActions, type NationalColor, type PcbStatusCounts } from '@/lib/company-pcb-status';
 
 type Company = { id: string; name: string };
 type Row = { id: string; name: string; counts: PcbStatusCounts; color: NationalColor };
@@ -142,20 +142,20 @@ export function RoadmapSchedule({ supabase, companies, onPick }: { supabase: Sup
         </div>
         {rows && (
           <dl className="grid grid-cols-3 gap-3">
-            <div><dt className="text-[11px] font-medium text-slate-500">Trafo lewat tanggal rencana</dt><dd className={`text-xl font-semibold tabular-nums ${totals.late ? 'text-rose-700' : 'text-slate-900'}`}>{fmt(totals.late)}</dd></div>
+            <div><dt className="text-[11px] font-medium text-slate-500">Trafo lewat waktu rencana</dt><dd className={`text-xl font-semibold tabular-nums ${totals.late ? 'text-rose-700' : 'text-slate-900'}`}>{fmt(totals.late)}</dd></div>
             <div><dt className="text-[11px] font-medium text-slate-500">Perusahaan dengan rencana berjalan</dt><dd className="text-xl font-semibold tabular-nums text-slate-900">{fmt(totals.planned)}</dd></div>
             <div><dt className="text-[11px] font-medium text-slate-500">Trafo belum punya rencana</dt><dd className={`text-xl font-semibold tabular-nums ${totals.noPlan ? 'text-rose-700' : 'text-slate-900'}`}>{fmt(totals.noPlan)}</dd></div>
           </dl>
         )}
-        <Chips<ScheduleFilter> options={[['late', 'Lewat tanggal', lists.late.length], ['soon', '30 hari ke depan', lists.soon.length], ['later', '90 hari ke depan', lists.later.length], ['noplan', 'Belum punya rencana', lists.noplan.length]]} value={filter} onChange={(key) => { setPicked(key); setOpen(false); }} />
+        <Chips<ScheduleFilter> options={[['late', 'Lewat waktu', lists.late.length], ['soon', '30 hari ke depan', lists.soon.length], ['later', '90 hari ke depan', lists.later.length], ['noplan', 'Belum punya rencana', lists.noplan.length]]} value={filter} onChange={(key) => { setPicked(key); setOpen(false); }} />
       </div>
       {rows === null ? <p className="flex items-center gap-2 p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>
         : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'late' ? 'Tidak ada rencana yang lewat tanggal.' : filter === 'noplan' ? 'Semua trafo yang perlu tindakan sudah punya rencana.' : 'Tidak ada rencana pada rentang ini.'}</p>
           : visible.map((row) => {
             const s = row.counts;
-            const detail = filter === 'late' ? `${fmt(late(s))} trafo lewat tanggal rencana`
+            const detail = filter === 'late' ? `${fmt(late(s))} trafo lewat waktu rencana`
               : filter === 'noplan' ? `${fmt(noPlan(s))} trafo belum punya rencana (${fmt(s.belum_uji - s.belum_uji_terjadwal - s.belum_uji_lewat)} uji, ${fmt(s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal - s.tinggi_lewat)} penanganan, ${fmt(manageOpenOf(s))} pengelolaan)`
-                : `Rencana terdekat ${formatPlanDate(s.rencana_berikut!)} (${fmt(daysTo(s.rencana_berikut)!)} hari lagi)`;
+                : `Rencana terdekat ${formatPlanMonth(s.rencana_berikut!)}`;
             return (
               <button key={row.id} type="button" onClick={() => onPick(row.id)} className="flex w-full items-center gap-3 border-b border-slate-100 px-5 py-2.5 text-left last:border-0 hover:bg-slate-50">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${styleOf(row.color).dot}`} />

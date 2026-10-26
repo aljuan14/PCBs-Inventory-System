@@ -91,7 +91,7 @@ export default function LockedReport() {
           </div>
         </div>
         <fieldset disabled className="mt-4 grid gap-2 opacity-60 sm:grid-cols-2">
-          {['Memiliki peralatan', 'Tidak memiliki peralatan (dengan surat pernyataan)'].map((label) => (
+          {['Ya, memiliki trafo', 'Tidak memiliki trafo (dengan surat pernyataan)'].map((label) => (
             <label key={label} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
               <input type="radio" name="locked-owns" className="mt-0.5" />
               <span className="text-sm font-semibold text-slate-700">{label}</span>

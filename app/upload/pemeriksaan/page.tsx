@@ -80,7 +80,7 @@ function UploadCard({ upload, onAnswered }: { upload: Upload; onAnswered: () => 
       <button type="button" onClick={() => setOpen(!open)} className="flex w-full flex-wrap items-center gap-3 px-5 py-4 text-left">
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-slate-900">{upload.companies?.nama_perusahaan ?? 'Perusahaan'} · Formulir {spec.code}</span>
-          <span className="block text-xs text-slate-500">{upload.nama_file} · {upload.mode === 'ganti' ? 'mengganti semua data' : 'ditambahkan'}{summary ? ` · ${fmt(summary.rows)} baris` : ''} · dikirim {fmtDate(upload.created_at)}</span>
+          <span className="block text-xs text-slate-500">{upload.nama_file} · {upload.mode === 'ganti' ? 'mengganti semua data' : 'ditambahkan'}{summary ? ` · ${fmt(summary.rows)} baris` : ''} · diunggah {fmtDate(upload.created_at)}</span>
         </span>
         <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${status.className}`}>{upload.status === 'menunggu' ? 'Menunggu' : status.label}</span>
         <ChevronDown className={`h-4 w-4 text-slate-400 transition ${open ? 'rotate-180' : ''}`} />
@@ -90,7 +90,7 @@ function UploadCard({ upload, onAnswered }: { upload: Upload; onAnswered: () => 
           {summary && (
             <>
               <p className="text-xs text-slate-700">
-                Saat dikirim: <span className="font-semibold">{fmt(summary.rows)} baris</span> dari sheet &quot;{summary.sheetName}&quot;
+                Saat diunggah: <span className="font-semibold">{fmt(summary.rows)} baris</span> dari sheet &quot;{summary.sheetName}&quot;
                 {upload.mode === 'tambah' && summary.alreadyStored > 0 && `, ${fmt(summary.alreadyStored)} sudah ada dan akan dilewati`}
                 {upload.mode === 'ganti' && `, menggantikan ${fmt(summary.currentRows)} data lama perusahaan`}.
                 {' '}Berkas dibaca ulang saat diterima.
@@ -150,22 +150,23 @@ export default function CompanyUploadsPage() {
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Data masuk</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Unggahan perusahaan</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-500">Template Excel formulir 1.1–1.4 yang dikirim perusahaan dari halaman laporannya. Data baru masuk ke inventaris setelah diterima di sini; penolakan disertai alasan untuk perusahaan.</p>
+        <p className="mt-2 max-w-3xl text-sm text-slate-500">Template Excel formulir 1.1–1.4 yang diunggah perusahaan dari halaman laporannya. Sejak 26 Oktober 2026 datanya langsung masuk ke inventaris; halaman ini mencatat setiap unggahan beserta temuan pemeriksaan otomatisnya.</p>
       </header>
       {uploads?.error && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">Gagal memuat: {uploads.error}. Pastikan migrasi 20261014000006_company_uploads.sql sudah dijalankan.</p>}
       {list === null ? <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p> : (
         <>
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-slate-800">Menunggu pemeriksaan ({fmt(waiting.length)})</h2>
-            {waiting.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Tidak ada unggahan yang menunggu.</p>
-              : <ul className="space-y-3">{waiting.map((upload) => <UploadCard key={upload.id} upload={upload} onAnswered={() => setReload((value) => value + 1)} />)}</ul>}
-          </section>
-          {answered.length > 0 && (
+          {/* Only uploads sent before they were saved straight away can still wait. */}
+          {waiting.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-slate-800">Sudah diperiksa</h2>
-              <ul className="space-y-3">{answered.map((upload) => <UploadCard key={upload.id} upload={upload} onAnswered={() => setReload((value) => value + 1)} />)}</ul>
+              <h2 className="text-sm font-semibold text-slate-800">Unggahan lama yang masih menunggu ({fmt(waiting.length)})</h2>
+              <ul className="space-y-3">{waiting.map((upload) => <UploadCard key={upload.id} upload={upload} onAnswered={() => setReload((value) => value + 1)} />)}</ul>
             </section>
           )}
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-800">Unggahan masuk</h2>
+            {answered.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Belum ada unggahan dari perusahaan.</p>
+              : <ul className="space-y-3">{answered.map((upload) => <UploadCard key={upload.id} upload={upload} onAnswered={() => setReload((value) => value + 1)} />)}</ul>}
+          </section>
         </>
       )}
     </div>

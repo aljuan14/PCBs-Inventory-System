@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CalendarPlus, Check, CheckCircle2, Loader2, Trash2, X } from 'lucide-react';
-import { formatPlanDate } from '@/lib/company-pcb-status';
+import { formatPlanDate, formatPlanMonth, monthEnd } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 import { useReadOnly } from '@/components/useAccess';
 import { confirmDialog } from '@/components/Dialog';
@@ -23,11 +23,16 @@ const PAGE = 100;
 const BATCH = 1000;
 const today = () => new Date().toISOString().slice(0, 10);
 const fmt = (value: number) => value.toLocaleString('id-ID');
-const CATEGORY_LABEL: Record<Category, string> = { transformator_digunakan: 'Digunakan', transformator_tidak_digunakan: 'Tidak digunakan' };
+// The roadmap in two parts: transformers still in use (when tested, when retrofilled) and those no longer in use (when managed).
 const FILTERS = [
-  ['all', 'Semua'], ['uji', 'Belum diuji'], ['penanganan', '≥ 50 ppm'], ['pengelolaan', 'Tidak digunakan'], ['noplan', 'Tanpa rencana'], ['late', 'Lewat tanggal'],
+  ['all', 'Semua'], ['uji', 'Belum diuji'], ['penanganan', '≥ 50 ppm'], ['noplan', 'Tanpa rencana'], ['late', 'Lewat waktu'],
 ] as const;
 type Filter = (typeof FILTERS)[number][0];
+// Testing and handling only concern transformers in use.
+const filtersOf = (group: Category) => FILTERS.filter(([key]) => group === 'transformator_digunakan' || (key !== 'uji' && key !== 'penanganan'));
+const MONTHS = Array.from({ length: 12 }, (_, index) => new Date(2000, index, 1).toLocaleDateString('id-ID', { month: 'long' }));
+const thisYear = new Date().getFullYear();
+const YEARS = Array.from({ length: 11 }, (_, index) => thisYear + index);
 
 const inputClass = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600';
 
@@ -36,19 +41,20 @@ function planState(row: FocusRow) {
   // A handling is done by its after-test under 50 ppm (form 2), when the transformer leaves this list; one marked done by hand is not.
   if (row.rencana_selesai && row.kebutuhan === 'penanganan') return { label: 'Ditandai selesai, masih ≥ 50 ppm', className: 'border-amber-200 bg-amber-50 text-amber-900' };
   if (row.rencana_selesai) return { label: `Selesai ${formatPlanDate(row.rencana_selesai)}`, className: 'border-emerald-200 bg-emerald-50 text-emerald-800' };
-  if (row.rencana_tanggal < today()) return { label: `Lewat: ${formatPlanDate(row.rencana_tanggal)}`, className: 'border-rose-200 bg-rose-50 text-rose-800' };
-  return { label: formatPlanDate(row.rencana_tanggal), className: 'border-amber-200 bg-amber-50 text-amber-900' };
+  if (row.rencana_tanggal < today()) return { label: `Lewat: ${formatPlanMonth(row.rencana_tanggal)}`, className: 'border-rose-200 bg-rose-50 text-rose-800' };
+  return { label: formatPlanMonth(row.rencana_tanggal), className: 'border-amber-200 bg-amber-50 text-amber-900' };
 }
 
 const needLabel = (row: FocusRow) =>
   row.kebutuhan === 'uji' ? 'Uji PCBs'
-    : row.kebutuhan === 'pengelolaan' ? `Pengelolaan${row.ppm !== null ? ` (${row.ppm.toLocaleString('id-ID')} ppm)` : ' (belum diuji)'}`
+    // A transformer no longer in use is managed whatever its test says, so its ppm is not shown.
+    : row.kebutuhan === 'pengelolaan' ? 'Pengelolaan'
       : `Retrofilling / penggantian (${row.ppm?.toLocaleString('id-ID')} ppm)`;
 
-/** The transformers of a filter, as the database function gives them. */
-function focusQuery(supabase: SupabaseClient, companyId: string, filter: Filter, columns = '*', options?: { count: 'exact'; head: true }) {
-  let request = supabase.rpc('company_focus_transformers', { p_company_id: companyId }, options).select(columns).not('kebutuhan', 'is', null);
-  if (filter === 'uji' || filter === 'penanganan' || filter === 'pengelolaan') request = request.eq('kebutuhan', filter);
+/** The transformers of a group and filter, as the database function gives them. */
+function focusQuery(supabase: SupabaseClient, companyId: string, group: Category, filter: Filter, columns = '*', options?: { count: 'exact'; head: true }) {
+  let request = supabase.rpc('company_focus_transformers', { p_company_id: companyId }, options).select(columns).not('kebutuhan', 'is', null).eq('kategori', group);
+  if (filter === 'uji' || filter === 'penanganan') request = request.eq('kebutuhan', filter);
   if (filter === 'noplan') request = request.is('rencana_tanggal', null);
   if (filter === 'late') request = request.lt('rencana_tanggal', today()).is('rencana_selesai', null);
   return request;
@@ -58,11 +64,26 @@ const pickedOf = (row: FocusRow): Picked => ({ kategori: row.kategori, kebutuhan
 
 /**
  * A company's roadmap for its transformers before 1997 (or of unknown year),
- * in one table: tick the ones to plan, give them a date; mark a plan done or
+ * one above the other: those still in use, then those no longer in use.
+ * On the Roadmap page and in the company's report.
+ */
+export default function RoadmapPanels(props: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void }) {
+  return (
+    <div className="space-y-6">
+      <RoadmapGroup {...props} group="transformator_digunakan" />
+      <RoadmapGroup {...props} group="transformator_tidak_digunakan" />
+    </div>
+  );
+}
+
+/**
+ * One group's table: tick the ones to plan, give
+ * them a month and year (kept as the month's last day, so a plan is late
+ * only once its month is over); mark a plan done or
  * remove it on its row or for the ticked ones. A new date replaces the open
  * plan a transformer had. On the Roadmap page and in the company's report.
  */
-export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void }) {
+function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void; group: Category }) {
   // A pemantau account sees the plans and the transformers, without the means to change them.
   const readOnly = useReadOnly();
   const [filter, setFilter] = useState<Filter>('all');
@@ -70,7 +91,9 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
   const [rows, setRows] = useState<{ key: string; list: FocusRow[]; more: boolean } | null>(null);
   const [counts, setCounts] = useState<{ key: string; values: Partial<Record<Filter, number>> } | null>(null);
   const [picked, setPicked] = useState<Map<string, Picked>>(new Map());
-  const [date, setDate] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
+  const date = month && year ? monthEnd(Number(year), Number(month)) : '';
   // An optional note going with the date, e.g. why it is set so.
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -80,25 +103,26 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
 
   useEffect(() => {
     let active = true;
-    focusQuery(supabase, companyId, filter).order('kebutuhan', { ascending: false }).order('tahun_pembuatan', { nullsFirst: true }).range(0, limit)
+    focusQuery(supabase, companyId, group, filter).order('kebutuhan', { ascending: false }).order('tahun_pembuatan', { nullsFirst: true }).range(0, limit)
       .then(({ data }) => {
         if (!active) return;
         const list = (data ?? []) as unknown as FocusRow[];
         setRows({ key: requestKey, list: list.slice(0, limit), more: list.length > limit });
       });
     return () => { active = false; };
-  }, [supabase, companyId, filter, limit, requestKey]);
+  }, [supabase, companyId, group, filter, limit, requestKey]);
 
   // The number behind each filter.
   useEffect(() => {
     let active = true;
-    Promise.all(FILTERS.map(async ([key]) => {
-      const { count } = await focusQuery(supabase, companyId, key, 'id', { count: 'exact', head: true });
+    Promise.all(filtersOf(group).map(async ([key]) => {
+      const { count } = await focusQuery(supabase, companyId, group, key, 'id', { count: 'exact', head: true });
       return [key, count ?? 0] as const;
     })).then((entries) => { if (active) setCounts({ key: countKey, values: Object.fromEntries(entries) }); });
     return () => { active = false; };
-  }, [supabase, companyId, countKey]);
+  }, [supabase, companyId, group, countKey]);
 
+  const inUse = group === 'transformator_digunakan';
   const list = rows?.key === requestKey ? rows.list : null;
   const count = (key: Filter) => (counts?.key === countKey ? counts.values[key] : undefined);
   const filterTotal = count(filter) ?? 0;
@@ -116,7 +140,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
     setBusy('pick');
     const next = new Map<string, Picked>();
     for (let from = 0; ; from += BATCH) {
-      const { data, error: loadError } = await focusQuery(supabase, companyId, filter).range(from, from + BATCH - 1);
+      const { data, error: loadError } = await focusQuery(supabase, companyId, group, filter).range(from, from + BATCH - 1);
       if (loadError) { setBusy(null); return setError(loadError.message); }
       for (const row of (data ?? []) as unknown as FocusRow[]) next.set(row.id, pickedOf(row));
       if (!data || data.length < BATCH) break;
@@ -132,7 +156,8 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
     setBusy(null);
     if (failed) return setError(failed.message);
     setPicked(new Map());
-    setDate('');
+    setMonth('');
+    setYear('');
     setNote('');
     onChange();
   };
@@ -143,7 +168,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
   // only a management (handing a transformer no longer in use over) is marked done by hand.
   const toFinish = withOwnPlan.filter(([, row]) => !row.done && row.kebutuhan === 'pengelolaan');
 
-  // Each ticked transformer gets the date; an open plan it had is replaced, and so is a handling
+  // Each ticked transformer gets the month; an open plan it had is replaced, and so is a handling
   // marked done while the transformer is still 50 ppm or more (it would win over the new date).
   const setPlan = () => run('plan', async () => {
     const ids = chosen.map(([id]) => id);
@@ -160,7 +185,7 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
   });
   const finishPlans = (planIds: string[]) => run('finish', async () => [await supabase.from('equipment_plans').update({ selesai_at: today() }).in('id', planIds)]);
   const removePlans = async (planIds: string[]) => {
-    if (!(await confirmDialog({ title: planIds.length === 1 ? 'Hapus rencana trafo ini?' : `Hapus rencana ${fmt(planIds.length)} trafo?`, message: 'Trafonya kembali tanpa rencana dan status perusahaan bisa menjadi merah sampai diberi tanggal lagi.', tone: 'danger', confirmLabel: 'Hapus rencana' }))) return;
+    if (!(await confirmDialog({ title: planIds.length === 1 ? 'Hapus rencana trafo ini?' : `Hapus rencana ${fmt(planIds.length)} trafo?`, message: 'Trafonya kembali tanpa rencana dan status perusahaan bisa menjadi merah sampai diberi rencana lagi.', tone: 'danger', confirmLabel: 'Hapus rencana' }))) return;
     run('remove', async () => [await supabase.from('equipment_plans').delete().in('id', planIds)]);
   };
 
@@ -168,14 +193,18 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
     <div className="rounded-2xl border border-slate-200 bg-white">
       <div className="space-y-3 border-b border-slate-200 px-5 py-4">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Trafo yang perlu tindakan</h2>
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            {inUse ? 'Trafo masih digunakan' : 'Trafo tidak digunakan'}
+            {count('all') !== undefined && <span className="rounded-full bg-slate-100 px-2 text-xs tabular-nums text-slate-600">{fmt(count('all')!)}</span>}
+          </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun: yang masih digunakan dan belum diuji (kapan diuji), yang masih digunakan ≥ 50 ppm (kapan diretrofilling atau diganti), dan yang sudah tidak digunakan (kapan dikelola).
-            {!readOnly && ' Centang trafonya, lalu tetapkan tanggal rencana.'}
+            Buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun.{' '}
+            {inUse ? 'Kapan diuji (bila belum diuji) dan kapan diretrofilling atau diganti (bila ≥ 50 ppm).' : 'Kapan dikelola, berapa pun hasil ujinya.'}
+            {!readOnly && ' Centang trafonya, lalu tetapkan bulan dan tahun rencananya.'}
           </p>
         </div>
         <div role="group" aria-label="Saring" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
-          {FILTERS.map(([key, label]) => {
+          {filtersOf(group).map(([key, label]) => {
             const value = count(key);
             const alarming = (key === 'noplan' || key === 'late') && value;
             return (
@@ -192,7 +221,19 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
           <div className="space-y-2 rounded-xl bg-emerald-50 p-3">
             <div className="flex flex-wrap items-end gap-3">
               <span className="self-center text-xs font-semibold text-emerald-900">{fmt(picked.size)} trafo dipilih</span>
-              <label className="text-xs font-medium text-slate-600">Tanggal rencana<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`${inputClass} mt-1 block`} /></label>
+              <fieldset className="text-xs font-medium text-slate-600">
+                <legend>Rencana (bulan dan tahun)</legend>
+                <div className="mt-1 flex gap-2">
+                  <select aria-label="Bulan" value={month} onChange={(event) => setMonth(event.target.value)} className={inputClass}>
+                    <option value="">Bulan</option>
+                    {MONTHS.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+                  </select>
+                  <select aria-label="Tahun" value={year} onChange={(event) => setYear(event.target.value)} className={inputClass}>
+                    <option value="">Tahun</option>
+                    {YEARS.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </div>
+              </fieldset>
               <label className="min-w-56 flex-1 text-xs font-medium text-slate-600">Keterangan <span className="font-normal text-slate-400">(opsional)</span>
                 <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={300} placeholder="mis. menunggu jadwal laboratorium, anggaran tahun depan" className={`${inputClass} mt-1 block w-full`} />
               </label>
@@ -210,14 +251,14 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
                 </button>
               )}
             </div>
-            {withOwnPlan.length > 0 && <p className="text-[11px] text-slate-500">Tanggal baru menggantikan rencana yang belum selesai pada trafo yang sudah punya rencana.</p>}
+            {withOwnPlan.length > 0 && <p className="text-[11px] text-slate-500">Rencana baru menggantikan rencana yang belum selesai pada trafo yang sudah punya rencana.</p>}
           </div>
         )}
         {error && <p className="text-xs font-medium text-rose-700">{error}</p>}
       </div>
 
       {list === null ? <p className="flex items-center gap-2 p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>
-        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo sebelum ${TRAFO_FOCUS_YEAR} yang perlu tindakan.` : 'Tidak ada trafo pada pilihan ini.'}</p> : (
+        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo ${inUse ? 'masih digunakan' : 'tidak digunakan'} sebelum ${TRAFO_FOCUS_YEAR} yang perlu tindakan.` : 'Tidak ada trafo pada pilihan ini.'}</p> : (
           <div className="overflow-x-auto">
             {!readOnly && allShownPicked && filterTotal > list.length && picked.size < filterTotal && (
               <p className="border-b border-slate-100 bg-slate-50 px-5 py-2 text-xs text-slate-600">
@@ -225,11 +266,11 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
                 <button type="button" disabled={busy !== null} onClick={pickAll} className="font-semibold text-emerald-700 underline">{busy === 'pick' ? 'Memilih…' : `Pilih semua ${fmt(filterTotal)} trafo pada saringan ini`}</button>
               </p>
             )}
-            <table className="w-full min-w-[760px] text-left text-xs">
+            <table className="w-full min-w-[680px] text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
                   {!readOnly && <th className="w-10 px-3 py-2.5"><input type="checkbox" aria-label="Pilih semua yang tampil" checked={allShownPicked} onChange={toggleShown} className="accent-emerald-700" /></th>}
-                  <th className="px-3 py-2.5">Merek / No. serial</th><th className="px-3 py-2.5">Tahun</th><th className="px-3 py-2.5">Lokasi</th><th className="px-3 py-2.5">Trafo</th><th className="px-3 py-2.5">Perlu</th><th className="px-3 py-2.5">Rencana</th>
+                  <th className="px-3 py-2.5">Merek / No. serial</th><th className="px-3 py-2.5">Tahun</th><th className="px-3 py-2.5">Lokasi</th><th className="px-3 py-2.5">Perlu</th><th className="px-3 py-2.5">Rencana</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -242,7 +283,6 @@ export default function RoadmapPanels({ supabase, companyId, reloadKey, onChange
                       <td className="px-3 py-2.5 text-slate-800">{row.nama_merek || '–'}<span className="block text-slate-500">{row.nomor_serial || '–'}</span></td>
                       <td className="px-3 py-2.5 tabular-nums">{row.tahun_pembuatan ?? <span className="text-amber-700">tidak ada</span>}</td>
                       <td className="max-w-56 px-3 py-2.5 text-slate-600"><span className="line-clamp-2">{[row.unit, row.lokasi].filter(Boolean).join(' · ') || '–'}</span></td>
-                      <td className="px-3 py-2.5 text-slate-600">{CATEGORY_LABEL[row.kategori]}</td>
                       <td className="px-3 py-2.5 font-medium text-slate-800">{needLabel(row)}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1">

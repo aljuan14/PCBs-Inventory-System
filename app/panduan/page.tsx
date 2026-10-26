@@ -22,7 +22,7 @@ const FAQ_GROUPS: FaqGroup[] = [
     items: [
       { id: 'mulai', q: 'Saya baru memakai aplikasi ini. Mulai dari mana?', a: 'Buka Dashboard untuk melihat gambaran nasional: peta, jumlah peralatan, hasil uji, dan tonase. Lalu buka Perusahaan untuk melihat status PCBs setiap perusahaan, dan Unggahan perusahaan bila ada angka kuning di menu itu. Bagian "Peta menu" di halaman ini menjelaskan setiap menu.', go: { label: 'Buka Dashboard', path: '/dashboard' } },
       { id: 'satu-perusahaan', q: 'Bagaimana melihat data satu perusahaan saja?', a: 'Di Dashboard, pilih perusahaannya di card filter "Tampilkan data". Peta, angka, tonase, dan tabel langsung menampilkan perusahaan itu saja, ditambah kartu status PCBs dan hasil pemeriksaan datanya. Untuk perusahaan dengan beberapa unit, pilihan unit dan sub-unit muncul di sebelahnya.', go: { label: 'Buka Dashboard', path: '/dashboard' } },
-      { id: 'angka-kuning', q: 'Ada angka kuning di menu Unggahan perusahaan. Apa artinya?', a: 'Jumlah berkas Excel dari perusahaan yang menunggu diperiksa. Datanya belum masuk ke inventaris sampai diterima. Buka menunya, periksa temuan dan berkasnya, lalu Terima atau Tolak dengan alasan.', go: { label: 'Buka Unggahan perusahaan', path: '/upload/pemeriksaan' } },
+      { id: 'angka-kuning', q: 'Apakah unggahan Excel perusahaan perlu diterima admin dulu?', a: 'Tidak lagi (sejak 26 Oktober 2026). Unggahan formulir 1.1–1.4 dari perusahaan langsung masuk ke inventaris setelah lolos pemeriksaan otomatis. Menu Unggahan perusahaan mencatat setiap unggahan; angka kuning hanya muncul untuk unggahan lama yang masih menunggu.', go: { label: 'Buka Unggahan perusahaan', path: '/upload/pemeriksaan' } },
       { id: 'halaman-perusahaan', q: 'Bagaimana melihat halaman seperti yang dilihat perusahaan?', a: 'Di menu Perusahaan, klik label hitam "ID SIMPEL …" di samping nama perusahaan. Halaman laporan perusahaan terbuka dengan tombol "Kembali ke halaman admin" di kiri bawah. Admin dapat mengisi dan mengubah datanya dari sana.', go: { label: 'Buka Perusahaan', path: '/companies' } },
       { id: 'ubah-data', q: 'Ada data yang salah. Bagaimana memperbaikinya?', a: 'Cari barisnya di tabel Dashboard atau halaman jenis alatnya (cari merek, nomor serial, kode, atau lokasi), lalu klik ikon pensil. Untuk data yang diisi lewat formulir, perbaikan lewat Isi formulir > Data tersimpan lebih lengkap karena semua isian formulir bisa diubah dan diperiksa ulang.' },
     ],
@@ -31,7 +31,7 @@ const FAQ_GROUPS: FaqGroup[] = [
     title: 'Data & unggahan',
     items: [
       { id: 'beda-upload', q: 'Apa beda "Upload data" dengan "Unggahan perusahaan"?', a: `Upload data dipakai admin untuk mengimpor berkas Excel apa pun (format KLH, PLN, atau lainnya) langsung ke inventaris, dengan pemetaan kolom; batasnya ${ADMIN_MB} MB. Unggahan perusahaan berisi template resmi formulir 1.1–1.4 yang dikirim perusahaan sendiri (maks. ${COMPANY_MB} MB) dan baru masuk setelah admin menerimanya.` },
-      { id: 'tambah-ganti', q: 'Saat menerima unggahan, pilih "tambahkan" atau "ganti semua"?', a: 'Tambahkan: baris berkas ditambahkan ke data formulir itu, baris yang sudah ada dilewati. Ganti semua: semua data formulir itu milik perusahaan dihapus lalu diganti isi berkas. Pilih ganti bila perusahaan mengirim versi perbaikan dari seluruh datanya.', go: { label: 'Buka Unggahan perusahaan', path: '/upload/pemeriksaan' } },
+      { id: 'tambah-ganti', q: 'Apa arti "tambahkan" dan "ganti semua" pada unggahan perusahaan?', a: 'Pilihan perusahaan saat mengunggah. Tambahkan: baris berkas ditambahkan ke data formulir itu, baris yang sudah ada dilewati. Ganti semua: semua data formulir itu milik perusahaan dihapus lalu diganti isi berkas (perusahaan diminta konfirmasi dulu).', go: { label: 'Buka Unggahan perusahaan', path: '/upload/pemeriksaan' } },
       { id: 'revisi', q: 'Perusahaan mengirim berkas revisi lewat admin. Apakah datanya jadi dobel?', a: 'Tidak, bila di langkah terakhir Upload data dipilih "Ganti data dari unggahan sebelumnya" lalu dipilih unggahan lamanya: baris lama dihapus dan diganti isi sheet baru dalam satu langkah. Baris yang persis sama dengan data di database juga selalu dilewati.' },
       { id: 'temuan', q: 'Apa itu "temuan" dan "hasil pemeriksaan"?', a: 'Setiap baris yang diimpor diperiksa otomatis: koordinat tidak terbaca atau di laut, tahun di luar 1900 sampai sekarang, berat tidak wajar atau tidak sesuai daya, kolom wajib kosong, dan sebagainya. Sebagian diperbaiki otomatis (dicatat), sebagian hanya ditandai. Ringkasannya ada di Riwayat upload dan Kualitas data.' },
       { id: 'hapus-perusahaan', q: 'Bagaimana menghapus perusahaan yang dobel atau salah?', a: 'Di menu Perusahaan, klik Hapus di baris perusahaannya. Bila masih ada datanya, jendela konfirmasi menampilkan apa saja yang ikut terhapus dan meminta nama perusahaan diketik ulang. Penghapusan tidak dapat dibatalkan.', go: { label: 'Buka Perusahaan', path: '/companies' } },
@@ -104,7 +104,7 @@ export default function AdminGuide() {
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Bantuan</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Panduan admin</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-500">Cara memakai setiap menu admin Sistem Inventarisasi PCBs: memantau data nasional, memeriksa unggahan perusahaan, mengimpor Excel, mengelola perusahaan, ID SIMPEL, dan akun.</p>
+        <p className="mt-2 max-w-3xl text-sm text-slate-500">Cara memakai setiap menu admin Sistem Inventarisasi PCBs: memantau data nasional, memantau unggahan perusahaan, mengimpor Excel, mengelola perusahaan, ID SIMPEL, dan akun.</p>
       </header>
 
       {/* The contents stay in sight on the left while the guide scrolls. */}
@@ -125,7 +125,7 @@ export default function AdminGuide() {
               ['Isi formulir', 'Mengisi atau memperbaiki laporan sebuah perusahaan, persis seperti halaman perusahaan.'],
               ['Roadmap', 'Jadwal rencana uji, penanganan, dan pengelolaan trafo, nasional atau per perusahaan.'],
               ['Upload data', `Impor berkas Excel (maks. ${ADMIN_MB} MB) ke inventaris dengan pemetaan kolom.`],
-              ['Unggahan perusahaan', 'Antrean template Excel kiriman perusahaan untuk diterima atau ditolak. Angka kuning = menunggu.'],
+              ['Unggahan perusahaan', 'Catatan template Excel yang diunggah perusahaan. Datanya langsung masuk; angka kuning hanya untuk unggahan lama yang masih menunggu.'],
               ['Riwayat upload', 'Setiap sheet yang pernah diimpor beserta hasil pemeriksaannya.'],
               ['Kualitas data', 'Skor kelengkapan data dan daftar data yang perlu dilengkapi, bisa diunduh sebagai Excel.'],
               ['Perusahaan', 'Status PCBs nasional, daftar perusahaan, tambah, dan hapus.'],
@@ -170,7 +170,7 @@ export default function AdminGuide() {
           <Section id="formulir" title="Isi formulir" description="Mengisi atau memperbaiki laporan perusahaan atas nama perusahaan.">
             <Steps items={[
               ['Pilih perusahaan', <>Di {go('/formulir', 'Isi formulir')}, pilih di kotak Perusahaan, atau klik perusahaan di daftar &ldquo;perlu perhatian&rdquo;. Perusahaan terakhir yang dibuka diingat untuk kunjungan berikutnya.</>],
-              ['Pernyataan perusahaan', <>Memiliki peralatan, atau tidak memiliki peralatan dengan surat pernyataan. Surat yang diunggah perusahaan diperiksa di sini: klik <b>Terima</b>, atau <b>Tolak</b> dengan alasan yang akan dibaca perusahaan.</>],
+              ['Pernyataan perusahaan', <>Memiliki trafo, atau tidak memiliki trafo dengan surat pernyataan (PDF). Surat yang diunggah perusahaan diperiksa di sini: klik <b>Terima</b>, atau <b>Tolak</b> dengan alasan yang akan dibaca perusahaan.</>],
               ['Pilih formulirnya', <>Tab Inventarisasi (1.1–1.4) dan Pengelolaan (2, 3, 4.2, 5).</>],
               ['Tambah data', <>Card &ldquo;Tambah data&rdquo;: <b>Isi lewat formulir</b> membuka formulir sebagai pop-up, satu data per simpan; <b>Unggah template Excel</b> untuk banyak data sekaligus. Unggahan oleh admin langsung tersimpan, tidak perlu diperiksa.</>],
               ['Data tersimpan & bukti dukung', <>Di bawahnya: daftar data yang sudah tersimpan untuk diubah atau dihapus, dan tautan Google Drive bukti dukung formulir 1.1–1.4.</>],
@@ -178,24 +178,23 @@ export default function AdminGuide() {
             <Note>Sebelum perusahaan dipilih, halaman menampilkan kerangkanya dalam keadaan terkunci. Tab tetap bisa diklik untuk melihat isi setiap formulir.</Note>
           </Section>
 
-          <Section id="roadmap" title="Roadmap" description={`Rencana untuk setiap trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun.`}>
+          <Section id="roadmap" title="Roadmap" description={`Rencana bulan dan tahun untuk setiap trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun, dalam dua kelompok: masih digunakan dan tidak digunakan.`}>
             <Parts items={[
-              ['Kapan diuji', 'Trafo masih digunakan yang belum diuji.'],
-              ['Kapan ditangani', 'Trafo masih digunakan dengan hasil uji 50 ppm atau lebih: retrofilling, penggantian, atau pengolahan.'],
-              ['Kapan dikelola', 'Setiap trafo yang sudah tidak digunakan, berapa pun hasil ujinya.'],
-              ['Keterangan', 'Catatan opsional di samping tanggal rencana.'],
+              ['Kapan diuji', 'Masih digunakan: trafo yang belum diuji.'],
+              ['Kapan diretrofilling', 'Masih digunakan: trafo dengan hasil uji 50 ppm atau lebih (retrofilling atau penggantian). Hasil ujinya ditampilkan.'],
+              ['Kapan dikelola', 'Tidak digunakan: setiap trafo, berapa pun hasil ujinya, jadi ppm-nya tidak ditampilkan.'],
+              ['Keterangan', 'Catatan opsional di samping bulan rencana.'],
             ]} />
-            <p>Tanpa perusahaan dipilih, {go('/roadmap', 'Roadmap')} menampilkan jadwal nasional. Pilih perusahaan untuk mengisi atau mengubah tanggal rencananya. Rencana yang belum ada atau lewat tanggal membuat status perusahaan merah.</p>
+            <p>Tanpa perusahaan dipilih, {go('/roadmap', 'Roadmap')} menampilkan jadwal nasional. Pilih perusahaan untuk mengisi atau mengubah rencananya. Rencana yang belum ada, atau yang bulannya sudah lewat, membuat status perusahaan merah.</p>
           </Section>
 
-          <Section id="unggahan" title="Unggahan perusahaan" description="Template Excel formulir 1.1–1.4 yang dikirim perusahaan, menunggu diperiksa.">
+          <Section id="unggahan" title="Unggahan perusahaan" description="Template Excel formulir 1.1–1.4 yang diunggah perusahaan.">
             <Steps items={[
-              ['Buka antreannya', <>Di {go('/upload/pemeriksaan', 'Unggahan perusahaan')}, yang menunggu tampil paling atas. Angka kuning di sidebar = jumlah yang menunggu.</>],
-              ['Periksa', <>Lihat perusahaan, formulir, mode kirim (tambah atau ganti), jumlah data, dan temuan pemeriksaan otomatis. Unduh berkasnya bila perlu, atau buka halaman laporan perusahaannya.</>],
-              ['Terima', <>Data masuk ke inventaris: <b>ditambahkan</b> (baris yang sudah ada dilewati) atau <b>mengganti semua</b> data formulir itu, sesuai pilihan perusahaan.</>],
-              ['Atau tolak', <>Tulis alasan penolakan. Alasan itu tampil di halaman perusahaan agar berkasnya diperbaiki dan dikirim ulang.</>],
+              ['Langsung masuk', <>Sejak 26 Oktober 2026, unggahan perusahaan tidak perlu diterima admin. Setelah lolos pemeriksaan otomatis, datanya langsung masuk ke inventaris: <b>ditambahkan</b> (baris yang sudah ada dilewati) atau <b>mengganti semua</b> data formulir itu, sesuai pilihan perusahaan.</>],
+              ['Pantau', <>Di {go('/upload/pemeriksaan', 'Unggahan perusahaan')}, lihat perusahaan, formulir, jumlah data, dan temuan pemeriksaan otomatis setiap unggahan. Unduh berkasnya bila perlu, atau buka halaman laporan perusahaannya.</>],
+              ['Unggahan lama', <>Unggahan yang dikirim sebelum perubahan ini dan masih menunggu tetap bisa <b>diterima</b> atau <b>ditolak</b> dengan alasan.</>],
             ]} />
-            <Note tone="warn">Data unggahan perusahaan tidak masuk ke dashboard sebelum diterima. Periksa antrean ini secara rutin.</Note>
+            <Note tone="warn">Karena tidak diperiksa admin lagi, cek temuan pada unggahan baru secara rutin dan hubungi perusahaannya bila datanya perlu diperbaiki.</Note>
           </Section>
 
           <Section id="upload" title="Upload data" description={`Impor berkas Excel ke inventaris oleh admin (maks. ${ADMIN_MB} MB).`}>
@@ -237,7 +236,7 @@ export default function AdminGuide() {
               </div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
                 <p className="flex items-center gap-2 font-semibold text-emerald-800"><CheckCircle2 className="h-4 w-4" /> Aman (hijau)</p>
-                <p className="mt-1 text-slate-700">Semua trafo sebelum {TRAFO_FOCUS_YEAR} sudah diuji di bawah 50 ppm atau sudah dikelola, dan tidak ada catatan lain; atau surat pernyataan tidak memiliki peralatan sudah diterima.</p>
+                <p className="mt-1 text-slate-700">Semua trafo sebelum {TRAFO_FOCUS_YEAR} sudah diuji di bawah 50 ppm atau sudah dikelola, dan tidak ada catatan lain; atau surat pernyataan tidak memiliki trafo sudah diterima.</p>
               </div>
             </div>
             <Note>Status dihitung ulang otomatis setiap data berubah. Kuning yang hanya karena administrasi ditandai tersendiri di status nasional.</Note>

@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
-import { COMPANY_UPLOAD_FOLDER, UploadCheckError, readCompanyUpload, type UploadMode } from '@/lib/company-upload';
+import { COMPANY_UPLOAD_FOLDER, UploadCheckError, importCompanyUpload, readCompanyUpload, type UploadMode } from '@/lib/company-upload';
 import { isExcelFileName } from '@/lib/upload-store';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const isCategory = (value: unknown): value is InventoryCategory => INVENTORY_CATEGORIES.some((category) => category.key === value);
 
 /**
  * A company's Excel upload of a form 1.x (lib/company-upload.ts). The file is
  * already in its folder (the browser put it there). `send: false` checks it
- * and returns what was found; `send: true` checks it again and leaves it
- * waiting for the admin (unggahan_perusahaan). Nothing reaches the
- * inventory here.
+ * and returns what was found; `send: true` reads it again and saves it to
+ * the company's data at once (no admin acceptance since 2026-10-26), noted
+ * as accepted in unggahan_perusahaan for the upload history.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -28,14 +28,19 @@ export async function POST(req: NextRequest) {
     const { data: company } = await supabase.from('companies').select('id').eq('id', companyId).maybeSingle();
     if (!company) return NextResponse.json({ error: 'Perusahaan tidak ditemukan.' }, { status: 404 });
 
-    const { summary } = await readCompanyUpload(supabase, { companyId, category, path, mode });
-    if (!send) return NextResponse.json({ summary });
+    if (!send) {
+      const { summary } = await readCompanyUpload(supabase, { companyId, category, path, mode });
+      return NextResponse.json({ summary });
+    }
 
+    const { summary, batchId, imported, skipped, replacedRows } = await importCompanyUpload(supabase, { companyId, category, path, fileName, mode });
+    // The data is in; this row is the upload's place in the history.
     const { data, error } = await supabase.from('unggahan_perusahaan').insert({
       company_id: companyId, kategori: category, mode, nama_file: fileName, file_path: path, sheet_name: summary.sheetName, ringkasan: summary,
+      status: 'diterima', import_batch_id: batchId,
     }).select('id').single();
-    if (error) return NextResponse.json({ error: `Gagal mengirim unggahan: ${error.message}` }, { status: 500 });
-    return NextResponse.json({ id: data.id, summary });
+    if (error) console.error('Company upload saved, history row failed:', error.message);
+    return NextResponse.json({ id: data?.id, summary, imported, skipped, replacedRows });
   } catch (err) {
     if (err instanceof UploadCheckError) return NextResponse.json({ error: err.message }, { status: 400 });
     console.error('Company upload error:', err);

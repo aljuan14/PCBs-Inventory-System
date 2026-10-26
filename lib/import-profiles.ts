@@ -306,9 +306,37 @@ export function hasIdentity(row: Record<string, unknown>, mapping: Record<string
 // a sample year and test result (UID Kalbar left one under its header).
 const EXAMPLE_TEXT = /^\s*contoh\s*$/i;
 
-/** A template example row: "CONTOH" in the unit or sub-unit column. */
+// The official KLHK templates of forms 1.1-1.4 (public/template) carry sample
+// rows of one plant, "GARDU PM1 PT SAKTI" / "GARDU PM 1 PT PAPYRUS SAKTI", with
+// these serial numbers (1.4 has none). A company that leaves them in would
+// report them as its own: with the location and the serial both matching, the
+// row is the sample.
+const TEMPLATE_EXAMPLE_PLACE = /^gardu\s*pm\s*1\s+pt\s+(papyrus\s+)?sakti$/i;
+const TEMPLATE_EXAMPLE_SERIALS = new Set(['90235', '74829', '79886', '2002513', '2325870', '23003331']);
+
+const mappedValues = (row: Record<string, unknown>, mapping: Record<string, string>, target: string) =>
+  Object.entries(mapping).filter(([, fieldKey]) => fieldKey === target).map(([header]) => String(row[header] ?? '').replace(/\s+/g, ' ').trim());
+
+// Below the form, the templates list the photos to attach (bukti dukung) on
+// numbered rows, read as data in the brand column (seen in 1.4), under the
+// heading "A. DOKUMENTASI : BUKTI DUKUNG (isi dengan tautan/ link google drive)".
+const TEMPLATE_EVIDENCE_HEADING = /^\s*bukti\s+dukung\s*\(\s*isi\s+dengan\s+tautan/i;
+const TEMPLATE_EVIDENCE_LIST = /^(?:(?:transformator|kapasitor|wadah penempatan)\b.*\bsimbol\b|ketersediaan (?:keran buang|peralatan tanggap darurat)|plat nama pada|log perawatan \(minyak dielektrik\)|kondisi ruang penyimpanan|lokasi, titik koordinat)/i;
+
+function isTemplateSample(row: Record<string, unknown>, mapping: Record<string, string>) {
+  const brands = [...mappedValues(row, mapping, 'nama_merek'), ...mappedValues(row, mapping, 'merek_minyak_dielektrik')];
+  if (brands.some((brand) => TEMPLATE_EVIDENCE_LIST.test(brand))) return true;
+  if (Object.values(row).some((value) => typeof value === 'string' && TEMPLATE_EVIDENCE_HEADING.test(value))) return true;
+  const places = [...mappedValues(row, mapping, 'lokasi_peralatan'), ...mappedValues(row, mapping, 'lokasi_penyimpanan')];
+  if (!places.some((place) => TEMPLATE_EXAMPLE_PLACE.test(place))) return false;
+  const serials = mappedValues(row, mapping, 'nomor_serial');
+  return serials.length === 0 || serials.some((serial) => TEMPLATE_EXAMPLE_SERIALS.has(serial));
+}
+
+/** A template example row: "CONTOH" in the unit or sub-unit column, or a sample row of the official KLHK template. */
 export function isExampleRow(row: Record<string, unknown>, mapping: Record<string, string>) {
-  return Object.entries(mapping).some(([header, target]) => (target === 'unit' || target === 'sub_unit') && EXAMPLE_TEXT.test(String(row[header] ?? '')));
+  return Object.entries(mapping).some(([header, target]) => (target === 'unit' || target === 'sub_unit') && EXAMPLE_TEXT.test(String(row[header] ?? '')))
+    || isTemplateSample(row, mapping);
 }
 
 /**

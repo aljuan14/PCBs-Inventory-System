@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronRight, CircleAlert, HelpCircle, Loader2 } from 'lucide-react';
-import { STATUS_COLORS, evaluateStatus, fetchPcbStatus, formatPlanDate, type PcbStatusCounts, type StatusColor, type StatusTarget } from '@/lib/company-pcb-status';
+import { STATUS_COLORS, evaluateStatus, fetchPcbStatus, formatPlanMonth, type PcbStatusCounts, type StatusColor, type StatusTarget } from '@/lib/company-pcb-status';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 
 const ICONS: Record<StatusColor, typeof CircleAlert> = { red: CircleAlert, yellow: AlertTriangle, green: CheckCircle2 };
@@ -91,7 +91,7 @@ export default function CompanyPcbStatusCard({ supabase, companyId, reloadKey = 
           <p className={`text-lg font-semibold ${style.text}`}>{style.label}</p>
           {helpHref && <Link href={helpHref} className="inline-flex items-center gap-1 text-xs text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline"><HelpCircle className="h-3.5 w-3.5" /> Untuk penjelasan status PCBs, klik di sini</Link>}
         </div>
-        {counts.rencana_berikut && <span className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs text-slate-600"><CalendarClock className="h-3.5 w-3.5" /> Rencana terdekat {formatPlanDate(counts.rencana_berikut)}</span>}
+        {counts.rencana_berikut && <span className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs text-slate-600"><CalendarClock className="h-3.5 w-3.5" /> Rencana terdekat {formatPlanMonth(counts.rencana_berikut)}</span>}
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">

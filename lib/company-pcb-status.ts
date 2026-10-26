@@ -102,6 +102,9 @@ export const STATUS_COLORS: Record<StatusColor, { label: string; dot: string; ca
 
 const fmt = (value: number) => value.toLocaleString('id-ID');
 export const formatPlanDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+// A roadmap plan is a month and year, kept as the month's last day (late once the month is over).
+export const formatPlanMonth = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+export const monthEnd = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
 // On the web the counts come from summary_company_status, sent by web:publish (migration 20261013000005).
 export async function fetchPcbStatus(supabase: SupabaseClient, companyId: string): Promise<PcbStatusCounts> {
@@ -127,11 +130,11 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   const highOpen = s.tinggi - s.tinggi_selesai - s.tinggi_terjadwal - s.tinggi_lewat;
   const manageOpen = manageOpenOf(s);
 
-  if (s.belum_uji_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.belum_uji_lewat)} trafo melewati tanggal rencana uji dan belum ada hasil ujinya.`, go: ROADMAP, action: 'Atur roadmap' });
-  if (s.tinggi_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.tinggi_lewat)} trafo ≥ 50 ppm melewati tanggal rencana penanganan.`, go: ROADMAP, action: 'Atur roadmap' });
+  if (s.belum_uji_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.belum_uji_lewat)} trafo melewati bulan rencana uji dan belum ada hasil ujinya.`, go: ROADMAP, action: 'Atur roadmap' });
+  if (s.tinggi_lewat > 0) messages.push({ tone: 'red', text: `${fmt(s.tinggi_lewat)} trafo ≥ 50 ppm melewati bulan rencana penanganan.`, go: ROADMAP, action: 'Atur roadmap' });
   if (highOpen > 0) messages.push({ tone: 'red', text: `${fmt(highOpen)} trafo mengandung PCBs (≥ 50 ppm) tanpa rencana penanganan (penggantian, retrofilling, atau pengolahan).`, go: ROADMAP, action: 'Atur roadmap' });
   if (untestedOpen > 0) messages.push({ tone: 'red', text: `${fmt(untestedOpen)} trafo belum diuji dan belum punya rencana uji.`, go: ROADMAP, action: 'Atur roadmap' });
-  if ((s.kelola_lewat ?? 0) > 0) messages.push({ tone: 'red', text: `${fmt(s.kelola_lewat!)} trafo tidak digunakan melewati tanggal rencana pengelolaan.`, go: ROADMAP, action: 'Atur roadmap' });
+  if ((s.kelola_lewat ?? 0) > 0) messages.push({ tone: 'red', text: `${fmt(s.kelola_lewat!)} trafo tidak digunakan melewati bulan rencana pengelolaan.`, go: ROADMAP, action: 'Atur roadmap' });
   if (manageOpen > 0) messages.push({ tone: 'red', text: `${fmt(manageOpen)} trafo tidak digunakan belum punya rencana pengelolaan.`, go: ROADMAP, action: 'Atur roadmap' });
   // A handling marked done, yet the last test is still 50 ppm or more: the transformer still contains PCBs.
   if (s.tinggi_selesai > 0) messages.push({ tone: 'yellow', text: `${fmt(s.tinggi_selesai)} trafo ditandai sudah ditangani, tetapi hasil uji terakhirnya masih ≥ 50 ppm. Isi hasil uji sesudah penanganan (formulir 2), atau pindahkan ke formulir 1.2 bila trafonya sudah diganti.`, go: { tab: 'pengurangan' }, action: 'Isi formulir 2' });
@@ -176,20 +179,20 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   const statement = s.pernyataan;
   if (hasInventory(s)) {
     if (statement && declaresNone(statement)) {
-      messages.push({ tone: 'yellow', text: 'Pernyataan menyebut tidak memiliki trafo, kapasitor, maupun minyak dielektrik, tetapi datanya ada. Periksa pernyataan atau datanya.', go: STATEMENT, action: 'Periksa pernyataan' });
+      messages.push({ tone: 'yellow', text: 'Pernyataan menyebut tidak memiliki trafo, tetapi datanya ada. Periksa pernyataan atau datanya.', go: STATEMENT, action: 'Periksa pernyataan' });
     } else if (statement && !statement.punya_trafo_sebelum_1997 && statement.punya_trafo_1997_keatas && s.fokus > 0) {
       messages.push({ tone: 'yellow', text: `Pernyataan menyebut hanya ada trafo ${TRAFO_FOCUS_YEAR} ke atas, tetapi data berisi ${fmt(s.fokus)} trafo sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun.`, go: STATEMENT, action: 'Periksa pernyataan' });
     }
   } else if (!statement) {
-    messages.push({ tone: 'yellow', admin: true, text: 'Belum ada data maupun pernyataan: isi formulir, atau nyatakan tidak memiliki peralatan.', go: STATEMENT, action: 'Isi pernyataan' });
+    messages.push({ tone: 'yellow', admin: true, text: 'Belum ada data maupun pernyataan: jawab dulu apakah perusahaan memiliki trafo.', go: STATEMENT, action: 'Jawab' });
   } else if (!declaresNone(statement)) {
-    messages.push({ tone: 'yellow', text: 'Perusahaan menyatakan memiliki peralatan, tetapi datanya belum dilaporkan di formulir.', go: { tab: 'transformator_digunakan' }, action: 'Isi formulir' });
+    messages.push({ tone: 'yellow', text: 'Perusahaan menyatakan memiliki trafo, tetapi datanya belum dilaporkan di formulir.', go: { tab: 'transformator_digunakan' }, action: 'Isi formulir' });
   } else if (statement.verifikasi === 'ditolak') {
-    messages.push({ tone: 'yellow', admin: true, text: 'Surat pernyataan tidak memiliki peralatan ditolak. Unggah surat yang sudah diperbaiki.', go: STATEMENT, action: 'Unggah surat' });
+    messages.push({ tone: 'yellow', admin: true, text: 'Surat pernyataan tidak memiliki trafo ditolak. Unggah surat yang sudah diperbaiki.', go: STATEMENT, action: 'Unggah surat' });
   } else if (statement.verifikasi === 'menunggu') {
-    messages.push({ tone: 'yellow', admin: true, text: 'Surat pernyataan tidak memiliki peralatan menunggu verifikasi KLH.', go: STATEMENT, action: 'Lihat surat' });
+    messages.push({ tone: 'yellow', admin: true, text: 'Surat pernyataan tidak memiliki trafo menunggu verifikasi KLH.', go: STATEMENT, action: 'Lihat surat' });
   } else if (statement.verifikasi !== 'diterima') {
-    messages.push({ tone: 'yellow', admin: true, text: 'Pernyataan tidak memiliki peralatan belum dilengkapi surat pernyataan.', go: STATEMENT, action: 'Unggah surat' });
+    messages.push({ tone: 'yellow', admin: true, text: 'Pernyataan tidak memiliki trafo belum dilengkapi surat pernyataan (PDF).', go: STATEMENT, action: 'Unggah surat' });
   }
   if (s.fokus_tahun_kosong > 0) messages.push({ tone: 'yellow', text: `${fmt(s.fokus_tahun_kosong)} trafo tanpa tahun pembuatan, dihitung sebagai trafo sebelum ${TRAFO_FOCUS_YEAR}. Lengkapi tahunnya.`, go: ROADMAP, action: 'Lihat trafonya' });
 
@@ -197,7 +200,7 @@ export function evaluateStatus(s: PcbStatusCounts): { color: StatusColor; messag
   messages.sort((a, b) => Number(b.tone === 'red') - Number(a.tone === 'red'));
   const color: StatusColor = messages.some((message) => message.tone === 'red') ? 'red' : messages.length > 0 ? 'yellow' : 'green';
   if (color === 'green') {
-    messages.push({ tone: 'green', text: !hasInventory(s) && statement && declaresNone(statement) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik (surat pernyataan diterima).' : s.fokus === 0 ? `Tidak ada trafo buatan sebelum ${TRAFO_FOCUS_YEAR}.` : `Semua trafo sebelum ${TRAFO_FOCUS_YEAR} sudah diuji di bawah 50 ppm, atau sudah tidak digunakan dan dikelola.` });
+    messages.push({ tone: 'green', text: !hasInventory(s) && statement && declaresNone(statement) ? 'Perusahaan tidak memiliki trafo, jadi tidak perlu melakukan inventarisasi PCBs (surat pernyataan diterima).' : s.fokus === 0 ? `Tidak ada trafo buatan sebelum ${TRAFO_FOCUS_YEAR}.` : `Semua trafo sebelum ${TRAFO_FOCUS_YEAR} sudah diuji di bawah 50 ppm, atau sudah tidak digunakan dan dikelola.` });
   }
   return { color, messages };
 }
@@ -212,7 +215,7 @@ export function summarySentence(s: PcbStatusCounts): string {
   if (s.kapasitor > 0) parts.push(`${fmt(s.kapasitor)} kapasitor`);
   if (s.minyak > 0) parts.push(`${fmt(s.minyak)} data minyak dielektrik`);
   const owned = parts.length ? `Tercatat ${parts.join(', ')}.`
-    : s.pernyataan && declaresNone(s.pernyataan) ? 'Perusahaan menyatakan tidak memiliki trafo, kapasitor, maupun minyak dielektrik.'
+    : s.pernyataan && declaresNone(s.pernyataan) ? 'Perusahaan menyatakan tidak memiliki trafo.'
       : 'Belum ada peralatan yang tercatat.';
   const focus = trafo > 0
     ? ` ${fmt(s.fokus)} trafo buatan sebelum ${TRAFO_FOCUS_YEAR} atau tanpa tahun: ${fmt(s.aman)} aman (< 50 ppm), ${fmt(s.tinggi)} ≥ 50 ppm, ${fmt(s.belum_uji)} belum diuji${s.kelola ? `, ${fmt(s.kelola)} tidak digunakan (perlu dikelola)` : ''}.`

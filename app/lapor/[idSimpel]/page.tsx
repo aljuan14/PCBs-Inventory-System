@@ -5,13 +5,14 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { ChevronRight, ClipboardPen, FileSpreadsheet, Info, MapPinOff, Pencil, Trash2 } from 'lucide-react';
 import CompanyPcbStatusCard from '@/components/CompanyPcbStatusCard';
+import CompanyStatementCard, { type CompanyStatement } from '@/components/CompanyStatementCard';
 import DataTable, { type InventoryItem, type TablePreset } from '@/components/DataTable';
 import { StoredEntryEditor, removeStoredEntry, type StoredRow } from '@/components/StoredEntryEditor';
 import InventorySummary, { YearRail, YearToggle, useYearRail } from '@/components/InventorySummary';
 import TonnageCard from '@/components/TonnageCard';
 import { PortalHeader, useCompanyPortal } from '@/components/company/CompanyPortal';
 import { UPLOAD_STATUS } from '@/components/InventoryUpload';
-import type { StatusTarget } from '@/lib/company-pcb-status';
+import { declaresNone, type StatusTarget } from '@/lib/company-pcb-status';
 import { formSpec } from '@/lib/form-fields';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
 import { fetchInventoryStats, sumStats, type CategoryFilter, type InventoryFilters, type InventoryStats, type YearScope } from '@/lib/inventory-query';
@@ -68,13 +69,13 @@ function UploadsToWatch() {
   );
 }
 
-/** A company with nothing recorded yet: where to start, instead of empty charts. */
+/** A company that owns transformers but has recorded none yet: where to start, instead of empty charts. */
 function StartHere() {
   const { href } = useCompanyPortal();
   return (
     <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
       <h2 className="text-base font-semibold text-slate-900">Belum ada peralatan yang tercatat</h2>
-      <p className="mx-auto mt-1 max-w-xl text-sm text-slate-500">Mulai dengan mengisi kepemilikan peralatan dan formulir 1.1–1.4, satu per satu atau dengan template Excel. Ringkasan, grafik, dan peta akan muncul di sini setelah ada data.</p>
+      <p className="mx-auto mt-1 max-w-xl text-sm text-slate-500">Mulai dengan mengisi formulir 1.1–1.4, satu per satu atau dengan template Excel. Ringkasan, grafik, dan peta akan muncul di sini setelah ada data.</p>
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         <Link href={href('/formulir')} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800"><ClipboardPen className="h-4 w-4" /> Isi formulir</Link>
         <Link href={href('/template')} className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FileSpreadsheet className="h-4 w-4" /> Template Excel</Link>
@@ -84,7 +85,9 @@ function StartHere() {
 }
 
 /**
- * The company's home, its own dashboard: the PCBs status with what to do
+ * The company's home, its own dashboard. Without any data it first asks
+ * whether the company owns transformers (no: no inventory, a letter only).
+ * Then the PCBs status with what to do
  * (each item leading to where it is done), uploads to watch, the table of
  * all its equipment, its equipment by production year with the oil test
  * results and tonnage (one year switch), and its equipment on the map. A
@@ -99,6 +102,9 @@ export default function CompanyHome() {
   // After an edit or delete in the table: the figures and the table load again.
   const [reloadKey, setReloadKey] = useState(0);
   const changed = () => setReloadKey((key) => key + 1);
+  // The answer to "does it own transformers?", asked here while there is no data.
+  const [statement, setStatement] = useState<CompanyStatement | null>(null);
+  const [answered, setAnswered] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -156,11 +162,12 @@ export default function CompanyHome() {
           <MapLeaflet supabase={supabase} companies={[{ id: company.id, name: company.nama_perusahaan }]} scope={scope} onScopeChange={keepScope} fixedCompany height="380px" />
         </section>
       )}
-      <CompanyPcbStatusCard supabase={supabase} companyId={company.id} hrefFor={where} helpHref={`${href('/bantuan')}#arti-status`} />
+      {loaded !== null && total === 0 && <CompanyStatementCard supabase={supabase} companyId={company.id} reloadKey={answered} onStatement={setStatement} onSaved={() => setAnswered((key) => key + 1)} />}
+      <CompanyPcbStatusCard supabase={supabase} companyId={company.id} reloadKey={answered} hrefFor={where} helpHref={`${href('/bantuan')}#arti-status`} />
       <UploadsToWatch />
 
       {loaded === null ? <div className="h-48 animate-pulse rounded-2xl bg-slate-100" />
-        : total === 0 ? <StartHere /> : (
+        : total === 0 ? (statement && !declaresNone(statement) ? <StartHere /> : null) : (
           <>
             {/* All its equipment, right under the status: search, filter, revise. */}
             <div ref={tableRef} className="scroll-mt-6">

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useIdleHold } from '@/components/IdleLogout';
-import { AlertTriangle, CheckCircle2, Clock, Info, Loader2, Send, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Info, Loader2, Save, Trash2, X, XCircle } from 'lucide-react';
 import { COMPANY_UPLOAD_FOLDER, MAX_COMPANY_UPLOAD_BYTES, type UploadMode, type UploadSummary } from '@/lib/company-upload-shared';
 import { formSpec } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
@@ -20,7 +20,7 @@ type Checked = { fileName: string; path: string; summary: UploadSummary };
 
 export const UPLOAD_STATUS = {
   menunggu: { label: 'Menunggu pemeriksaan KLH', icon: Clock, className: 'border-amber-200 bg-amber-50 text-amber-900' },
-  diterima: { label: 'Diterima', icon: CheckCircle2, className: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
+  diterima: { label: 'Tersimpan', icon: CheckCircle2, className: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
   ditolak: { label: 'Ditolak', icon: XCircle, className: 'border-rose-200 bg-rose-50 text-rose-900' },
   dibatalkan: { label: 'Dibatalkan', icon: X, className: 'border-slate-200 bg-slate-50 text-slate-600' },
 } as const;
@@ -75,9 +75,9 @@ const CARD_TITLES: Record<InventoryCategory, string> = {
 
 /**
  * Upload of the official Excel template of a form 1.x by the company: read
- * and checked on the server (app/api/unggahan), shown, then sent to the admin
- * to add to or replace the company's rows of this form. Nothing changes
- * until the admin accepts it; the company sees its uploads and their answer.
+ * and checked on the server (app/api/unggahan), shown, then saved at once to
+ * add to or replace the company's rows of this form (no admin acceptance
+ * since 2026-10-26). Uploads still waiting from before show as waiting.
  * With `onManual` it is the form's "add data" card: filling the form one by
  * one beside the upload.
  */
@@ -85,7 +85,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
   companyId: string;
   category: InventoryCategory;
   readOnly?: boolean;
-  /** After an upload is sent or withdrawn. */
+  /** After an upload is saved (the company's rows changed) or withdrawn. */
   onSent?: () => void;
   /** Opens the form for one entry. */
   onManual?: () => void;
@@ -102,6 +102,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
   const [busy, setBusy] = useState<'check' | 'send' | 'cancel' | null>(null);
   useIdleHold(busy !== null);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const listKey = `${companyId}|${category}|${reload}`;
 
   useEffect(() => {
@@ -118,12 +119,13 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
     const response = await fetch('/api/unggahan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error ?? 'Gagal memeriksa berkas.');
-    return result as { id?: string; summary: UploadSummary };
+    return result as { id?: string; summary: UploadSummary; imported?: number; skipped?: number; replacedRows?: number };
   };
 
   // The file goes to the company's folder, then the server reads it from there (no request size limit).
   const check = async (chosen: File, chosenMode: UploadMode) => {
     setError(null);
+    setDone(null);
     setChecked(null);
     if (!isExcelFileName(chosen.name)) return setError('Berkas harus Excel (.xlsx atau .xls).');
     if (chosen.size > MAX_COMPANY_UPLOAD_BYTES) return setError(`Ukuran berkas maksimal ${MAX_COMPANY_UPLOAD_BYTES / 1024 / 1024} MB.`);
@@ -155,10 +157,17 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
 
   const send = async () => {
     if (!checked) return;
+    // Nobody looks at it first any more: replacing everything is asked once more.
+    if (mode === 'ganti' && checked.summary.currentRows > 0 && !(await confirmDialog({
+      title: `Ganti semua data formulir ${spec.code}?`,
+      message: `${fmt(checked.summary.currentRows)} data lama formulir ${spec.code} akan dihapus, termasuk yang diisi lewat formulir, lalu diganti ${fmt(checked.summary.rows)} baris dari ${checked.fileName}.`,
+      tone: 'danger', confirmLabel: 'Ganti semua data', cancelLabel: 'Kembali', icon: Trash2,
+    }))) return;
     setBusy('send');
     setError(null);
     try {
-      await call({ companyId, category, path: checked.path, fileName: checked.fileName, mode, send: true });
+      const result = await call({ companyId, category, path: checked.path, fileName: checked.fileName, mode, send: true });
+      setDone(`${fmt(result.imported ?? 0)} baris dari ${checked.fileName} tersimpan${result.skipped ? `, ${fmt(result.skipped)} sudah ada dan dilewati` : ''}${result.replacedRows ? `, ${fmt(result.replacedRows)} data lama diganti` : ''}.`);
       setChecked(null);
       setFile(null);
       setReload((value) => value + 1);
@@ -188,9 +197,10 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
     <AddDataCard
       title={onManual ? `Tambah data ${CARD_TITLES[category]} · formulir ${spec.code}` : undefined}
       manual={onManual && !readOnly && <ManualChoice hint={manualFull ? 'Daftar draf penuh; kirim dulu.' : 'Satu per satu, untuk data sedikit.'} disabled={manualFull} onClick={onManual} />}
-      upload={!readOnly && (waiting ? <WaitingChoice /> : <UploadChoice hint="Banyak data sekaligus, diperiksa KLH dulu." busy={busy === 'check'} template={template?.file} onFile={(chosen) => { if (!busy) choose(chosen); }} />)}>
+      upload={!readOnly && (waiting ? <WaitingChoice /> : <UploadChoice hint="Banyak data sekaligus, langsung tersimpan." busy={busy === 'check'} template={template?.file} onFile={(chosen) => { if (!busy) choose(chosen); }} />)}>
 
       {error && <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {error}</p>}
+      {done && <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> {done}</p>}
       {busy === 'check' && <p className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Membaca dan memeriksa {file?.name}…</p>}
 
       {summary && checked && (
@@ -219,11 +229,11 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
             </label>
           </fieldset>
 
-          {blocking.length > 0 && <p className="text-[11px] text-amber-800">Ada {fmt(blocking.length)} jenis peringatan. Data tetap bisa dikirim; KLH akan memeriksanya. Sebaiknya perbaiki dulu di Excel bila memungkinkan.</p>}
+          {blocking.length > 0 && <p className="text-[11px] text-amber-800">Ada {fmt(blocking.length)} jenis peringatan. Data tetap bisa disimpan, tetapi sebaiknya perbaiki dulu di Excel bila memungkinkan.</p>}
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => { setChecked(null); setFile(null); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Batal</button>
             <button type="button" disabled={busy !== null || (mode === 'tambah' && summary.alreadyStored >= summary.rows)} onClick={send} className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-40">
-              {busy === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Kirim untuk diperiksa
+              {busy === 'send' ? <><Loader2 className="h-4 w-4 animate-spin" /> Menyimpan…</> : <><Save className="h-4 w-4" /> Simpan ke data</>}
             </button>
           </div>
         </div>
@@ -239,7 +249,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
                 <Icon className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1">
                   <span className="font-semibold">{status.label}</span> · {upload.nama_file} · {upload.mode === 'ganti' ? 'mengganti semua data' : 'ditambahkan'}{upload.ringkasan ? ` · ${fmt(upload.ringkasan.rows)} baris` : ''}
-                  <span className="block text-[11px] opacity-80">Dikirim {fmtDate(upload.created_at)}{upload.diperiksa_at ? ` · diperiksa ${fmtDate(upload.diperiksa_at)}` : ''}</span>
+                  <span className="block text-[11px] opacity-80">Diunggah {fmtDate(upload.created_at)}{upload.diperiksa_at ? ` · diperiksa ${fmtDate(upload.diperiksa_at)}` : ''}</span>
                   {upload.status === 'ditolak' && upload.catatan && <span className="mt-1 block font-medium">Alasan: {upload.catatan}</span>}
                 </span>
                 {!readOnly && upload.status === 'menunggu' && (
