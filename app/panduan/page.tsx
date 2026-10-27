@@ -140,7 +140,7 @@ export default function AdminGuide() {
             <h3 className="pt-1 font-semibold text-slate-900">Peta sebaran</h3>
             <Parts items={[
               ['Kelompok / Titik', 'Kelompok (bawaan): lingkaran berangka = jumlah data di area itu, warnanya porsi hasil uji. Titik: setiap lokasi satu titik kecil. Perbesar peta untuk melihat titik satuan.'],
-              ['Warna: Hasil uji / Kategori', 'Hasil uji: merah ≥ 50 ppm, oranye 2 – < 50 ppm, hijau < 2 ppm, abu-abu belum diuji. Kategori: warna per jenis alat.'],
+              ['Warna: Hasil uji / Kategori', 'Hasil uji: oranye tua ≥ 50 ppm (batas konsentrasi atau lebih), biru < 50 ppm (di bawah batas konsentrasi), abu-abu belum ada hasil uji. Kategori: warna per jenis alat.'],
               ['Filter peta', 'Jenis alat, perusahaan, hasil uji, dan tahun, khusus untuk peta.'],
               ['Peta / Satelit, rumah, layar penuh', 'Ganti latar peta, kembali ke tampilan seluruh Indonesia, atau buka peta layar penuh.'],
               ['Klik titik', 'Membuka datanya di tabel di bagian bawah halaman.'],

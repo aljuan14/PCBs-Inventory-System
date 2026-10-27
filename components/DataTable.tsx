@@ -3,14 +3,14 @@
 import { Fragment, useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
-import { Search, Filter, AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw, Map as MapIcon } from 'lucide-react';
+import { Search, Filter, AlertTriangle, CircleDot, HelpCircle, Pencil, Trash2, X, Save, Loader2, SlidersHorizontal, ArrowUpDown, RotateCcw, Map as MapIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useReadOnly } from '@/components/useAccess';
 import CompanyPicker from '@/components/CompanyPicker';
 import { CoordinatePreview } from '@/components/FormEditor';
 import { parseDMSCoordinate } from '@/lib/dms';
 import { coordinateText } from '@/lib/inventory-edit';
-import { PCB_CLASSES, getCategoryLabel, pcbClassLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
+import { getCategoryLabel, pcbGroupLabel, pcbGroupOf, type InventoryCategory } from '@/lib/inventory';
 import {
   DEFAULT_FILTERS,
   fetchCompanyUnits,
@@ -206,7 +206,9 @@ const MAX_ROWS = 1000;
 const SELECT_CLASS = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-emerald-500 focus:outline-none';
 const FIELD_LABEL_CLASS = 'flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500';
 
-const PCB_LABELS: Record<InventoryFilters['pcbRange'], string> = { all: 'Semua kadar PCBs', safe: pcbClassLabel('safe'), moderate: pcbClassLabel('moderate'), below50: 'Di bawah ambang (< 50 ppm)', high: pcbClassLabel('high'), untested: 'Belum diuji' };
+// The groups of PCB_GROUPS; "safe" and "moderate" (the data's < 2 ppm split) only reach here from an older link.
+const PCB_LABELS: Record<InventoryFilters['pcbRange'], string> = { all: 'Semua hasil uji', below50: pcbGroupLabel('below50'), high: pcbGroupLabel('high'), untested: pcbGroupLabel('untested'), safe: '< 2 ppm', moderate: '2 – < 50 ppm' };
+const PCB_OPTIONS: Array<InventoryFilters['pcbRange']> = ['all', 'below50', 'high', 'untested'];
 const TEST_LABELS: Record<InventoryFilters['test'], string> = { all: 'Semua jenis uji', lab: 'Uji lab (GC)', cepat: 'Uji cepat (Dexil)', none: 'Belum diuji' };
 const YEAR_LABELS: Record<InventoryFilters['yearRange'], string> = { all: 'Semua tahun', pre1985: 'Sebelum 1985', '1985_1996': '1985 – 1996', from1997: '1997 ke atas', unknown: 'Tahun tidak diketahui', custom: 'Rentang tertentu' };
 const COORDINATE_LABELS: Record<InventoryFilters['coordinates'], string> = {
@@ -615,7 +617,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
 
         {hasTests && (
           <select aria-label="Kadar PCB" value={filters.pcbRange} onChange={(e) => updateFilter('pcbRange', e.target.value as InventoryFilters['pcbRange'])} className={SELECT_CLASS}>
-            {(Object.keys(PCB_LABELS) as Array<InventoryFilters['pcbRange']>).map((key) => <option key={key} value={key}>{PCB_LABELS[key]}</option>)}
+            {(PCB_OPTIONS.includes(filters.pcbRange) ? PCB_OPTIONS : [...PCB_OPTIONS, filters.pcbRange]).map((key) => <option key={key} value={key}>{PCB_LABELS[key]}</option>)}
           </select>
         )}
 
@@ -776,22 +778,22 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
             ) : (
               paginatedItems.map((item, index) => {
                 // PCB status pill
-                let pcbIcon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />;
-                let pcbBadge = 'bg-emerald-50 text-emerald-800 border-emerald-200/80';
-                let pcbText = 'Belum Diuji';
+                let pcbIcon = <HelpCircle className="h-3.5 w-3.5 text-slate-400" />;
+                let pcbBadge = 'bg-slate-50 text-slate-600 border-slate-200';
+                let pcbText = 'Belum ada hasil uji';
 
                 if (item.pcbConcentration === null || item.pcbConcentration === undefined) {
                   pcbIcon = <HelpCircle className="h-3.5 w-3.5 text-slate-400" />;
                   pcbBadge = 'bg-slate-50 text-slate-600 border-slate-200';
                 } else {
-                  const pcbClass = pcbClassOf(item.pcbConcentration);
-                  pcbText = `${item.pcbConcentration} ppm (${PCB_CLASSES[pcbClass].range.replace(' ppm', '')})`;
-                  if (pcbClass === 'high') {
-                    pcbIcon = <AlertOctagon className="h-3.5 w-3.5 text-rose-600" />;
-                    pcbBadge = 'bg-rose-50 text-rose-800 border-rose-200/80';
-                  } else if (pcbClass === 'moderate') {
-                    pcbIcon = <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />;
-                    pcbBadge = 'bg-amber-50 text-amber-800 border-amber-200/80';
+                  // Neutral below the 50 ppm Batas Konsentrasi, marked at or over it (PCB_GROUPS).
+                  pcbText = `${item.pcbConcentration} ppm`;
+                  if (pcbGroupOf(item.pcbConcentration) === 'high') {
+                    pcbIcon = <AlertTriangle className="h-3.5 w-3.5 text-orange-700" />;
+                    pcbBadge = 'bg-orange-50 text-orange-900 border-orange-200/80';
+                  } else {
+                    pcbIcon = <CircleDot className="h-3.5 w-3.5 text-slate-500" />;
+                    pcbBadge = 'bg-slate-50 text-slate-700 border-slate-200';
                   }
                 }
 

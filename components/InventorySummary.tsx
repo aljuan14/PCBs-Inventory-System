@@ -19,7 +19,7 @@ export const SCOPE_TEXT: Record<YearScope, string> = { all: 'semua tahun produks
 interface Segment {
   key: string;
   label: string;
-  /** Range or note after the label, e.g. "< 2 ppm". */
+  /** Range or note after the label, e.g. "di bawah batas konsentrasi". */
   hint?: string;
   value: number;
   color: string;
@@ -243,14 +243,12 @@ function TransformerColumn({ category, stats, grandTotal, scope, loading, onSele
   const counts: RiskCounts = riskCountsFor(stats, [category], scope);
   const statusTotal = RISK_CLASSES.reduce((sum, risk) => sum + counts[risk.key], 0);
   const statusTested = statusTotal - counts.untested;
-  // Three results only: under the 50 ppm threshold, at or over it, not tested.
-  const [safe, , high, untested] = RISK_CLASSES;
+  // Three results: under the 50 ppm Batas Konsentrasi, at or over it, not tested.
   const scoped = SCOPE_FIGURES[scope].filters;
-  const results: Segment[] = [
-    { key: 'below50', label: 'Di bawah ambang', hint: '< 50 ppm', value: counts.safe + counts.moderate, color: safe.color, icon: safe.icon, iconClass: safe.iconClass, filters: { pcbRange: 'below50', ...scoped } },
-    { key: 'high', label: high.label, hint: high.range, value: counts.high, color: high.color, icon: high.icon, iconClass: high.iconClass, filters: { pcbRange: 'high', ...scoped } },
-    { key: 'untested', label: untested.label, value: counts.untested, color: untested.color, icon: untested.icon, iconClass: untested.iconClass, filters: { pcbRange: 'untested', ...scoped } },
-  ];
+  const results: Segment[] = RISK_CLASSES.map((risk) => ({
+    key: risk.key, label: risk.label, hint: risk.key === 'untested' ? undefined : risk.range, value: counts[risk.key],
+    color: risk.color, icon: risk.icon, iconClass: risk.iconClass, filters: { pcbRange: risk.key, ...scoped },
+  }));
 
   return (
     <div className="flex h-full flex-col gap-3 rounded-2xl border p-3" style={categoryTint(category)}>

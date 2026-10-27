@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Canvas, DivIcon, LayerGroup, Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { House, Loader2, Maximize2, Minimize2, RotateCcw } from 'lucide-react';
-import { INVENTORY_CATEGORIES, PCB_CLASSES, getCategoryColor, getCategoryLabel, pcbClassOf, type InventoryCategory } from '@/lib/inventory';
+import { INVENTORY_CATEGORIES, PCB_GROUPS, PCB_GROUP_PARTS, getCategoryColor, getCategoryLabel, pcbGroupLabel, pcbGroupOf, type InventoryCategory, type PcbGroup } from '@/lib/inventory';
 import { DEFAULT_MAP_FILTERS, fetchMapCells, fetchMapPointsIn, fetchSummaryCells, type CategoryFilter, type DashboardScope, type MapBounds, type MapCell, type MapFilters } from '@/lib/inventory-query';
 import CompanyPicker from '@/components/CompanyPicker';
 import { SUMMARY_MODE } from '@/lib/data-mode';
@@ -28,15 +28,8 @@ export interface MapPoint {
 type ColorMode = 'pcb' | 'category';
 /** Dots: many small dots, one per nearby data (fine cells); groups: numbered bubbles (coarse cells). */
 type ViewMode = 'dots' | 'groups';
-type PcbKey = 'high' | 'moderate' | 'safe' | 'untested';
-
-// The same colours as the Status PCBs donuts (RISK_CLASSES in DashboardCharts).
-const PCB_COLORS: Array<{ key: PcbKey; label: string; color: string }> = [
-  { key: 'high', label: `${PCB_CLASSES.high.label} (${PCB_CLASSES.high.range})`, color: '#e11d48' },
-  { key: 'moderate', label: `${PCB_CLASSES.moderate.label} (${PCB_CLASSES.moderate.range})`, color: '#f59e0b' },
-  { key: 'safe', label: `${PCB_CLASSES.safe.label} (${PCB_CLASSES.safe.range})`, color: '#059669' },
-  { key: 'untested', label: 'Belum diuji', color: '#b4b2a9' },
-];
+// The same groups and colours as the dashboard (PCB_GROUPS): the 50 ppm Batas Konsentrasi only.
+const PCB_COLORS: Array<{ key: PcbGroup; label: string; color: string }> = (['high', 'below50', 'untested'] as const).map((key) => ({ key, label: pcbGroupLabel(key), color: PCB_GROUPS[key].color }));
 const CELL_CATEGORIES: Array<{ key: keyof MapCell; category: InventoryCategory }> = [
   { key: 'trafo_used', category: 'transformator_digunakan' },
   { key: 'trafo_unused', category: 'transformator_tidak_digunakan' },
@@ -92,14 +85,13 @@ const formatNumber = (value: number) => value.toLocaleString('id-ID');
 // Points closer than ~0.1 m share a marker, so a click must cover all of them.
 const coordinateKey = (point: MapPoint) => `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`;
 
-const pcbKeyOf = (ppm: number | null): PcbKey => (ppm === null ? 'untested' : pcbClassOf(ppm));
 const pointColor = (point: MapPoint, mode: ColorMode) =>
-  mode === 'pcb' ? PCB_COLORS.find((entry) => entry.key === pcbKeyOf(point.pcbConcentration))!.color : getCategoryColor(point.type);
+  mode === 'pcb' ? PCB_GROUPS[pcbGroupOf(point.pcbConcentration)].color : getCategoryColor(point.type);
 
 /** A cell's shares as (colour, count), in the order of its legend. */
 function cellShares(cell: MapCell, mode: ColorMode) {
   return mode === 'pcb'
-    ? PCB_COLORS.map((entry) => ({ color: entry.color, label: entry.label, count: cell[entry.key] }))
+    ? PCB_COLORS.map((entry) => ({ color: entry.color, label: entry.label, count: PCB_GROUP_PARTS[entry.key].reduce((sum, part) => sum + cell[part], 0) }))
     : CELL_CATEGORIES.map((entry) => ({ color: getCategoryColor(entry.category), label: getCategoryLabel(entry.category), count: cell[entry.key] }));
 }
 
@@ -124,7 +116,7 @@ function cellTooltip(cell: MapCell, mode: ColorMode) {
 }
 
 function pointTooltip(point: MapPoint, sameSpot: number, selectable: boolean) {
-  const pcb = pcbKeyOf(point.pcbConcentration);
+  const pcb = pcbGroupOf(point.pcbConcentration);
   const pcbEntry = PCB_COLORS.find((entry) => entry.key === pcb)!;
   const ppm = point.pcbConcentration !== null ? `${formatNumber(point.pcbConcentration)} ppm · ` : '';
   const line = (label: string, value: unknown) => (value ? `<div><span style="color:#64748b">${label}:</span> ${escapeHtml(value)}</div>` : '');

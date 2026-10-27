@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ChevronRight, FileSignature, Scale } from 'lucide-react';
 import { fetchAllPcbStatus } from '@/lib/company-pcb-status';
-import { categoryTint, type InventoryCategory } from '@/lib/inventory';
+import { PCB_GROUPS, categoryTint, type InventoryCategory } from '@/lib/inventory';
 import { PRE_1997_FILTER, sumStats, TRAFO_CATEGORIES, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats, type YearScope } from '@/lib/inventory-query';
 import { formatPercent, niceMax } from '@/components/DashboardCharts';
 import { NEWER_COLOR, PRE_1997_COLOR, UNKNOWN_COLOR } from '@/components/InventorySummary';
@@ -21,9 +21,9 @@ type Select = (filters: Partial<InventoryFilters>, type: CategoryFilter) => void
 // Checked with the dataviz palette validator (light surface); the grey is
 // neutral on purpose and every column is named under it.
 const LEVELS: Array<{ key: Level; label: string; range: string; color: string; pcbRange: InventoryFilters['pcbRange'] }> = [
-  { key: 'high', label: '≥ 50 ppm', range: 'mengandung PCBs', color: '#be123c', pcbRange: 'high' },
-  { key: 'low', label: '< 50 ppm', range: 'di bawah ambang', color: '#10b981', pcbRange: 'below50' },
-  { key: 'untested', label: 'Belum diuji', range: 'konsentrasi kosong', color: '#b4b2a9', pcbRange: 'untested' },
+  { key: 'high', ...PCB_GROUPS.high, pcbRange: 'high' },
+  { key: 'low', ...PCB_GROUPS.below50, pcbRange: 'below50' },
+  { key: 'untested', ...PCB_GROUPS.untested, pcbRange: 'untested' },
 ];
 
 const BANDS: Record<Band, { label: string; filters: Partial<InventoryFilters> }> = {
@@ -269,7 +269,7 @@ export default function TonnageCard({ stats, scope, loading, onSelect, supabase,
 
           <div className="pt-2">
             <h4 className="text-sm font-bold text-slate-900">Tahun pembuatan tidak diketahui</h4>
-            <p className="text-[11px] text-slate-500">Risikonya belum bisa dinilai karena tahun pembuatannya kosong · perlu dilengkapi</p>
+            <p className="text-[11px] text-slate-500">Belum bisa dikelompokkan karena tahun pembuatannya kosong · perlu dilengkapi</p>
           </div>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {TRAFO_CATEGORIES.map((category) => <TonnageColumns key={category} stats={stats} category={category} band="noyear" onSelect={onSelect} />)}

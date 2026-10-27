@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertCircle, RefreshCw, UploadCloud } from 'lucide-react';
-import { INVENTORY_CATEGORIES, PCB_CLASSES, hasPcbConcentration, type InventoryCategory } from '@/lib/inventory';
+import { INVENTORY_CATEGORIES, hasPcbConcentration, pcbGroupLabel, type InventoryCategory } from '@/lib/inventory';
 import { ALL_SCOPE, PRE_1997_FILTER, TRAFO_CATEGORIES, issueTableFilter, mapPointFilter, pre1997RiskCounts, type InventoryFilters, type IssueLink } from '@/lib/inventory-query';
 import DataTable, { type EditableInventoryFields, type InventoryItem } from '@/components/DataTable';
 import DashboardCharts from '@/components/DashboardCharts';
@@ -55,9 +55,9 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
   const summary = stats?.[category];
   const total = summary?.total ?? 0;
   const tested = summary?.tested ?? 0;
-  const moderate = summary?.risk_moderate ?? 0;
+  const below50 = (summary?.risk_safe ?? 0) + (summary?.risk_moderate ?? 0);
   const high = summary?.risk_high ?? 0;
-  const riskCounts = hasPcbConcentration(category) ? { safe: summary?.risk_safe ?? 0, moderate, high, untested: total - tested } : null;
+  const riskCounts = hasPcbConcentration(category) ? { below50, high, untested: total - tested } : null;
   const pre1997 = TRAFO_CATEGORIES.includes(category)
     ? [{ counts: pre1997RiskCounts(stats, [category]), unknownYear: summary?.unknown_year ?? 0, onSelectRisk: SUMMARY_MODE ? undefined : (pcbRange: InventoryFilters['pcbRange']) => showRows({ pcbRange, ...PRE_1997_FILTER }) }]
     : undefined;
@@ -69,7 +69,7 @@ export default function InventoryCategoryDashboard({ category, issue }: { catego
     </header>
     {SUMMARY_MODE && <SummaryStamp supabase={supabase} />}
     {error && <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800"><AlertCircle className="h-4 w-4" /> {error}</div>}
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Total data</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(total)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Sudah diuji</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(tested)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{PCB_CLASSES.moderate.label} ({PCB_CLASSES.moderate.range})</div><div className="mt-2 text-3xl font-semibold text-amber-700">{loading ? '...' : formatNumber(moderate)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{PCB_CLASSES.high.label} ({PCB_CLASSES.high.range})</div><div className="mt-2 text-3xl font-semibold text-rose-700">{loading ? '...' : formatNumber(high)}</div></div></section>
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Total data</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(total)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">Sudah diuji</div><div className="mt-2 text-3xl font-semibold">{loading ? '...' : formatNumber(tested)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{pcbGroupLabel('below50')}</div><div className="mt-2 text-3xl font-semibold text-slate-700">{loading ? '...' : formatNumber(below50)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="text-xs text-slate-500">{pcbGroupLabel('high')}</div><div className="mt-2 text-3xl font-semibold text-orange-700">{loading ? '...' : formatNumber(high)}</div></div></section>
     {riskCounts && <DashboardCharts riskCounts={riskCounts} loading={loading} onSelectRisk={SUMMARY_MODE ? undefined : (pcbRange) => showRows({ pcbRange })} pre1997={pre1997} />}
     {TRAFO_CATEGORIES.includes(category) && (
       <DistributionCharts

@@ -111,8 +111,7 @@ export const sumStats = (stats: InventoryStats, categories: InventoryCategory[],
 export function pre1997RiskCounts(stats: InventoryStats | null, categories: InventoryCategory[]) {
   const sum = (key: keyof CategoryStats) => (stats ? sumStats(stats, categories, key) : 0);
   return {
-    safe: sum('pre1997_risk_safe'),
-    moderate: sum('pre1997_risk_moderate'),
+    below50: sum('pre1997_risk_safe') + sum('pre1997_risk_moderate'),
     high: sum('pre1997_risk_high'),
     untested: sum('before_1997') - sum('pre1997_tested'),
   };
@@ -128,8 +127,8 @@ export type YearScope = 'all' | 'pre1997' | 'from1997';
 export function riskCountsFor(stats: InventoryStats | null, categories: InventoryCategory[], scope: YearScope) {
   if (scope === 'pre1997') return pre1997RiskCounts(stats, categories);
   const sum = (key: keyof CategoryStats) => (stats ? sumStats(stats, categories, key) : 0);
-  if (scope === 'from1997') return { safe: sum('from1997_risk_safe'), moderate: sum('from1997_risk_moderate'), high: sum('from1997_risk_high'), untested: sum('from_1997') - sum('from1997_tested') };
-  return { safe: sum('risk_safe'), moderate: sum('risk_moderate'), high: sum('risk_high'), untested: sum('total') - sum('tested') };
+  if (scope === 'from1997') return { below50: sum('from1997_risk_safe') + sum('from1997_risk_moderate'), high: sum('from1997_risk_high'), untested: sum('from_1997') - sum('from1997_tested') };
+  return { below50: sum('risk_safe') + sum('risk_moderate'), high: sum('risk_high'), untested: sum('total') - sum('tested') };
 }
 
 /** Rows, oil volume and table filter of one year scope. */
@@ -293,7 +292,7 @@ function applyFilters(request: InventoryRequest, category: CategoryFilter, filte
   if (filters.mapPoint) request = request.in('id', filters.mapPoint.ids);
   if (filters.note) request = request.contains('catatan_impor', noteMatch({ kode: filters.note.kode }));
 
-  // Bounds of PCB_CLASSES in lib/inventory.ts.
+  // The data's classes (< 2, 2 – < 50, ≥ 50) and the groups shown (PCB_GROUPS in lib/inventory.ts).
   if (filters.pcbRange === 'safe') request = request.lt('ppm', 2);
   else if (filters.pcbRange === 'moderate') request = request.gte('ppm', 2).lt('ppm', 50);
   else if (filters.pcbRange === 'below50') request = request.lt('ppm', 50);

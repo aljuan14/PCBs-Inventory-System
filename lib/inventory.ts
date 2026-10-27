@@ -31,21 +31,30 @@ export const INVENTORY_CATEGORIES: Array<{
 /** Whether a category's KLHK template has a PCBs concentration column; kapasitor (1.3) does not, so its risk cannot be classified. */
 export const hasPcbConcentration = (category: InventoryCategory) => category !== 'kapasitor';
 
-// PCBs concentration classes: < 2, 2 to under 50, and 50 ppm or more (Permen LHK
-// 29/2020: only "di bawah" the 50 ppm Batas Konsentrasi is left out). The same
-// bounds are in the table filter (inventory-query.ts) and the SQL (migration 20261019000001).
-export type PcbClass = 'safe' | 'moderate' | 'high';
+// PCBs concentration as the app shows it: only the 50 ppm Batas Konsentrasi of
+// Permen LHK 29/2020, in neutral words. "Bebas PCBs" claims more than a test
+// shows, and "contaminated with" PCBs means 50 ppm or more in the Stockholm and
+// Basel texts (KLH, 2026-10-23). The data keeps its < 2 ppm split (risk_safe,
+// risk_moderate, the SQL of migration 20261019000001); PCB_GROUP_PARTS adds it up.
+export type PcbGroup = 'below50' | 'high' | 'untested';
 
-export const PCB_CLASSES: Record<PcbClass, { label: string; range: string }> = {
-  safe: { label: 'Bebas PCBs', range: '< 2 ppm' },
-  moderate: { label: 'Terkontaminasi PCBs', range: '2 – < 50 ppm' },
-  high: { label: 'Mengandung PCBs', range: '≥ 50 ppm' },
+export const PCB_GROUPS: Record<PcbGroup, { label: string; range: string; color: string }> = {
+  below50: { label: '< 50 ppm', range: 'di bawah batas konsentrasi', color: '#3d78b0' },
+  high: { label: '≥ 50 ppm', range: 'batas konsentrasi atau lebih', color: '#c2410c' },
+  untested: { label: 'Belum ada hasil uji', range: 'konsentrasi kosong', color: '#b4b2a9' },
 };
 
-export const pcbClassOf = (ppm: number): PcbClass => (ppm < 2 ? 'safe' : ppm < 50 ? 'moderate' : 'high');
+/** The data's classes that make up each group. */
+export const PCB_GROUP_PARTS: Record<PcbGroup, Array<'safe' | 'moderate' | 'high' | 'untested'>> = {
+  below50: ['safe', 'moderate'],
+  high: ['high'],
+  untested: ['untested'],
+};
 
-/** e.g. "Terkontaminasi PCBs (2 – < 50 ppm)" */
-export const pcbClassLabel = (pcbClass: PcbClass) => `${PCB_CLASSES[pcbClass].label} (${PCB_CLASSES[pcbClass].range})`;
+export const pcbGroupOf = (ppm: number | null | undefined): PcbGroup => (ppm === null || ppm === undefined ? 'untested' : ppm < 50 ? 'below50' : 'high');
+
+/** e.g. "< 50 ppm (di bawah batas konsentrasi)" */
+export const pcbGroupLabel = (group: PcbGroup) => (group === 'untested' ? PCB_GROUPS.untested.label : `${PCB_GROUPS[group].label} (${PCB_GROUPS[group].range})`);
 
 const field = (field_key: string, label: string, tipe_data: InventoryFieldType, wajib: boolean, group: InventoryField['group'] = 'Data umum'): InventoryField => ({ field_key, label, tipe_data, wajib, group });
 // No field is mandatory: real-world reports (e.g. PLN) often lack serials or

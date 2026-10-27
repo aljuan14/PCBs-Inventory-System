@@ -85,7 +85,7 @@ const TERMS: Array<[string, string]> = [
   ['PCBs', 'Polychlorinated Biphenyls, senyawa kimia yang dulu banyak dipakai pada minyak dielektrik trafo dan kapasitor. Termasuk bahan pencemar organik persisten yang wajib dikelola sampai tuntas.'],
   ['ppm', 'Part per million, satuan konsentrasi. Batas konsentrasi PCBs menurut Permen LHK 29/2020 adalah 50 ppm: 50 ppm atau lebih dianggap mengandung PCBs.'],
   ['Uji cepat / uji lab', 'Uji cepat (screening) memberi perkiraan di lapangan; uji laboratorium memberi hasil konsentrasi yang pasti. Keduanya dicatat beserta metode dan penyedia jasanya.'],
-  ['Retrofilling', 'Mengganti minyak dielektrik yang mengandung PCBs dengan minyak bebas PCBs, lalu menguji ulang trafonya.'],
+  ['Retrofilling', 'Mengganti minyak dielektrik yang mengandung PCBs dengan minyak baru yang tidak mengandung PCBs, lalu menguji ulang trafonya.'],
   ['Pengelolaan', 'Menyerahkan peralatan atau limbah PCBs ke pengolah berizin, atau mengolahnya sendiri sesuai ketentuan, sampai tuntas.'],
   ['TPS Limbah B3', 'Tempat Penyimpanan Sementara limbah bahan berbahaya dan beracun, yang wajib berizin. Limbah PCBs paling lama disimpan ' + MAX_STORAGE_DAYS + ' hari.'],
   ['A101d', 'Kode limbah B3 untuk limbah yang mengandung PCBs.'],

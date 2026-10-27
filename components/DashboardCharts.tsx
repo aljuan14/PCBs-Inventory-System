@@ -2,8 +2,8 @@
 
 import { PieChart, Pie, Cell } from 'recharts';
 import { useState } from 'react';
-import { ChevronRight, CircleDashed, OctagonAlert, ShieldCheck, TriangleAlert, type LucideIcon } from 'lucide-react';
-import { PCB_CLASSES, type InventoryCategory } from '@/lib/inventory';
+import { ChevronRight, CircleDashed, CircleDot, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { PCB_GROUPS, type InventoryCategory } from '@/lib/inventory';
 
 interface ChartProps {
   /** Null when the category cannot be classified (no PCBs concentration in its template). */
@@ -32,18 +32,16 @@ export interface Pre1997Donut {
 }
 
 export interface RiskCounts {
-  safe: number;
-  moderate: number;
+  below50: number;
   high: number;
   untested: number;
 }
 
-// Same bands and wording as the table's PCBs filter; ppm = konsentrasi PCBs in the KLHK template.
+// The groups of PCB_GROUPS (the 50 ppm Batas Konsentrasi, neutral words); ppm = konsentrasi PCBs in the KLHK template.
 export const RISK_CLASSES: { key: keyof RiskCounts; label: string; range: string; color: string; icon: LucideIcon; iconClass: string }[] = [
-  { key: 'safe', ...PCB_CLASSES.safe, color: '#059669', icon: ShieldCheck, iconClass: 'text-emerald-600' },
-  { key: 'moderate', ...PCB_CLASSES.moderate, color: '#f59e0b', icon: TriangleAlert, iconClass: 'text-amber-600' },
-  { key: 'high', ...PCB_CLASSES.high, color: '#e11d48', icon: OctagonAlert, iconClass: 'text-rose-600' },
-  { key: 'untested', label: 'Belum diuji', range: 'konsentrasi kosong', color: '#b4b2a9', icon: CircleDashed, iconClass: 'text-slate-400' },
+  { key: 'below50', ...PCB_GROUPS.below50, icon: CircleDot, iconClass: 'text-slate-500' },
+  { key: 'high', ...PCB_GROUPS.high, icon: TriangleAlert, iconClass: 'text-orange-700' },
+  { key: 'untested', ...PCB_GROUPS.untested, icon: CircleDashed, iconClass: 'text-slate-400' },
 ];
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
@@ -167,9 +165,9 @@ function RiskProportion({ title, subtitle, emptyText, counts, footnote, loading,
 function RiskNotMeasured() {
   return (
     <div className="flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-      <h3 className="text-base font-bold text-slate-900">Status Risiko PCBs</h3>
+      <h3 className="text-base font-bold text-slate-900">Hasil Uji PCBs</h3>
       <div className="mt-4 flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-6 py-10 text-center text-xs text-slate-500">
-        Template tidak memuat kolom konsentrasi PCBs, jadi status risikonya tidak dapat ditentukan.
+        Template tidak memuat kolom konsentrasi PCBs, jadi hasil ujinya tidak dapat dikelompokkan.
       </div>
     </div>
   );
@@ -188,19 +186,19 @@ function CardHeader({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-const FINDING_CLASSES = RISK_CLASSES.filter((risk) => risk.key === 'moderate' || risk.key === 'high');
+const FINDING_CLASSES = RISK_CLASSES.filter((risk) => risk.key !== 'untested');
 
 /**
- * PCBs found (≥ 2 ppm) among the tested transformers made before 1997, per
- * type. The share is of the tested units, which the donuts above (shares of
- * every unit, untested included) do not show.
+ * The test results of the tested transformers made before 1997, per type:
+ * the share at the 50 ppm Batas Konsentrasi or more is of the tested units,
+ * which the donuts above (shares of every unit, untested included) do not show.
  */
 function Findings({ entries, loading }: { entries: Pre1997Donut[]; loading?: boolean }) {
   return (
     <div className={CARD_CLASS}>
       <CardHeader
-        title="Temuan PCBs ≥ 2 ppm · Trafo < 1997"
-        subtitle="Dihitung dari trafo buatan sebelum 1997 yang sudah diuji, bukan dari semua trafo · batas 50 ppm mengacu pada Permen LHK 29/2020 (50 ppm atau lebih mengandung PCBs)"
+        title="Hasil Uji ≥ 50 ppm · Trafo < 1997"
+        subtitle="Dihitung dari trafo buatan sebelum 1997 yang sudah diuji, bukan dari semua trafo · batas konsentrasi 50 ppm mengacu pada Permen LHK 29/2020"
       />
       {loading ? (
         <div className="h-32 animate-pulse rounded-xl bg-slate-100" />
@@ -208,7 +206,7 @@ function Findings({ entries, loading }: { entries: Pre1997Donut[]; loading?: boo
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {entries.map((entry, index) => {
             const tested = totalOf(entry.counts) - entry.counts.untested;
-            const found = entry.counts.moderate + entry.counts.high;
+            const found = entry.counts.high;
             return (
               <div key={index} className="rounded-xl border border-slate-200 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -216,7 +214,7 @@ function Findings({ entries, loading }: { entries: Pre1997Donut[]; loading?: boo
                   {tested > 0 && (
                     <span className="text-right">
                       <span className="block text-2xl font-semibold tabular-nums text-slate-900">{formatPercent((found / tested) * 100)}</span>
-                      <span className="text-[11px] text-slate-500">{formatNumber(found)} temuan dari {formatNumber(tested)} yang sudah diuji</span>
+                      <span className="text-[11px] text-slate-500">{formatNumber(found)} dari {formatNumber(tested)} yang sudah diuji</span>
                     </span>
                   )}
                 </div>
@@ -264,12 +262,12 @@ export default function DashboardCharts({ riskCounts, riskFootnote, loading, onS
   const subtitle = 'Pengelompokan berdasarkan konsentrasi PCBs (ppm) hasil uji';
   const stackWide = (pre1997?.length ?? 0) > 1;
   const donut = riskCounts
-    ? <RiskProportion title="Proporsi Status Risiko PCBs Keseluruhan" subtitle={subtitle} emptyText="Belum ada data inventaris." counts={riskCounts} footnote={riskFootnote} loading={loading} onSelectRisk={onSelectRisk && ((risk) => onSelectRisk(risk))} stackWide={stackWide} />
+    ? <RiskProportion title="Proporsi Hasil Uji PCBs Keseluruhan" subtitle={subtitle} emptyText="Belum ada data inventaris." counts={riskCounts} footnote={riskFootnote} loading={loading} onSelectRisk={onSelectRisk && ((risk) => onSelectRisk(risk))} stackWide={stackWide} />
     : <RiskNotMeasured />;
   const pre1997Donuts = (pre1997 ?? []).map((entry, index) => (
     <RiskProportion
       key={index}
-      title={`Proporsi Status Risiko PCBs ${entry.title ?? 'Trafo'} < 1997`}
+      title={`Proporsi Hasil Uji PCBs ${entry.title ?? 'Trafo'} < 1997`}
       subtitle={entry.subtitle ?? 'Transformator dengan tahun produksi sebelum 1997'}
       emptyText="Belum ada transformator dengan tahun produksi sebelum 1997."
       counts={entry.counts}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronRight, FlaskConical, Zap, type LucideIcon } from 'lucide-react';
-import { getCategoryLabel } from '@/lib/inventory';
+import { PCB_GROUP_PARTS, getCategoryLabel } from '@/lib/inventory';
 import { PRE_1997_FILTER, sumStats, type CategoryFilter, type CategoryStats, type InventoryFilters, type InventoryStats, type TestFilter } from '@/lib/inventory-query';
 import { RISK_CLASSES, formatPercent } from '@/components/DashboardCharts';
 
@@ -40,7 +40,7 @@ export default function TestMethodCard({ stats, loading, onSelect }: {
   const categories = [scope];
   const sum = (key: keyof CategoryStats) => (stats ? sumStats(stats, categories, key) : 0);
   const methods = METHODS.map((method) => {
-    const counts = Object.fromEntries(TESTED_CLASSES.map((risk) => [risk.key, sum(`pre1997_${method.key}_${risk.key}` as keyof CategoryStats)])) as Record<TestedClass, number>;
+    const counts = Object.fromEntries(TESTED_CLASSES.map((risk) => [risk.key, PCB_GROUP_PARTS[risk.key].reduce((total, part) => total + sum(`pre1997_${method.key}_${part}` as keyof CategoryStats), 0)])) as Record<TestedClass, number>;
     return { ...method, counts, total: TESTED_CLASSES.reduce((total, risk) => total + counts[risk.key], 0) };
   });
   const tested = methods.reduce((total, method) => total + method.total, 0);

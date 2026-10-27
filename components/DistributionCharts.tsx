@@ -8,6 +8,7 @@ import type { InventoryCategory } from '@/lib/inventory';
 import { fetchInventoryCharts, type ChartFigures, type ChartGroup, type ChartYearBand, type DashboardScope, type InventoryCharts, type InventoryFilters, type PcbRange } from '@/lib/inventory-query';
 import { RISK_CLASSES, formatPercent, niceMax, type RiskCounts } from '@/components/DashboardCharts';
 import { formatTons } from '@/components/TonnageCard';
+import { PCB_GROUP_PARTS } from '@/lib/inventory';
 
 type Measure = 'count' | 'weight';
 type RiskKey = keyof RiskCounts;
@@ -16,7 +17,9 @@ type RiskKey = keyof RiskCounts;
 const MAX_GROUPS = 12;
 
 const formatNumber = (value: number) => value.toLocaleString('id-ID');
-const valueOf = (figures: ChartFigures, risk: RiskKey, measure: Measure) => (measure === 'count' ? figures[risk] : figures[`${risk}_kg`]);
+// A group adds up the data's classes it is made of (< 50 ppm: < 2 and 2 – < 50).
+const valueOf = (figures: ChartFigures, risk: RiskKey, measure: Measure) =>
+  PCB_GROUP_PARTS[risk].reduce((sum, part) => sum + (measure === 'count' ? figures[part] : figures[`${part}_kg`]), 0);
 const totalOf = (figures: ChartFigures, measure: Measure) => RISK_CLASSES.reduce((sum, risk) => sum + valueOf(figures, risk.key, measure), 0);
 const formatValue = (value: number, measure: Measure) => (measure === 'count' ? `${formatNumber(value)} unit` : `${formatTons(value)} t`);
 
@@ -275,7 +278,7 @@ export default function DistributionCharts({ scope, category, reloadKey, onSelec
       <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div>
           <h3 className="text-base font-bold text-slate-900">Sebaran Transformator</h3>
-          <p className="text-xs font-medium text-slate-500">Per {levelLabel.toLowerCase()} dan per tahun produksi, dipecah menurut status risiko PCBs{clickHint}</p>
+          <p className="text-xs font-medium text-slate-500">Per {levelLabel.toLowerCase()} dan per tahun produksi, dipecah menurut hasil uji PCBs{clickHint}</p>
         </div>
         <div role="group" aria-label="Ukuran" className="flex shrink-0 rounded-lg border border-slate-200 p-0.5 text-xs font-semibold">
           {(['count', 'weight'] as const).map((option) => (
