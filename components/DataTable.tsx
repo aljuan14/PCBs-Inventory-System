@@ -940,7 +940,7 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600"><Trash2 className="h-5 w-5" /></div>
               <div className="min-w-0">
                 <h4 id="delete-inventory-title" className="text-base font-bold text-slate-900">Hapus data ini?</h4>
-                <p id="delete-inventory-desc" className="mt-1 text-xs text-slate-500">Data akan dihapus permanen dari database dan tidak bisa dikembalikan, kecuali dengan mengimpor ulang berkas Excel-nya.</p>
+                <p id="delete-inventory-desc" className="mt-1 text-xs text-slate-500">Data akan dihapus permanen dari database dan tidak bisa dikembalikan, kecuali dengan mengimpor ulang berkas Excel-nya.{deleting.type === 'transformator_digunakan' || deleting.type === 'transformator_tidak_digunakan' ? ' Rencana roadmap trafo ini, bila ada, ikut terhapus.' : ''}</p>
               </div>
             </div>
             <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">

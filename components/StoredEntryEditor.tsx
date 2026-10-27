@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import FormEditor from '@/components/FormEditor';
 import { alertDialog, confirmDialog } from '@/components/Dialog';
-import { answerOf, fieldErrors, formFields, formSpec, type FormEntry } from '@/lib/form-fields';
+import { answerOf, fieldErrors, formFields, formSpec, isTrafo, type FormEntry } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import type { createClient } from '@/lib/supabase/client';
 
@@ -61,7 +61,7 @@ export function StoredEntryEditor({ category, row, onClose, onSaved }: { categor
 /** Deletes a stored row after asking; true when it is gone. */
 export async function removeStoredEntry(supabase: ReturnType<typeof createClient>, category: InventoryCategory, row: StoredRow): Promise<boolean> {
   const name = text(category === 'minyak_dielektrik' ? row.merek_minyak_dielektrik : row.nama_merek) || 'data ini';
-  if (!(await confirmDialog({ title: `Hapus ${name}${row.nomor_serial ? ` (${row.nomor_serial})` : ''}?`, message: 'Data ini dihapus dari formulir dan tidak dapat dibatalkan.', tone: 'danger', confirmLabel: 'Hapus' }))) return false;
+  if (!(await confirmDialog({ title: `Hapus ${name}${row.nomor_serial ? ` (${row.nomor_serial})` : ''}?`, message: isTrafo(category) ? 'Data ini dihapus dari formulir, beserta rencana roadmap-nya bila ada, dan tidak dapat dibatalkan.' : 'Data ini dihapus dari formulir dan tidak dapat dibatalkan.', tone: 'danger', confirmLabel: 'Hapus' }))) return false;
   const { error, count } = await supabase.from(category).delete({ count: 'exact' }).eq('id', row.id);
   if (error || count === 0) {
     await alertDialog({ title: 'Gagal menghapus', message: error?.message ?? 'Data tidak ditemukan; mungkin sudah dihapus.' });
