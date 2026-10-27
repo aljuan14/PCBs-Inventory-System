@@ -33,14 +33,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ summary });
     }
 
-    const { summary, batchId, imported, skipped, replacedRows } = await importCompanyUpload(supabase, { companyId, category, path, fileName, mode });
+    const { summary, batchId, imported, skipped, replacedRows, plansKept, plansLost } = await importCompanyUpload(supabase, { companyId, category, path, fileName, mode });
     // The data is in; this row is the upload's place in the history.
     const { data, error } = await supabase.from('unggahan_perusahaan').insert({
       company_id: companyId, kategori: category, mode, nama_file: fileName, file_path: path, sheet_name: summary.sheetName, ringkasan: summary,
       status: 'diterima', import_batch_id: batchId,
     }).select('id').single();
     if (error) console.error('Company upload saved, history row failed:', error.message);
-    return NextResponse.json({ id: data?.id, summary, imported, skipped, replacedRows });
+    return NextResponse.json({ id: data?.id, summary, imported, skipped, replacedRows, plansKept, plansLost });
   } catch (err) {
     if (err instanceof UploadCheckError) return NextResponse.json({ error: err.message }, { status: 400 });
     console.error('Company upload error:', err);

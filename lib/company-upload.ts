@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseSheet, readWorkbook } from '@/lib/excel';
 import { buildSuggestedMapping, detectSheet } from '@/lib/import-profiles';
 import { buildCheckReport, checkMappings, findRowsInDatabase, insertBatchRows, transformRows, type LoadedSheet, type TransformedRow } from '@/lib/import-transform';
-import { formSpec } from '@/lib/form-fields';
+import { TRAFO_FOCUS_YEAR, formSpec, isTrafo } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import type { SampleRow, UploadMode, UploadSummary } from '@/lib/company-upload-shared';
 import { downloadWorkbook } from '@/lib/upload-store';
@@ -92,6 +92,79 @@ export async function readCompanyUpload(supabase: SupabaseClient, input: { compa
   return { summary, sheet, mappings, transformed, existing };
 }
 
+type PlanRow = { id: string; item_id: string; jenis: string };
+type TrafoRow = { id: string; nama_merek: string | null; nomor_serial: string | null; tahun_pembuatan: number | null; uji_konsentrasi_ppm: number | null };
+
+const UNKNOWN_SERIAL = /^(tidak diketahui|tdk diketahui|-|n\/a)?$/i;
+const identity = (row: TrafoRow) => {
+  const serial = (row.nomor_serial ?? '').trim().toLowerCase();
+  return UNKNOWN_SERIAL.test(serial) ? null : `${(row.nama_merek ?? '').trim().toLowerCase()}|${serial}`;
+};
+// What the roadmap asks of a transformer, as company_focus_transformers decides it (migration 20261020000001).
+const needOf = (category: InventoryCategory, row: TrafoRow) => {
+  if (row.tahun_pembuatan !== null && row.tahun_pembuatan >= TRAFO_FOCUS_YEAR) return null;
+  if (category === 'transformator_tidak_digunakan') return 'pengelolaan';
+  return row.uji_konsentrasi_ppm === null ? 'uji' : row.uji_konsentrasi_ppm >= 50 ? 'penanganan' : null;
+};
+
+async function allRows<T>(load: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) {
+  const rows: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await load(from, from + 999);
+    if (error) throw new Error(error.message);
+    rows.push(...(data ?? []));
+    if (!data || data.length < 1000) return rows;
+  }
+}
+
+/**
+ * Before "ganti" deletes a company's transformers (and, by trigger, their
+ * roadmap plans; migration 20261027000002), each plan moves to the new row of
+ * the same brand and serial number, when that pairing is one to one and the
+ * new row still needs the same thing. Rows without a serial number cannot be
+ * told apart, so their plans go. Returns how many plans moved and went.
+ */
+async function carryPlans(supabase: SupabaseClient, category: InventoryCategory, companyId: string, batchId: string) {
+  const columns = 'id, nama_merek, nomor_serial, tahun_pembuatan, uji_konsentrasi_ppm';
+  const [fresh, old] = await Promise.all([
+    allRows<TrafoRow>((from, to) => supabase.from(category).select(columns).eq('import_batch_id', batchId).range(from, to)),
+    allRows<TrafoRow>((from, to) => supabase.from(category).select(columns).eq('company_id', companyId).or(`import_batch_id.is.null,import_batch_id.neq.${batchId}`).range(from, to)),
+  ]);
+  const plans: PlanRow[] = [];
+  const oldIds = old.map((row) => row.id);
+  for (let at = 0; at < oldIds.length; at += 300) {
+    plans.push(...await allRows<PlanRow>((from, to) => supabase.from('equipment_plans').select('id, item_id, jenis').in('item_id', oldIds.slice(at, at + 300)).range(from, to)));
+  }
+  if (plans.length === 0) return { kept: 0, lost: 0 };
+
+  // Only a brand and serial found once on each side pairs two rows.
+  const byKey = (rows: TrafoRow[]) => {
+    const found = new Map<string, TrafoRow | null>();
+    for (const row of rows) {
+      const key = identity(row);
+      if (key) found.set(key, found.has(key) ? null : row);
+    }
+    return found;
+  };
+  const freshByKey = byKey(fresh);
+  const oldByKey = byKey(old);
+  const target = new Map<string, TrafoRow>();
+  for (const [key, row] of oldByKey) {
+    const match = freshByKey.get(key);
+    if (row && match) target.set(row.id, match);
+  }
+
+  let kept = 0;
+  for (const plan of plans) {
+    const match = target.get(plan.item_id);
+    if (!match || needOf(category, match) !== plan.jenis) continue;
+    const { error } = await supabase.from('equipment_plans').update({ item_id: match.id, kategori: category }).eq('id', plan.id);
+    if (error) throw new Error(`Gagal memindahkan rencana roadmap: ${error.message}`);
+    kept++;
+  }
+  return { kept, lost: plans.length - kept };
+}
+
 /**
  * Reads the file again and imports it like an admin upload, as one import
  * batch; "ganti" then removes every other row of the company for that form.
@@ -118,7 +191,17 @@ export async function importCompanyUpload(supabase: SupabaseClient, input: { com
 
   // "ganti": the company's other rows of this form go only once the new ones are in.
   let replacedRows = 0;
+  let plans = { kept: 0, lost: 0 };
   if (input.mode === 'ganti') {
+    if (isTrafo(input.category)) {
+      try {
+        plans = await carryPlans(supabase, input.category, batch.company_id, batch.id);
+      } catch (err) {
+        await supabase.from(input.category).delete().eq('import_batch_id', batch.id);
+        await supabase.from('import_batches').delete().eq('id', batch.id);
+        throw new Error(`${err instanceof Error ? err.message : String(err)}. Tidak ada data yang berubah.`);
+      }
+    }
     const { count, error: deleteError } = await supabase.from(input.category).delete({ count: 'exact' }).eq('company_id', batch.company_id).or(`import_batch_id.is.null,import_batch_id.neq.${batch.id}`);
     if (deleteError) {
       await supabase.from(input.category).delete().eq('import_batch_id', batch.id);
@@ -132,5 +215,5 @@ export async function importCompanyUpload(supabase: SupabaseClient, input: { com
 
   const report = buildCheckReport(transformed, rows.length, mappings);
   await supabase.from('import_batches').update({ status: 'imported', laporan_pemeriksaan: report }).eq('id', batch.id);
-  return { summary, batchId: batch.id, imported: rows.length, skipped: transformed.rows.length - rows.length, replacedRows };
+  return { summary, batchId: batch.id, imported: rows.length, skipped: transformed.rows.length - rows.length, replacedRows, plansKept: plans.kept, plansLost: plans.lost };
 }

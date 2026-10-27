@@ -119,7 +119,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
     const response = await fetch('/api/unggahan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error ?? 'Gagal memeriksa berkas.');
-    return result as { id?: string; summary: UploadSummary; imported?: number; skipped?: number; replacedRows?: number };
+    return result as { id?: string; summary: UploadSummary; imported?: number; skipped?: number; replacedRows?: number; plansKept?: number; plansLost?: number };
   };
 
   // The file goes to the company's folder, then the server reads it from there (no request size limit).
@@ -167,7 +167,7 @@ export default function InventoryUpload({ companyId, category, readOnly = false,
     setError(null);
     try {
       const result = await call({ companyId, category, path: checked.path, fileName: checked.fileName, mode, send: true });
-      setDone(`${fmt(result.imported ?? 0)} baris dari ${checked.fileName} tersimpan${result.skipped ? `, ${fmt(result.skipped)} sudah ada dan dilewati` : ''}${result.replacedRows ? `, ${fmt(result.replacedRows)} data lama diganti` : ''}.`);
+      setDone(`${fmt(result.imported ?? 0)} baris dari ${checked.fileName} tersimpan${result.skipped ? `, ${fmt(result.skipped)} sudah ada dan dilewati` : ''}${result.replacedRows ? `, ${fmt(result.replacedRows)} data lama diganti` : ''}.${result.plansKept ? ` Rencana roadmap ${fmt(result.plansKept)} trafo tetap tersimpan.` : ''}${result.plansLost ? ` ${fmt(result.plansLost)} rencana roadmap terhapus (trafonya tidak ada lagi, tanpa nomor serial, atau kebutuhannya berubah); isi ulang di menu Roadmap.` : ''}`);
       setChecked(null);
       setFile(null);
       setReload((value) => value + 1);
