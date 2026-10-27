@@ -190,7 +190,7 @@ function YearSplit({ stats, declared, onSelect }: { stats: InventoryStats | null
  * switch shows either the ones made before 1997 or all of them; those
  * without a production year follow as their own row, to be filled in.
  */
-export default function TonnageCard({ stats, scope, loading, onSelect, supabase, companyId = null, unitPicked = false, reloadKey = 0 }: {
+export default function TonnageCard({ stats, scope, loading, onSelect, supabase, companyId = null, unitPicked = false, reloadKey = 0, totalsOnly = false }: {
   stats: InventoryStats | null;
   /** The dashboard's production-year switch. */
   scope: YearScope;
@@ -201,6 +201,8 @@ export default function TonnageCard({ stats, scope, loading, onSelect, supabase,
   companyId?: string | null;
   unitPicked?: boolean;
   reloadKey?: number;
+  /** The totals alone, without the year split and the charts (a company's own page). */
+  totalsOnly?: boolean;
 }) {
   const declared = useDeclared(supabase, companyId, unitPicked, reloadKey);
   const band: Band = scope;
@@ -234,7 +236,7 @@ export default function TonnageCard({ stats, scope, loading, onSelect, supabase,
         <div className="rounded-xl border border-dashed border-slate-200 px-6 py-8 text-center text-xs text-slate-500">Belum ada berat yang tercatat untuk transformator.</div>
       ) : (
         <div className="space-y-4">
-          <YearSplit stats={stats} declared={declared} onSelect={onSelect} />
+          {!totalsOnly && <YearSplit stats={stats} declared={declared} onSelect={onSelect} />}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {tiles.map((tile) => (
@@ -254,6 +256,7 @@ export default function TonnageCard({ stats, scope, loading, onSelect, supabase,
             ))}
           </div>
 
+          {!totalsOnly && <>
           <ul className="flex flex-wrap gap-x-4 gap-y-1.5 pt-2">
             {LEVELS.map((level) => (
               <li key={level.key} className="flex items-center gap-1.5 text-[11px] text-slate-600">
@@ -274,11 +277,12 @@ export default function TonnageCard({ stats, scope, loading, onSelect, supabase,
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {TRAFO_CATEGORIES.map((category) => <TonnageColumns key={category} stats={stats} category={category} band="noyear" onSelect={onSelect} />)}
           </div>
+          </>}
         </div>
       )}
       {!loading && weighed > 0 && (
         <p className="mt-4 text-[11px] text-slate-400">
-          Grafik memakai skala logaritmik: garis bantu bernilai 1, 10, 100, … ton, jadi bandingkan angkanya, bukan tinggi kolomnya.
+          {!totalsOnly && 'Grafik memakai skala logaritmik: garis bantu bernilai 1, 10, 100, … ton, jadi bandingkan angkanya, bukan tinggi kolomnya. '}
           Dihitung dari {weighed.toLocaleString('id-ID')} dari {units.toLocaleString('id-ID')} trafo ({formatPercent(share(weighed, units))}) yang beratnya tercatat; berat 0 di formulir dianggap kosong.
         </p>
       )}
