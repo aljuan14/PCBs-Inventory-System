@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CheckCircle2, ClipboardList, Download, FileSpreadsheet, Info, Upload } from 'lucide-react';
+import { ClipboardList, Download, FileSpreadsheet, Info, Upload } from 'lucide-react';
 import { PortalHeader, useCompanyPortal } from '@/components/company/CompanyPortal';
 import { INVENTORY_CATEGORIES } from '@/lib/inventory';
 import { TEMPLATE_FILES } from '@/lib/templates';
@@ -13,16 +13,14 @@ const GROUPS = [
   {
     title: 'Inventarisasi',
     description: 'Formulir 1.1–1.4: peralatan yang dimiliki perusahaan.',
-    after: 'langsung tersimpan',
     files: TEMPLATE_FILES.filter((entry) => isInventory(entry.form)),
-    tone: { icon: 'bg-emerald-50 text-emerald-700', code: 'bg-emerald-50 text-emerald-800', download: 'border-emerald-200 bg-white text-emerald-800 hover:border-emerald-600 hover:bg-emerald-700 hover:text-white', badge: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+    tone: { icon: 'bg-emerald-50 text-emerald-700', code: 'bg-emerald-50 text-emerald-800', download: 'border-emerald-200 bg-white text-emerald-800 hover:border-emerald-600 hover:bg-emerald-700 hover:text-white' },
   },
   {
     title: 'Pengelolaan',
     description: 'Formulir 2–5: perawatan, penyimpanan, pengolahan, dan neraca limbah PCBs.',
-    after: 'langsung tersimpan',
     files: TEMPLATE_FILES.filter((entry) => !isInventory(entry.form)),
-    tone: { icon: 'bg-sky-50 text-sky-700', code: 'bg-sky-50 text-sky-800', download: 'border-sky-200 bg-white text-sky-800 hover:border-sky-600 hover:bg-sky-700 hover:text-white', badge: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+    tone: { icon: 'bg-sky-50 text-sky-700', code: 'bg-sky-50 text-sky-800', download: 'border-sky-200 bg-white text-sky-800 hover:border-sky-600 hover:bg-sky-700 hover:text-white' },
   },
 ];
 
@@ -66,7 +64,6 @@ export default function CompanyTemplates() {
                 <p className="text-xs text-slate-500">{group.description}</p>
               </div>
             </div>
-            <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${group.tone.badge}`}><CheckCircle2 className="h-3.5 w-3.5" /> Setelah diunggah: {group.after}</span>
           </header>
           <ul className="divide-y divide-slate-100">
             {group.files.map((entry) => (
@@ -83,7 +80,7 @@ export default function CompanyTemplates() {
         </section>
       ))}
 
-      <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-slate-500"><Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><span>Baris contoh di template (bertanda CONTOH) tidak ikut terbaca. Jangan memindah, menghapus, atau mengganti nama kolom, karena sistem mengenali kolom dari judulnya. Status unggahan formulir 1.1–1.4 terlihat di menu <Link href={href('/unggah')} className="font-semibold text-emerald-700 hover:underline">Riwayat unggahan</Link>.</span></p>
+      <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-slate-500"><Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><span>Baris contoh di template (bertanda CONTOH) tidak ikut terbaca. Jangan memindah, menghapus, atau mengganti nama kolom, karena sistem mengenali kolom dari judulnya. Status unggahan formulir 1.1–1.4 terlihat di menu <Link href={href('/unggah')} className="font-semibold text-emerald-700 hover:underline">Riwayat data masuk</Link>.</span></p>
     </>
   );
 }

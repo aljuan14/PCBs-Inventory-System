@@ -331,9 +331,6 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, need: { need: 
               <span className="font-semibold text-slate-800">{fmt(planned)} dari {fmt(total)} trafo sudah punya rencana</span>
               {open ? <span className="font-semibold text-rose-700">{fmt(open)} belum diisi</span> : <span className="flex items-center gap-1 font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Semua sudah diisi</span>}
             </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-              <div className={`h-full rounded-full ${open ? 'bg-amber-500' : 'bg-emerald-600'}`} style={{ width: `${(planned / total) * 100}%` }} />
-            </div>
           </div>
         )}
 

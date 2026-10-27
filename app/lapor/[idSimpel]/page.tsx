@@ -15,7 +15,7 @@ import { UPLOAD_STATUS } from '@/components/InventoryUpload';
 import { declaresNone, type StatusTarget } from '@/lib/company-pcb-status';
 import { formSpec } from '@/lib/form-fields';
 import { INVENTORY_CATEGORIES, type InventoryCategory } from '@/lib/inventory';
-import { fetchInventoryStats, sumStats, type CategoryFilter, type InventoryFilters, type InventoryStats, type YearScope } from '@/lib/inventory-query';
+import { fetchInventoryStats, mapPointFilter, sumStats, type CategoryFilter, type InventoryFilters, type InventoryStats, type YearScope } from '@/lib/inventory-query';
 
 // Leaflet needs the window.
 const MapLeaflet = dynamic(() => import('@/components/MapLeaflet'), { ssr: false });
@@ -159,7 +159,7 @@ export default function CompanyHome() {
               </span>
             </button>
           )}
-          <MapLeaflet supabase={supabase} companies={[{ id: company.id, name: company.nama_perusahaan }]} scope={scope} onScopeChange={keepScope} fixedCompany height="380px" />
+          <MapLeaflet supabase={supabase} companies={[{ id: company.id, name: company.nama_perusahaan }]} scope={scope} onScopeChange={keepScope} fixedCompany height="380px" onSelectPoint={(selected) => showRows({ mapPoint: mapPointFilter(selected) })} />
         </section>
       )}
       {loaded !== null && total === 0 && <CompanyStatementCard supabase={supabase} companyId={company.id} reloadKey={answered} onStatement={setStatement} onSaved={() => setAnswered((key) => key + 1)} />}
