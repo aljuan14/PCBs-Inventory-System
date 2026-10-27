@@ -389,6 +389,7 @@ export function issueTableFilter(key: string, label: string): Partial<InventoryF
   if (key.startsWith('missing:')) return MISSING_FINDINGS[key] ?? null;
   // Not kept with the row: read from the workbook (test: findings are only reported).
   if (key.startsWith('duplicate:') || key.startsWith('skipped:') || key.startsWith('test:')) return null;
+  if (key === 'year:from1997') return { yearRange: 'from1997' };
   return { note: { kode: key, label } };
 }
 

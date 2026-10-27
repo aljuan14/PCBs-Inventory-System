@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseExcelWithSmartHeader } from '@/lib/excel';
 import { parseDMSCoordinate, repairIndonesianCoordinate } from '@/lib/dms';
 import { INVENTORY_FIELDS, WEIGHT_FIELDS, type InventoryCategory } from '@/lib/inventory';
+import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
 import { applyDerivedFields, convertValue, getDerivedFields, hasIdentity, IGNORE, isExampleRow, isMeaningful, recordMask } from '@/lib/import-profiles';
 import { downloadWorkbook } from '@/lib/upload-store';
 import { resolveUnit, tidyUnitName, type UnitContext } from '@/lib/units';
@@ -492,6 +493,10 @@ export function transformRows(
         found.push(['test:no_result', 'warning', 'Hasil uji tidak lengkap: konsentrasi PCBs kosong, trafo dianggap belum diuji', rowNumber]);
       } else if (filled('uji_konsentrasi_ppm') && !filled('uji_jenis')) {
         found.push(['test:no_kind', 'info', 'Jenis uji kosong: isi uji cepat atau uji lab', rowNumber]);
+      }
+      // Kept (its weight counts), but the roadmap is for transformers made before 1997 only, which the form alone enforces.
+      if (typeof item.tahun_pembuatan === 'number' && item.tahun_pembuatan >= TRAFO_FOCUS_YEAR) {
+        found.push(['year:from1997', 'info', `Trafo buatan ${TRAFO_FOCUS_YEAR} ke atas: tidak masuk Roadmap (Roadmap hanya untuk trafo buatan sebelum ${TRAFO_FOCUS_YEAR})`, rowNumber]);
       }
     }
 
