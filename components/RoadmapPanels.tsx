@@ -26,7 +26,7 @@ const PAGE = 100;
 const BATCH = 1000;
 const today = () => new Date().toISOString().slice(0, 10);
 const fmt = (value: number) => value.toLocaleString('id-ID');
-const FILTERS = [['all', 'Semua'], ['noplan', 'Belum diisi'], ['late', 'Terlambat']] as const;
+const FILTERS = [['all', 'Semua'], ['noplan', 'Belum diisi'], ['planned', 'Sudah diisi'], ['late', 'Terlambat']] as const;
 type Filter = (typeof FILTERS)[number][0];
 const MONTHS = Array.from({ length: 12 }, (_, index) => new Date(2000, index, 1).toLocaleDateString('id-ID', { month: 'long' }));
 const thisYear = new Date().getFullYear();
@@ -55,6 +55,8 @@ const NEEDS: Array<{ need: Need; title: string; text: string; none: string }> = 
 function focusQuery(supabase: SupabaseClient, companyId: string, need: Need, filter: Filter, columns = '*', options?: { count: 'exact'; head: true }) {
   let request = supabase.rpc('company_focus_transformers', { p_company_id: companyId }, options).select(columns).eq('kebutuhan', need);
   if (filter === 'noplan') request = request.is('rencana_tanggal', null);
+  // Every plan, late or done ones included.
+  if (filter === 'planned') request = request.not('rencana_tanggal', 'is', null);
   if (filter === 'late') request = request.lt('rencana_tanggal', today()).is('rencana_selesai', null);
   return request;
 }
@@ -339,7 +341,7 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, need: { need: 
           <div role="group" aria-label="Tampilkan" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
             {FILTERS.map(([key, label]) => {
               const value = count(key);
-              const alarming = key !== 'all' && value;
+              const alarming = (key === 'noplan' || key === 'late') && value;
               return (
                 <button key={key} type="button" aria-pressed={filter === key} onClick={() => { setFilter(key); setLimit(PAGE); setPicked(new Map()); }}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${filter === key ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}>
@@ -385,7 +387,7 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, need: { need: 
       </div>
 
       {list === null ? <p className="flex items-center gap-2 p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>
-        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo yang ${title.toLowerCase()}.` : filter === 'noplan' ? 'Semua trafo sudah punya rencana.' : 'Tidak ada rencana yang terlambat.'}</p> : (
+        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo yang ${title.toLowerCase()}.` : filter === 'noplan' ? 'Semua trafo sudah punya rencana.' : filter === 'planned' ? 'Belum ada trafo yang diisi rencananya.' : 'Tidak ada rencana yang terlambat.'}</p> : (
           <div className="px-5 py-4">
             {picking && allShownPicked && filterTotal > list.length && picked.size < filterTotal && (
               <p className="mb-3 rounded-xl bg-slate-50 px-4 py-2 text-xs text-slate-600">
