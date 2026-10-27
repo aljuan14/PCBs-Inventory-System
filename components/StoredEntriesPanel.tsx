@@ -32,10 +32,13 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
   useEffect(() => {
     let active = true;
     const timer = setTimeout(() => {
-      let request = supabase.from(category).select('*', { count: 'exact' }).eq('company_id', companyId);
+      // The batch's profile tells a row from an Excel file (its own "No." and row) from one typed in the form.
+      let request = supabase.from(category).select('*, import_batches(profile)', { count: 'exact' }).eq('company_id', companyId);
       const columns = oil ? ['merek_minyak_dielektrik', 'lokasi_penyimpanan', 'unit', 'kode_alat'] : ['nama_merek', 'nomor_serial', 'lokasi_peralatan', 'unit', 'kode_alat'];
       if (term) request = request.or(columns.map((column) => `${column}.ilike.%${term}%`).join(','));
-      request.order('no').range(0, limit - 1).then(({ data, count }) => {
+      // In the order they came in: upload by upload, each in its Excel order. The "No." column of a
+      // company's file restarts per plant or section, so it does not order the list.
+      request.order('created_at').order('baris_excel', { nullsFirst: false }).order('id').range(0, limit - 1).then(({ data, count }) => {
         if (active) setResult({ key, rows: (data ?? []) as Row[], total: count ?? 0 });
       });
     }, term ? 250 : 0);
@@ -76,14 +79,18 @@ export default function StoredEntriesPanel({ companyId, category, refreshKey, on
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-xs">
               <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <tr><th className="w-12 px-3 py-2.5">No</th>{columns.map(([column, label]) => <th key={column} className="px-3 py-2.5">{label}</th>)}{!oil && category !== 'kapasitor' && <th className="px-3 py-2.5">ppm</th>}<th className="w-20 px-3 py-2.5" /></tr>
+                <tr><th className="w-24 px-3 py-2.5">No</th>{columns.map(([column, label]) => <th key={column} className="px-3 py-2.5">{label}</th>)}{!oil && category !== 'kapasitor' && <th className="px-3 py-2.5">ppm</th>}<th className="w-20 px-3 py-2.5" /></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((row) => {
+                {rows.map((row, index) => {
                   const notes = Array.isArray(row.catatan_impor) ? row.catatan_impor.length : 0;
+                  const fromFile = (row.import_batches as { profile?: string } | null)?.profile !== 'formulir' && row.baris_excel !== null && row.baris_excel !== undefined;
                   return (
                     <tr key={row.id} className={editing?.id === row.id ? 'bg-emerald-50/50' : ''}>
-                      <td className="px-3 py-2.5 tabular-nums text-slate-400">{text(row.no)}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-slate-500">
+                        {index + 1}
+                        {fromFile && <span title="Nomor dan baris di berkas Excel yang diunggah" className="block whitespace-nowrap text-[10px] text-slate-400">Excel: no. {text(row.no) || '–'} · baris {text(row.baris_excel)}</span>}
+                      </td>
                       {columns.map(([column]) => <td key={column} className="max-w-48 truncate px-3 py-2.5 text-slate-800">{text(row[column]) || (column === 'tahun_pembuatan' ? <span className="text-amber-700">tidak ada</span> : '–')}</td>)}
                       {!oil && category !== 'kapasitor' && <td className="px-3 py-2.5 tabular-nums text-slate-700">{text(row.uji_konsentrasi_ppm) || '–'}</td>}
                       <td className="px-3 py-2.5">

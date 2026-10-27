@@ -48,7 +48,7 @@ export function StoredEntryEditor({ category, row, onClose, onSaved }: { categor
 
   return (
     <FormEditor key={row.id} sections={spec.sections} initial={entryOf(category, row)} validate={(entry) => fieldErrors(formFields(category), entry)}
-      title={`Ubah data no. ${text(row.no)}`} subtitle={`Formulir ${spec.code}: ${spec.title}`} saveLabel="Simpan perubahan" saving={saving} onSave={save} onCancel={onClose}
+      title={`Ubah data ${[text(category === 'minyak_dielektrik' ? row.merek_minyak_dielektrik : row.nama_merek), text(row.nomor_serial)].filter(Boolean).join(' · ') || 'ini'}`} subtitle={`Formulir ${spec.code}: ${spec.title}`} saveLabel="Simpan perubahan" saving={saving} onSave={save} onCancel={onClose}
       notice={errors.length > 0 && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900">
           <p className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-4 w-4" /> Perubahan belum tersimpan:</p>
