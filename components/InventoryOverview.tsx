@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { AlertTriangle, CalendarDays, RefreshCw, UploadCloud } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarDays, RefreshCw, UploadCloud } from 'lucide-react';
 import { ALL_SCOPE, mapPointFilter, type DashboardScope, type InventoryFilters, type YearScope } from '@/lib/inventory-query';
 import DataTable, { type EditableInventoryFields, type InventoryItem, type TablePreset } from '@/components/DataTable';
 import CompanyCheckCard from '@/components/CompanyCheckCard';
@@ -58,6 +58,30 @@ export default function InventoryOverview() {
   };
   // The web has no table, so figures and map points open nothing there.
 
+  // A transformer clicked on a company's roadmap (?company=…&trafo=…&nama=…): that company,
+  // the table showing the transformer alone, and a way back.
+  const [fromRoadmap, setFromRoadmap] = useState<string | null>(null);
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const company = query.get('company');
+    const trafo = query.get('trafo');
+    if (SUMMARY_MODE || !company || !trafo) return;
+    const frame = requestAnimationFrame(() => {
+      setFromRoadmap(company);
+      setScope({ ...ALL_SCOPE, companyId: company });
+      setTablePreset((prev) => ({ key: (prev?.key ?? 0) + 1, filters: { mapPoint: { ids: [trafo], label: `Dari Roadmap: ${query.get('nama') || 'trafo'}` } } }));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  // Brought into view once, when the company's figures above it have loaded.
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (!fromRoadmap || scrolled.current || loading) return;
+    scrolled.current = true;
+    const frame = requestAnimationFrame(() => tableRef.current?.scrollIntoView({ block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [fromRoadmap, loading]);
+
   return <div className="mx-auto max-w-7xl space-y-6 px-5 py-8 lg:px-8">
     <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Ringkasan nasional</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Dashboard nasional</h1><p className="mt-2 text-sm text-slate-500">Ringkasan inventarisasi PCBs seluruh kategori{scopeLabel ? <> untuk <span className="font-semibold text-slate-700">{scopeLabel}</span></> : ''}.</p></div><div className="flex gap-2"><button type="button" onClick={reload} disabled={refreshing} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Segarkan</button>{!SUMMARY_MODE && !readOnly && <a href="/upload" className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white"><UploadCloud className="h-4 w-4" /> Upload data</a>}</div></header>
     {SUMMARY_MODE && <SummaryStamp supabase={supabase} />}
@@ -80,6 +104,6 @@ export default function InventoryOverview() {
     <InventorySummary stats={stats} scope={years} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, category) => showRows(filters, category)} />
     <TonnageCard stats={stats} scope={years} loading={loading} onSelect={SUMMARY_MODE ? undefined : (filters, type) => showRows(filters, type)} supabase={supabase} companyId={scope.companyId} unitPicked={Boolean(scope.unit || scope.subUnit)} reloadKey={reloadKey} />
     </div>
-    {!SUMMARY_MODE && <div ref={tableRef} className="scroll-mt-6"><DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>}
+    {!SUMMARY_MODE && <div ref={tableRef} className="scroll-mt-6">{fromRoadmap && <a href={`/roadmap?company=${fromRoadmap}`} className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline"><ArrowLeft className="h-3.5 w-3.5" /> Kembali ke Roadmap</a>}<DataTable companies={companies} reloadKey={reloadKey} scope={scope} onScopeChange={setScope} preset={tablePreset} onEdit={handleEdit} onDelete={handleDelete} /></div>}
   </div>;
 }

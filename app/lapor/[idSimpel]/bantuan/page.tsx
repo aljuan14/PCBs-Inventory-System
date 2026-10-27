@@ -208,7 +208,7 @@ export default function CompanyHelp() {
             ))}
           </div>
           <ol className="list-decimal space-y-1 pl-5">
-            <li>Buka menu <Link href={href('/roadmap')} className={linkClass}>Roadmap</Link>. Ada tiga tabel: <b>Perlu retrofilling / ganti trafo</b> (masih digunakan, ≥ 50 ppm), <b>Perlu diuji</b> (masih digunakan, belum diuji), dan <b>Perlu dikelola</b> (tidak digunakan). Di setiap tabel, trafo yang belum punya rencana ada di paling atas.</li>
+            <li>Buka menu <Link href={href('/roadmap')} className={linkClass}>Roadmap</Link>. Ada tiga tabel: <b>Trafo masih digunakan yang perlu retrofilling / penggantian</b> (hasil uji ≥ 50 ppm), <b>Trafo masih digunakan yang belum diuji</b>, dan <b>Trafo tidak digunakan yang perlu dikelola</b>. Di setiap tabel, trafo yang belum punya rencana ada di paling atas.</li>
             <li>Klik <span className="font-semibold">Isi rencana</span> di kanan baris trafo, pilih bulan dan tahun, lalu klik Simpan rencana. Untuk mengubah, klik ikon pensil di samping rencananya.</li>
             <li>Untuk mengisi banyak trafo sekaligus dengan bulan yang sama, klik <span className="font-semibold">Isi semua yang belum diisi</span> atau <span className="font-semibold">Pilih beberapa trafo</span> di atas tabel.</li>
             <li>Setelah dilaksanakan: untuk uji dan penanganan, isi hasil uji terbarunya di formulir (status mengikuti hasil uji terakhir); untuk pengelolaan, klik <span className="font-semibold">Tandai selesai</span>.</li>

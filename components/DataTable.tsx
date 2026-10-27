@@ -540,8 +540,8 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
   const td = (column?: FocusColumn) => `py-3.5 px-4${column && focused(column) ? ' bg-emerald-50/50' : ''}`;
   // No and brand stay on the left and the actions on the right while scrolling;
   // their backgrounds are opaque so the scrolled columns pass underneath.
-  const STICKY_NO = 'sticky left-0 z-10 w-14 min-w-14';
-  const STICKY_NAME = 'sticky left-14 z-10 min-w-56 border-r border-slate-100';
+  const STICKY_NO = 'sticky left-0 z-10 w-20 min-w-20';
+  const STICKY_NAME = 'sticky left-20 z-10 min-w-56 border-r border-slate-100';
   const STICKY_ACTIONS = 'sticky right-0 z-10 border-l border-slate-100';
   const stickyCell = (column?: FocusColumn) => (column && focused(column) ? 'bg-emerald-50' : 'bg-inherit');
 
@@ -806,7 +806,11 @@ export default function DataTable({ category, companies, reloadKey = 0, scope, o
                   <Fragment key={item.id}>
                   {/* Every other row a faint grey, so a row reads straight across; opaque, as the sticky cells inherit it. */}
                   <tr key={item.id} className={`transition-colors hover:bg-slate-100 ${index % 2 ? 'bg-slate-50' : 'bg-white'}`}>
-                    <td className={`${td()} ${STICKY_NO} bg-inherit font-medium`}>{item.no ?? '-'}</td>
+                    {/* Its place in the list as sorted; the "No." of the company's file (which restarts per plant or section) under it. */}
+                    <td className={`${td()} ${STICKY_NO} bg-inherit font-medium tabular-nums`}>
+                      {index + 1}
+                      {item.no !== null && item.no !== undefined && <span title="Nomor pada berkas atau formulir asal" className="mt-0.5 block whitespace-nowrap text-[10px] font-normal text-slate-400">No. asal {item.no}</span>}
+                    </td>
                     <td className={`${td()} ${STICKY_NAME} ${stickyCell(focused('kode') ? 'kode' : 'merek')}`}>
                       <button type="button" onClick={() => toggleDetails(item)} className={`text-left font-bold hover:text-emerald-700 ${item.name ? 'text-slate-900' : 'italic text-slate-400'}`}>{item.name || 'Merek tidak tercatat'}</button>
                       {item.type !== 'minyak_dielektrik' && (

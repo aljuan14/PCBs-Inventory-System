@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import CompanyPicker from '@/components/CompanyPicker';
 import type { CompanyOption } from '@/components/DataTable';
-import RoadmapPanels from '@/components/RoadmapPanels';
+import RoadmapPanels, { roadmapRowQuery } from '@/components/RoadmapPanels';
 import { RoadmapSchedule } from '@/components/CompanyOverviewLists';
 import { readLastCompany, writeLastCompany } from '@/lib/last-company';
 import { TRAFO_FOCUS_YEAR } from '@/lib/form-fields';
@@ -52,7 +52,7 @@ function RoadmapContent() {
       </div>
       {!companyId && companies && <RoadmapSchedule supabase={supabase} companies={companies} onPick={pick} />}
       {companyId && (
-        <RoadmapPanels supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={reload} />
+        <RoadmapPanels supabase={supabase} companyId={companyId} reloadKey={reloadKey} onChange={reload} rowHref={(row) => `/?${new URLSearchParams({ company: companyId, ...roadmapRowQuery(row) })}`} />
       )}
     </div>
   );
