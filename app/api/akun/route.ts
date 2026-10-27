@@ -14,6 +14,7 @@ import { selectCompanies } from '@/lib/company-sort';
  * GET     the accounts with their role
  * POST    { email, password, peran, idSimpel? }  a new account
  *         { action: 'uji', password, reset? }    the test companies and accounts (lib/test-accounts)
+ *         { action: 'uji-ulang', idSimpel }      one test company back to its start, its account kept
  * PATCH   { userId, password?, peran?, idSimpel? }
  * DELETE  { userId }
  */
@@ -86,7 +87,8 @@ export async function GET() {
     return NextResponse.json({
       accounts,
       companies: [...names].map(([idSimpel, name]) => ({ idSimpel, name, lastEdited: edited.get(idSimpel) ?? null })),
-      scenarios: TEST_SCENARIOS.map(({ idSimpel, email, name, purpose }) => ({ idSimpel, email, name, purpose })),
+      // Empty at the start: the company's first page asks whether it owns transformers.
+      scenarios: TEST_SCENARIOS.map(({ idSimpel, email, name, purpose, seed, storage }) => ({ idSimpel, email, name, purpose, startsEmpty: Object.keys(seed).length === 0 && !storage?.length })),
     });
   });
 }
@@ -94,6 +96,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   if (body.action === 'uji') return handle((admin, caller) => createTestAccounts(admin, caller.supabase, body.password, Boolean(body.reset)));
+  if (body.action === 'uji-ulang') return handle((admin, caller) => resetTestCompany(admin, caller.supabase, String(body.idSimpel ?? '')));
   return handle(async (admin) => {
     const email = String(body.email ?? '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail('Email tidak valid.');
@@ -147,6 +150,34 @@ export async function DELETE(req: NextRequest) {
   });
 }
 
+/** A test company's rows, forms and letters removed, as "Ulang dari awal" does for all of them. */
+async function clearTestCompany(admin: SupabaseClient, supabase: SupabaseClient, companyId: string) {
+  const { data: letters } = await admin.storage.from('surat-pernyataan').list(companyId);
+  if (letters?.length) await admin.storage.from('surat-pernyataan').remove(letters.map((file) => `${companyId}/${file.name}`));
+  await deleteCompany(supabase, companyId);
+}
+
+/** Makes a test company as at the start: its scenario's rows and nothing else. Returns its id. */
+async function makeTestCompany(supabase: SupabaseClient, scenario: (typeof TEST_SCENARIOS)[number]) {
+  const { data, error } = await supabase.from('companies').insert({ nama_perusahaan: scenario.name, id_simpel: scenario.idSimpel }).select('id').single();
+  if (error || !data) throw new Error(`Gagal membuat ${scenario.name}: ${error?.message}`);
+  await seedTestCompany(supabase, data.id as string, scenario);
+  return data.id as string;
+}
+
+/**
+ * One test company back to its start (e.g. ZZ Uji C, to answer the first
+ * question again), the others and every account left as they are.
+ */
+async function resetTestCompany(admin: SupabaseClient, supabase: SupabaseClient, idSimpel: string) {
+  const scenario = TEST_SCENARIOS.find((entry) => entry.idSimpel === idSimpel);
+  if (!scenario) return fail('Perusahaan uji tidak dikenal.');
+  const { data: existing } = await admin.from('companies').select('id').eq('id_simpel', scenario.idSimpel);
+  for (const { id } of existing ?? []) await clearTestCompany(admin, supabase, id);
+  await makeTestCompany(supabase, scenario);
+  return NextResponse.json({ ok: true, name: scenario.name });
+}
+
 /**
  * Every test company with its account: made when missing, the password set
  * again when it exists. With reset the companies are removed first (data,
@@ -159,20 +190,8 @@ async function createTestAccounts(admin: SupabaseClient, supabase: SupabaseClien
   const done: string[] = [];
   for (const scenario of TEST_SCENARIOS) {
     const { data: existing } = await admin.from('companies').select('id').eq('id_simpel', scenario.idSimpel);
-    if (reset) {
-      for (const { id } of existing ?? []) {
-        const { data: letters } = await admin.storage.from('surat-pernyataan').list(id);
-        if (letters?.length) await admin.storage.from('surat-pernyataan').remove(letters.map((file) => `${id}/${file.name}`));
-        await deleteCompany(supabase, id);
-      }
-    }
-    let companyId = reset ? null : existing?.[0]?.id ?? null;
-    if (!companyId) {
-      const { data, error } = await supabase.from('companies').insert({ nama_perusahaan: scenario.name, id_simpel: scenario.idSimpel }).select('id').single();
-      if (error || !data) throw new Error(`Gagal membuat ${scenario.name}: ${error?.message}`);
-      companyId = data.id as string;
-      await seedTestCompany(supabase, companyId, scenario);
-    }
+    if (reset) for (const { id } of existing ?? []) await clearTestCompany(admin, supabase, id);
+    if (reset || !existing?.length) await makeTestCompany(supabase, scenario);
     let user = users.find((entry) => entry.email?.toLowerCase() === scenario.email);
     if (user) {
       const { error } = await admin.auth.admin.updateUserById(user.id, { password: password as string });

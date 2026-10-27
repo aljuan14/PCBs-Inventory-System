@@ -7,7 +7,7 @@ import type { AccountRow } from '@/app/api/akun/route';
 import { alertDialog, confirmDialog } from '@/components/Dialog';
 
 type Peran = 'admin' | 'pemantau' | 'perusahaan';
-type Scenario = { idSimpel: string; email: string; name: string; purpose: string };
+type Scenario = { idSimpel: string; email: string; name: string; purpose: string; startsEmpty: boolean };
 type Data = { accounts: AccountRow[]; companies: Array<{ idSimpel: string; name: string; lastEdited: string | null }>; scenarios: Scenario[] };
 
 const ROLES: Record<Peran, { label: string; help: string; badge: string }> = {
@@ -88,7 +88,8 @@ function NewAccount({ companies, onSaved }: { companies: Data['companies']; onSa
 
 function TestAccounts({ scenarios, accounts, onSaved }: { scenarios: Scenario[]; accounts: AccountRow[]; onSaved: () => void }) {
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState<'create' | 'reset' | null>(null);
+  // 'create', 'reset' (all), or the ID SIMPEL of the one test company being reset.
+  const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const emails = new Set(accounts.map((account) => account.email.toLowerCase()));
   const made = scenarios.filter((scenario) => emails.has(scenario.email)).length;
@@ -108,6 +109,22 @@ function TestAccounts({ scenarios, accounts, onSaved }: { scenarios: Scenario[];
     }
   };
 
+  // One test company back to its start (its data, forms and answers), the others and the passwords kept.
+  const resetOne = async (scenario: Scenario) => {
+    if (!(await confirmDialog({ title: `Ulang ${scenario.name}?`, message: 'Data, isian formulir, jawaban pertanyaan awal, dan surat pernyataan perusahaan uji ini dihapus lalu dibuat ulang seperti semula. Akunnya, passwordnya, dan perusahaan uji lain tidak berubah.', tone: 'danger', confirmLabel: 'Ulang', icon: RotateCcw }))) return;
+    setBusy(scenario.idSimpel);
+    setMessage(null);
+    try {
+      await call('POST', { action: 'uji-ulang', idSimpel: scenario.idSimpel });
+      setMessage({ ok: true, text: `${scenario.name} kembali seperti awal. Masuk sebagai ${scenario.email} untuk mencobanya.` });
+      onSaved();
+    } catch (err) {
+      setMessage({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <section className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/40 p-5">
       <div>
@@ -118,11 +135,22 @@ function TestAccounts({ scenarios, accounts, onSaved }: { scenarios: Scenario[];
         {scenarios.map((scenario) => (
           <div key={scenario.idSimpel} className="flex flex-col gap-1 border-b border-slate-100 px-4 py-3 last:border-0 sm:flex-row sm:items-center sm:gap-4">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-slate-900">{scenario.name}</div>
+              <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+                {scenario.name}
+                <span title={scenario.startsEmpty ? 'Setelah diulang, halaman pertamanya menanyakan apakah perusahaan memiliki trafo.' : 'Setelah diulang, perusahaan ini langsung punya data contoh.'}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${scenario.startsEmpty ? 'border-sky-200 bg-sky-50 text-sky-800' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                  {scenario.startsEmpty ? 'Mulai kosong · ada pertanyaan awal' : 'Mulai dengan data'}
+                </span>
+              </div>
               <div className="text-xs text-slate-500">{scenario.purpose}</div>
             </div>
             <span className="shrink-0 font-mono text-xs text-slate-700">{scenario.email}</span>
             <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${emails.has(scenario.email) ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>{emails.has(scenario.email) ? 'Sudah ada' : 'Belum dibuat'}</span>
+            {emails.has(scenario.email) && (
+              <button type="button" disabled={busy !== null} onClick={() => resetOne(scenario)} title="Kembalikan perusahaan uji ini seperti awal" className="flex shrink-0 items-center gap-1 self-start rounded-lg border border-violet-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-violet-800 hover:bg-violet-50 disabled:opacity-40 sm:self-auto">
+                {busy === scenario.idSimpel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Ulang
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -131,7 +159,7 @@ function TestAccounts({ scenarios, accounts, onSaved }: { scenarios: Scenario[];
         <button type="button" disabled={password.length < 8 || busy !== null} onClick={() => run(false)} className="flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40">{busy === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />} {made ? 'Perbarui akun uji' : 'Buat akun uji'}</button>
         {made > 0 && <button type="button" disabled={password.length < 8 || busy !== null} onClick={() => run(true)} className="flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 py-2.5 text-xs font-semibold text-violet-800 disabled:opacity-40">{busy === 'reset' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Ulang dari awal</button>}
       </div>
-      <p className="text-[11px] text-slate-500">&quot;Perbarui&quot; hanya membuat yang belum ada dan mengganti password. &quot;Ulang dari awal&quot; menghapus isian perusahaan uji lalu mengisinya lagi dengan data awal.</p>
+      <p className="text-[11px] text-slate-500">&quot;Perbarui&quot; hanya membuat yang belum ada dan mengganti password. &quot;Ulang dari awal&quot; menghapus isian semua perusahaan uji lalu mengisinya lagi dengan data awal; tombol &quot;Ulang&quot; di setiap baris melakukannya untuk satu perusahaan uji saja.</p>
       {message && <p className={`rounded-xl border p-3 text-xs ${message.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>{message.text}</p>}
     </section>
   );
