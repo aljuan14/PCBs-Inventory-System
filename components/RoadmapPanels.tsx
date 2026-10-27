@@ -43,16 +43,17 @@ function planState(row: FocusRow) {
   return { label: formatPlanMonth(row.rencana_tanggal), className: 'border-slate-200 bg-white text-slate-800' };
 }
 
-// In plain words. A transformer no longer in use is managed whatever its test says, so its ppm is not shown.
-function NeedCell({ row }: { row: FocusRow }) {
-  if (row.kebutuhan === 'uji') return <>Uji kandungan PCBs</>;
-  if (row.kebutuhan === 'pengelolaan') return <>Kelola sebagai limbah B3</>;
-  return <>Retrofilling / ganti trafo<span className="block text-[11px] font-normal text-slate-500">hasil uji {row.ppm?.toLocaleString('id-ID')} ppm</span></>;
-}
+// One table per need, the most pressing first: in use at 50 ppm or more, in use untested, no longer in use.
+// Only the first shows the test result; a transformer no longer in use is managed whatever it says.
+const NEEDS: Array<{ need: Need; title: string; text: string; none: string }> = [
+  { need: 'penanganan', title: 'Perlu retrofilling / ganti trafo', text: 'Trafo masih digunakan dengan hasil uji 50 ppm atau lebih. Isi kapan akan diretrofilling atau diganti.', none: 'tidak ada trafo masih digunakan dengan hasil uji ≥ 50 ppm.' },
+  { need: 'uji', title: 'Perlu diuji', text: 'Trafo masih digunakan yang belum ada hasil ujinya. Isi kapan akan diuji kandungan PCBs-nya.', none: 'tidak ada trafo masih digunakan yang belum diuji.' },
+  { need: 'pengelolaan', title: 'Perlu dikelola', text: 'Trafo yang sudah tidak digunakan, berapa pun hasil ujinya. Isi kapan akan dikelola sebagai limbah B3.', none: 'tidak ada trafo yang sudah tidak digunakan.' },
+];
 
-/** The transformers of a group and filter, as the database function gives them. */
-function focusQuery(supabase: SupabaseClient, companyId: string, group: Category, filter: Filter, columns = '*', options?: { count: 'exact'; head: true }) {
-  let request = supabase.rpc('company_focus_transformers', { p_company_id: companyId }, options).select(columns).not('kebutuhan', 'is', null).eq('kategori', group);
+/** The transformers of one need and filter, as the database function gives them. */
+function focusQuery(supabase: SupabaseClient, companyId: string, need: Need, filter: Filter, columns = '*', options?: { count: 'exact'; head: true }) {
+  let request = supabase.rpc('company_focus_transformers', { p_company_id: companyId }, options).select(columns).eq('kebutuhan', need);
   if (filter === 'noplan') request = request.is('rencana_tanggal', null);
   if (filter === 'late') request = request.lt('rencana_tanggal', today()).is('rencana_selesai', null);
   return request;
@@ -62,14 +63,13 @@ const pickedOf = (row: FocusRow): Picked => ({ kategori: row.kategori, kebutuhan
 
 /**
  * A company's roadmap for its transformers before 1997 (or of unknown year),
- * one above the other: those still in use, then those no longer in use.
+ * one table per need (NEEDS): retrofilling, testing, management.
  * On the Roadmap page and in the company's report.
  */
 export default function RoadmapPanels(props: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void }) {
   return (
     <div className="space-y-6">
-      <RoadmapGroup {...props} group="transformator_digunakan" />
-      <RoadmapGroup {...props} group="transformator_tidak_digunakan" />
+      {NEEDS.map((entry) => <RoadmapGroup key={entry.need} {...props} need={entry} />)}
     </div>
   );
 }
@@ -166,7 +166,7 @@ function PlanDialog({ title, subtitle, initial, busy, error, done, onSave, onFin
  * the table the plan can be set at once for every transformer still without
  * one, or for those picked. A new plan replaces the open one a transformer had.
  */
-function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void; group: Category }) {
+function RoadmapGroup({ supabase, companyId, reloadKey, onChange, need: { need: group, title, text, none } }: { supabase: SupabaseClient; companyId: string; reloadKey: number; onChange: () => void; need: (typeof NEEDS)[number] }) {
   // A pemantau account sees the plans and the transformers, without the means to change them.
   const readOnly = useReadOnly();
   const [filter, setFilter] = useState<Filter>('all');
@@ -181,7 +181,7 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
   const [error, setError] = useState<string | null>(null);
   const requestKey = `${companyId}|${reloadKey}|${filter}|${limit}`;
   const countKey = `${companyId}|${reloadKey}`;
-  const inUse = group === 'transformator_digunakan';
+  const withPpm = group === 'penanganan';
 
   useEffect(() => {
     let active = true;
@@ -303,18 +303,24 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
     : <PlanDialog title={editing.title} subtitle="Bulan dan tahun yang sama untuk semua trafo ini. Rencana yang belum selesai diganti." initial={{ date: null, note: null }} busy={busy} error={error}
         onSave={(date, note) => setPlan(editing.targets, date, note)} onClose={() => { setEditing(null); setError(null); }} />);
 
+  // Nothing of this need: one line, so the company sees it was looked at.
+  if (total === 0) {
+    return (
+      <p className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600">
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-slate-400" /> <span><span className="font-semibold text-slate-900">{title}</span>: {none}</span>
+      </p>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white">
       <div className="space-y-4 border-b border-slate-200 px-5 py-4">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-            {inUse ? 'Trafo masih digunakan' : 'Trafo tidak digunakan'}
+            {title}
             {total !== undefined && <span className="rounded-full bg-slate-100 px-2 text-xs tabular-nums text-slate-600">{fmt(total)}</span>}
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun.{' '}
-            {inUse ? 'Isi kapan trafo akan diuji (bila belum diuji) atau diretrofilling / diganti (bila hasil ujinya 50 ppm atau lebih).' : 'Isi kapan trafo akan dikelola sebagai limbah B3, berapa pun hasil ujinya.'}
-          </p>
+          <p className="mt-1 text-xs text-slate-500">{text} Hanya trafo buatan sebelum {TRAFO_FOCUS_YEAR} atau tanpa tahun.</p>
         </div>
 
         {total !== undefined && total > 0 && planned !== undefined && (
@@ -379,7 +385,7 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
       </div>
 
       {list === null ? <p className="flex items-center gap-2 p-5 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Memuat…</p>
-        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo ${inUse ? 'masih digunakan' : 'tidak digunakan'} sebelum ${TRAFO_FOCUS_YEAR} yang perlu rencana.` : filter === 'noplan' ? 'Semua trafo sudah punya rencana.' : 'Tidak ada rencana yang terlambat.'}</p> : (
+        : list.length === 0 ? <p className="p-5 text-sm text-slate-500">{filter === 'all' ? `Tidak ada trafo yang ${title.toLowerCase()}.` : filter === 'noplan' ? 'Semua trafo sudah punya rencana.' : 'Tidak ada rencana yang terlambat.'}</p> : (
           <div className="px-5 py-4">
             {picking && allShownPicked && filterTotal > list.length && picked.size < filterTotal && (
               <p className="mb-3 rounded-xl bg-slate-50 px-4 py-2 text-xs text-slate-600">
@@ -394,7 +400,7 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
                 <tr>
                   {picking && <th className="w-10 px-3 py-3 text-center"><input type="checkbox" aria-label="Pilih semua yang tampil" checked={allShownPicked} onChange={toggleShown} className="accent-emerald-700" /></th>}
                   <th className="w-12 px-3 py-3 text-center">No</th>
-                  <th className="px-3 py-2.5">Trafo</th><th className="px-3 py-2.5">Tahun</th><th className="px-3 py-2.5">Lokasi</th><th className="px-3 py-2.5">Yang perlu dilakukan</th><th className="px-3 py-2.5 text-right">Rencana</th>
+                  <th className="px-3 py-2.5">Trafo</th><th className="px-3 py-2.5">Tahun</th><th className="px-3 py-2.5">Lokasi</th>{withPpm && <th className="px-3 py-2.5 text-right">Hasil uji</th>}<th className="px-3 py-2.5 text-right">Rencana</th>
                 </tr>
               </thead>
               <tbody>
@@ -407,7 +413,7 @@ function RoadmapGroup({ supabase, companyId, reloadKey, onChange, group }: { sup
                       <td className="px-3 py-3 text-slate-800">{row.nama_merek || '–'}<span className="block text-slate-500">{row.nomor_serial || '–'}</span></td>
                       <td className="px-3 py-3 tabular-nums">{row.tahun_pembuatan ?? <span className="text-amber-700">tidak ada</span>}</td>
                       <td className="max-w-56 px-3 py-3 text-slate-600"><span className="line-clamp-2">{[row.unit, row.lokasi].filter(Boolean).join(' · ') || '–'}</span></td>
-                      <td className="px-3 py-3 font-medium text-slate-800"><NeedCell row={row} /></td>
+                      {withPpm && <td className="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-orange-800">{row.ppm?.toLocaleString('id-ID')} ppm</td>}
                       <td className="px-3 py-3 text-right">
                         {!state ? (
                           readOnly || picking ? <span className="font-semibold text-rose-700">Belum diisi</span> : (
