@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
-import { AlertTriangle, CheckCircle2, ChevronDown, Loader2, Map as MapIcon, MapPin, Plus, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, Map as MapIcon, MapPin, Plus, X } from 'lucide-react';
 import { confirmDialog } from '@/components/Dialog';
 import { parseDMSCoordinate } from '@/lib/dms';
-import type { FormEntry, FormField, FormSection } from '@/lib/form-fields';
+import { isShown, type FormEntry, type FormField, type FormSection } from '@/lib/form-fields';
 
 // Leaflet needs the window.
 const CoordinatePicker = dynamic(() => import('@/components/CoordinatePicker'), { ssr: false });
@@ -77,6 +77,23 @@ export function FieldInput({ field, entry, error, onChange, onUnknownYear }: { f
     setPicking({ initial: parsed.isValid ? { lat: parsed.latitude as number, lng: parsed.longitude as number } : null });
   };
   let control: React.ReactNode;
+  if (field.input === 'choice') {
+    // Big buttons for a question anyone answers.
+    return (
+      <div data-field={field.key} role="radiogroup" aria-label={field.label} className="scroll-mt-4 text-[13px] font-medium text-slate-800 sm:col-span-2">
+        {field.label}{field.required && <span className="text-rose-600"> *</span>}
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          {field.options!.map((option) => (
+            <label key={option} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${value === option ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : error ? 'border-rose-300 bg-rose-50 text-slate-700' : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-slate-300'}`}>
+              <input type="radio" name={field.key} value={option} checked={value === option} onChange={() => onChange(option)} className="accent-emerald-700" /> {option}
+            </label>
+          ))}
+        </div>
+        {error && <p className="mt-1 text-[11px] font-medium text-rose-700">{error}</p>}
+        {field.notes?.[value] && <p className="mt-2 flex items-start gap-2 rounded-xl bg-sky-50 px-3.5 py-2.5 text-xs font-normal text-sky-900"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {field.notes[value]}</p>}
+      </div>
+    );
+  }
   if (field.input === 'select') {
     control = (
       <div className="relative">
@@ -220,7 +237,7 @@ export default function FormEditor({ sections, initial, validate, title, subtitl
 
   const sectionErrors = sections.map((section) => section.fields.filter((field) => errors[field.key]).length);
   const sectionDone = sections.map((section) => {
-    const required = section.fields.filter((field) => field.required);
+    const required = section.fields.filter((field) => field.required && isShown(field, entry.values));
     return required.length > 0 && required.every((field) => entry.values[field.key]?.trim() || (field.input === 'year' && entry.unknownYear));
   });
 
@@ -257,7 +274,7 @@ export default function FormEditor({ sections, initial, validate, title, subtitl
             </div>
           </div>
           <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
-            {section.fields.map((field) => (
+            {section.fields.filter((field) => isShown(field, entry.values)).map((field) => (
               <FieldInput key={field.key} field={field} entry={entry} error={errors[field.key]} onChange={(value) => set(field.key, value)}
                 onUnknownYear={(unknown) => setEntry((current) => ({ ...current, unknownYear: unknown, values: { ...current.values, [field.key]: unknown ? '' : current.values[field.key] ?? '' } }))} />
             ))}

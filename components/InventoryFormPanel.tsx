@@ -1,12 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Copy, Info, Loader2, Pencil, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, CalendarPlus, CheckCircle2, Copy, Info, Loader2, Pencil, Save, Trash2 } from 'lucide-react';
 import EvidencePanel from '@/components/EvidencePanel';
 import InventoryUpload from '@/components/InventoryUpload';
 import StoredEntriesPanel from '@/components/StoredEntriesPanel';
 import FormEditor from '@/components/FormEditor';
-import { MAX_FORM_ROWS, entryErrors, formSpec, isTrafo, TRAFO_FOCUS_YEAR, type EntryCheck, type FormEntry } from '@/lib/form-fields';
+import { MAX_FORM_ROWS, NOT_TESTED, entryErrors, formSpec, isTrafo, TRAFO_FOCUS_YEAR, type EntryCheck, type FormEntry } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 
 export const newId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -37,12 +37,14 @@ type Result = { saved: boolean; savedRows?: number; blocked: number; checks: Ent
  * browser, each typed in the editor, then saved together with one button
  * (none is saved while any is refused).
  */
-export default function InventoryFormPanel({ companyId, category, noTrafoBefore1997, onSaved }: {
+export default function InventoryFormPanel({ companyId, category, noTrafoBefore1997, onSaved, onRoadmap }: {
   companyId: string;
   category: InventoryCategory;
   /** The company stated it has no transformer made before 1997. */
   noTrafoBefore1997: boolean;
   onSaved: () => void;
+  /** Opens the roadmap, offered once untested transformers are saved. */
+  onRoadmap?: () => void;
 }) {
   const spec = formSpec(category);
   const key = draftKey(companyId, category);
@@ -53,7 +55,8 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
   const [editing, setEditing] = useState<FormEntry | null>(null);
   const [checks, setChecks] = useState<Map<string, EntryCheck>>(new Map());
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
+  // `untested`: transformers in use just saved as "belum diuji", now on the roadmap.
+  const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string; untested?: number } | null>(null);
   // After "Simpan & tambah lagi": how many entries the list holds now.
   const [added, setAdded] = useState<number | null>(null);
 
@@ -87,8 +90,9 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
       const body = await response.json() as Result & { error?: string };
       if (!response.ok) throw new Error(body.error || 'Gagal memproses formulir.');
       if (body.saved) {
+        const untested = category === 'transformator_digunakan' ? entries.filter((entry) => entry.values.sudah_diuji === NOT_TESTED).length : 0;
         update([]);
-        setMessage({ tone: 'ok', text: `${body.savedRows} isian tersimpan.` });
+        setMessage({ tone: 'ok', text: `${body.savedRows} isian tersimpan.`, untested });
         setSentKey((value) => value + 1);
         onSaved();
         return;
@@ -160,7 +164,15 @@ export default function InventoryFormPanel({ companyId, category, noTrafoBefore1
       {message && (
         <p className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-xs ${message.tone === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
           {message.tone === 'ok' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
-          <span>{message.text}{message.tone === 'ok' && entries.length === 0 && ' Lihat di daftar data tersimpan di bawah.'}</span>
+          <span>
+            {message.text}{message.tone === 'ok' && entries.length === 0 && ' Lihat di daftar data tersimpan di bawah.'}
+            {message.untested ? <> <b>{message.untested} trafo belum diuji</b> sudah masuk Roadmap; isi kapan akan diuji.</> : null}
+          </span>
+          {message.untested && onRoadmap ? (
+            <button type="button" onClick={onRoadmap} className="ml-auto flex shrink-0 items-center gap-1.5 self-center rounded-xl bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800">
+              <CalendarPlus className="h-4 w-4" /> Isi rencana uji
+            </button>
+          ) : null}
         </p>
       )}
 

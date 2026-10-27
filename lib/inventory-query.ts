@@ -388,8 +388,8 @@ const MISSING_FINDINGS: Record<string, Partial<InventoryFilters>> = {
  */
 export function issueTableFilter(key: string, label: string): Partial<InventoryFilters> | null {
   if (key.startsWith('missing:')) return MISSING_FINDINGS[key] ?? null;
-  // Not kept with the row: read from the workbook.
-  if (key.startsWith('duplicate:') || key.startsWith('skipped:')) return null;
+  // Not kept with the row: read from the workbook (test: findings are only reported).
+  if (key.startsWith('duplicate:') || key.startsWith('skipped:') || key.startsWith('test:')) return null;
   return { note: { kode: key, label } };
 }
 

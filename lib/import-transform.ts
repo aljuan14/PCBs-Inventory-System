@@ -484,6 +484,16 @@ export function transformRows(
       note('warning', { kode: 'invalid:ppm_negative', jenis: 'dikosongkan', kolom: 'uji_konsentrasi_ppm', pesan: 'Konsentrasi PCBs negatif, dikosongkan', nilai_asli: String(item.uji_konsentrasi_ppm) }, item.uji_konsentrasi_ppm);
       item.uji_konsentrasi_ppm = null;
     }
+    // A transformer without its concentration counts as untested (on the roadmap); the form asks
+    // for the concentration and the kind of test together, an Excel row may lack either.
+    if (category === 'transformator_digunakan' || category === 'transformator_tidak_digunakan') {
+      const filled = (key: string) => item[key] !== null && item[key] !== undefined && item[key] !== '';
+      if (!filled('uji_konsentrasi_ppm') && ['uji_jenis', 'uji_metode', 'uji_penyedia_jasa'].some(filled)) {
+        found.push(['test:no_result', 'warning', 'Hasil uji tidak lengkap: konsentrasi PCBs kosong, trafo dianggap belum diuji', rowNumber]);
+      } else if (filled('uji_konsentrasi_ppm') && !filled('uji_jenis')) {
+        found.push(['test:no_kind', 'info', 'Jenis uji kosong: isi uji cepat atau uji lab', rowNumber]);
+      }
+    }
 
     if (typeof item.koordinat_raw === 'string') {
       const raw = item.koordinat_raw;

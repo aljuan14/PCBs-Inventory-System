@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import FormEditor from '@/components/FormEditor';
 import { alertDialog, confirmDialog } from '@/components/Dialog';
-import { fieldErrors, formFields, formSpec, type FormEntry } from '@/lib/form-fields';
+import { answerOf, fieldErrors, formFields, formSpec, type FormEntry } from '@/lib/form-fields';
 import type { InventoryCategory } from '@/lib/inventory';
 import type { createClient } from '@/lib/supabase/client';
 
@@ -18,7 +18,7 @@ function entryOf(category: InventoryCategory, row: StoredRow): FormEntry {
   return {
     id: row.id,
     unknownYear: fields.some((field) => field.input === 'year') && (row.tahun_pembuatan === null || row.tahun_pembuatan === undefined),
-    values: Object.fromEntries(fields.map((field) => [field.key, field.input === 'date' ? text(row[field.key]).slice(0, 10) : text(row[field.key])])),
+    values: Object.fromEntries(fields.map((field) => [field.key, field.virtual ? answerOf(field.key, row) : field.input === 'date' ? text(row[field.key]).slice(0, 10) : text(row[field.key])])),
   };
 }
 

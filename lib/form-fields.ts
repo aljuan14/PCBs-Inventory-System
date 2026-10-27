@@ -7,7 +7,7 @@ import { INVENTORY_FIELDS, type InventoryCategory } from '@/lib/inventory';
  * go through the same check (app/api/formulir).
  */
 
-export type FormInput = 'text' | 'number' | 'year' | 'date' | 'select' | 'coordinate';
+export type FormInput = 'text' | 'number' | 'year' | 'date' | 'select' | 'coordinate' | 'choice';
 
 export type FormField = {
   key: string;
@@ -20,7 +20,16 @@ export type FormField = {
   hint?: string;
   /** A total of other number fields (divided by `divisor`): filled in and locked once all of them are, typed in otherwise. */
   sumOf?: { keys: string[]; divisor: number; label: string };
+  /** Shown (and checked, and saved) only while another field has this answer. */
+  showIf?: { key: string; value: string };
+  /** A question on the form only, not a column: its answer follows from the data (see answerOf). */
+  virtual?: boolean;
+  /** 'choice': a note under the buttons per answer. */
+  notes?: Record<string, string>;
 };
+
+/** Whether a field is on the form for these answers. */
+export const isShown = (field: FormField, values: Record<string, string>) => !field.showIf || values[field.showIf.key] === field.showIf.value;
 
 export type FormSection = { title: string; note?: string; fields: FormField[]; collapsed?: boolean };
 
@@ -31,7 +40,13 @@ export const TRAFO_FOCUS_YEAR = 1997;
 export const MAX_FORM_ROWS = 500;
 
 const TEST_METHODS = ['Potentiometry', 'GC-ECD', 'GC-MS', 'Dexil L2000', 'Clor-N-Oil'];
-const TEST_SECTION = (): FormSection => ({
+export const TESTED = 'Sudah diuji';
+export const NOT_TESTED = 'Belum diuji';
+const TESTED_ONLY = { key: 'sudah_diuji', value: TESTED };
+// The test fields show once "Sudah diuji" is chosen, with the result and its kind required;
+// "Belum diuji" leaves the concentration empty, which puts the transformer on the roadmap.
+// Other forms (oil) keep the test fields as they were, all optional.
+const TEST_SECTION = (inUse?: boolean): FormSection => (inUse === undefined ? {
   title: 'Uji lanjutan',
   note: 'Diisi jika sudah dilakukan uji cepat dan/atau uji laboratorium.',
   fields: [
@@ -40,7 +55,24 @@ const TEST_SECTION = (): FormSection => ({
     { key: 'uji_metode', label: 'Metode uji', input: 'text', options: TEST_METHODS },
     { key: 'uji_konsentrasi_ppm', label: 'Konsentrasi PCBs', input: 'number', unit: 'ppm' },
   ],
+} : {
+  title: 'Uji kandungan PCBs',
+  fields: [
+    { key: 'sudah_diuji', label: 'Apakah trafo ini sudah diuji kandungan PCBs-nya?', input: 'choice', options: [TESTED, NOT_TESTED], required: true, virtual: true,
+      notes: { [NOT_TESTED]: inUse ? 'Trafo ini akan masuk Roadmap. Setelah disimpan, isi kapan trafo ini akan diuji.' : 'Trafo ini masuk Roadmap untuk dikelola, apa pun hasil ujinya.' } },
+    { key: 'uji_jenis', label: 'Jenis uji', input: 'select', options: ['Uji cepat', 'Uji lab'], required: true, showIf: TESTED_ONLY },
+    { key: 'uji_konsentrasi_ppm', label: 'Konsentrasi PCBs', input: 'number', unit: 'ppm', required: true, showIf: TESTED_ONLY },
+    { key: 'uji_metode', label: 'Metode uji', input: 'text', options: TEST_METHODS, showIf: TESTED_ONLY },
+    { key: 'uji_penyedia_jasa', label: 'Penyedia jasa uji', input: 'text', hint: 'Nama perusahaan atau laboratorium', showIf: TESTED_ONLY },
+  ],
 });
+
+/** The answer of a form-only question from a stored row: tested when any test field is filled in. */
+export function answerOf(key: string, row: Record<string, unknown>): string {
+  if (key !== 'sudah_diuji') return '';
+  const filled = (value: unknown) => value !== null && value !== undefined && value !== '';
+  return ['uji_konsentrasi_ppm', 'uji_jenis', 'uji_metode', 'uji_penyedia_jasa'].some((column) => filled(row[column])) ? TESTED : NOT_TESTED;
+}
 const UNIT_SECTION = (): FormSection => ({
   title: 'Unit & kode alat',
   note: 'Untuk perusahaan dengan beberapa pabrik, cabang, atau unit.',
@@ -97,7 +129,7 @@ export const FORM_SPECS: FormSpec[] = [
           { key: 'perawatan_penyedia_jasa', label: 'Penyedia jasa perawatan', input: 'text', hint: 'Jika dilakukan pihak ketiga' },
         ],
       },
-      TEST_SECTION(),
+      TEST_SECTION(true),
       {
         title: 'Berat & peralatan tanggap darurat',
         fields: [
@@ -125,7 +157,7 @@ export const FORM_SPECS: FormSpec[] = [
           { key: 'kondisi_di_dalam_alat', label: 'Kondisi di dalam alat', input: 'text', options: ['Minyak dielektrik penuh', 'Minyak dielektrik sebagian', 'Kosong'] },
         ],
       },
-      TEST_SECTION(),
+      TEST_SECTION(false),
       {
         title: 'Kondisi & lainnya',
         fields: [
@@ -207,6 +239,7 @@ export function fieldErrors(fields: FormField[], entry: FormEntry, focusYear = f
   const errors: Record<string, string> = {};
   const currentYear = new Date().getFullYear();
   for (const field of fields) {
+    if (!isShown(field, entry.values)) continue;
     const value = entry.values[field.key]?.trim() ?? '';
     if (field.input === 'year') {
       if (!value) {
@@ -219,7 +252,7 @@ export function fieldErrors(fields: FormField[], entry: FormEntry, focusYear = f
       continue;
     }
     if (!value) {
-      if (field.required) errors[field.key] = field.input === 'coordinate' || field.input === 'select' || field.input === 'number' ? 'Wajib diisi.' : 'Wajib diisi. Tulis "Tidak diketahui" bila memang tidak diketahui.';
+      if (field.required) errors[field.key] = field.input === 'choice' ? 'Pilih salah satu.' : field.input === 'coordinate' || field.input === 'select' || field.input === 'number' ? 'Wajib diisi.' : 'Wajib diisi. Tulis "Tidak diketahui" bila memang tidak diketahui.';
       continue;
     }
     if (field.input === 'number') {
@@ -227,17 +260,17 @@ export function fieldErrors(fields: FormField[], entry: FormEntry, focusYear = f
       if (!Number.isFinite(number)) errors[field.key] = 'Harus berupa angka.';
       else if (number < 0) errors[field.key] = 'Tidak boleh negatif.';
     }
-    if (field.input === 'select' && field.options && !field.options.includes(value)) errors[field.key] = 'Pilih salah satu pilihan.';
+    if ((field.input === 'select' || field.input === 'choice') && field.options && !field.options.includes(value)) errors[field.key] = 'Pilih salah satu pilihan.';
   }
   return errors;
 }
 
-/** The entry as a row for the import check: only this category's columns, numbers with a decimal point. */
+/** The entry as a row for the import check: only this category's columns shown for its answers, numbers with a decimal point. */
 export function entryRow(category: InventoryCategory, entry: FormEntry): Record<string, unknown> {
   const columns = new Set(INVENTORY_FIELDS[category].map((field) => field.field_key));
   const row: Record<string, unknown> = {};
   for (const field of formFields(category)) {
-    if (!columns.has(field.key)) continue;
+    if (!columns.has(field.key) || !isShown(field, entry.values)) continue;
     const value = entry.values[field.key]?.trim();
     if (!value || (field.input === 'year' && entry.unknownYear)) continue;
     row[field.key] = field.input === 'number' ? value.replace(',', '.') : value;

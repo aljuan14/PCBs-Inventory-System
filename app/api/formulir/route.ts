@@ -160,7 +160,8 @@ export async function PATCH(req: NextRequest) {
     if (errors.length || !item) return NextResponse.json({ errors }, { status: 422 });
 
     const changes: Record<string, unknown> = {};
-    for (const field of fields) changes[field.key] = item[field.key] ?? null;
+    // A hidden field (a test of a transformer "belum diuji") is emptied; a form-only question is no column.
+    for (const field of fields) if (!field.virtual) changes[field.key] = item[field.key] ?? null;
     if ('koordinat_raw' in changes) {
       changes.koordinat_lat = item.koordinat_lat ?? null;
       changes.koordinat_lng = item.koordinat_lng ?? null;

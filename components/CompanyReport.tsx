@@ -104,6 +104,7 @@ export default function CompanyReport({ supabase, companyId, onRoadmap, onChange
               category={category}
               noTrafoBefore1997={statement !== null && (declaresNone(statement) || (!statement.punya_trafo_sebelum_1997 && statement.punya_trafo_1997_keatas))}
               onSaved={() => setReload((value) => value + 1)}
+              onRoadmap={onRoadmap ?? (() => setCategory('roadmap'))}
             />}
       </section>
     </div>
